@@ -6,7 +6,7 @@ function phaseplot(S;vector_field=false)
     f
 end
 
-function incomes(S;vector_field=false)
+function incomes(S)
     f=Figure()
     a=Axis(f[1,1])
     hidespines!(a)
