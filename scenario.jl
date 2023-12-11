@@ -27,7 +27,7 @@ mutable struct Scenario
     gini
     institution
     target
-    signal
+    value
     β
     sim
     label
@@ -39,7 +39,7 @@ end
     scenario(;N=100, external=Dict(), ē=SED(min=1.0,max=1.0), q=SED(min=1.0/N,max=1.0/N),
              a=SED(min=1.0,max=1.0), w=SED(min=0.1/N,max=0.9/N), r=1.0, K=1.0, p=1.0,
              w̃=nothing, ū=nothing, α=nothing, institution="OA", β=0.0 (conditional),
-             target=1.0, signal="effort", ts=0.0, ū0=Array of zeros, y0=1.0, dydt=1.0,
+             target="effort", value=1.0, ts=0.0, ū0=Array of zeros, y0=1.0, dydt=1.0,
              dt=0.01, label="", image="", caption="", color=nothing, simulate=true)
 
 Simulates a scenario based on various parameters. The function adjusts these parameters and visualizes the outcomes. It is designed to work with a range of inputs, including basic dimensionalized and non-dimensionalized parameters, institutional parameters, and simulation parameters.
@@ -102,8 +102,8 @@ function scenario(;
     # institutional parameters
     institution::String="OA",
     β::Float64=institution=="TQ" ? 0.05 : 0.0,
-    target::Float64=1.0,
-    signal::String="effort",
+    value::Float64=1.0,
+    target::String="effort",
     #simulation parameters
     ts::Float64=0.0,
     ū0::Array{Float64,1}=fill(0.0,N),
@@ -168,8 +168,8 @@ function scenario(;
     # We just need a good recalc method to be able to adjust e.g. PA dependence!
 
     if institution=="PA"
-        w̃=w̃./max(0.001,(1-(1-target))) # to avoid dividing by zero
-        ū=ū./(1+(1-target))
+        w̃=w̃./max(0.001,(1-(1-value))) # to avoid dividing by zero
+        ū=ū./(1+(1-value))
         q_sum=sum(q)  # this needed?
     end
 
@@ -212,7 +212,7 @@ function scenario(;
 	gini=0,
 	institution,
 	target,
-	signal,#or yield
+	value,#or yield
 	β,
 	sim=(;ū0,y0,dt,dydt),
 	label,
@@ -226,7 +226,7 @@ function scenario(;
         c̃=0 #Yo, add c to scenario!
         S.wage_revenue = (S.ū .- S.u) .* S.w̃; 
         S.resource_revenue = S.u.*(S.y .- c̃);
-        S.trade_revenue=(S.target./S.y./S.N.-S.u).*S.ϕ
+        S.trade_revenue=(S.value./S.y./S.N.-S.u).*S.ϕ
         #R̃ₕᵣ= S.u.*(S.y .- S.w̃);
         S.total_revenue = S.wage_revenue .+  S.resource_revenue
         

@@ -29,7 +29,7 @@ function dudt(dx,x,p,t)
     # PERMITS & PROPERTY RIGHTS
 	
     if p.institution=="PLL" || p.institution=="PHL" #if permits are used
-        n=Int64(round(p.target.*N)) # number of allowed permitholders (can we do this at scenario creation)
+        n=Int64(round(p.value.*N)) # number of allowed permitholders (can we do this at scenario creation)
         id=findall(u.+dx[1:N].>0.0)      # get all who would like to use resource
         l=length(id)                  # number of potential resource users 
         if l>n  # if number of actors that want to use resource are more than number of permits 
@@ -44,25 +44,17 @@ function dudt(dx,x,p,t)
         end
     end
     # One can have quota shared equally among all actors or only among those who want to use resource
-    if p.institution=="EC"
-        # NOTE: WHAT IF NOT ALL QUOTA IS USED? How to assign unused quotas to others
-        # If your intention will be higher than your individual quota, then adjust dx to be just at quota.
-        dx[1:N].-=ifelse.((u.+dx[1:N]).>p.target/y/p.N, (u.+dx[1:N]).-p.target/y/p.N , 0.0 )
-    end
+
  
-    if p.institution=="ECn"
+    if p.institution=="EC"
         n=sum((u.+dx[1:N]).>0.0)
-        dx[1:N].-=ifelse.((u.+dx[1:N]).>p.target/y/n, (u.+dx[1:N]).-p.target/y/n , 0.0 )
+		if p.target=="yield"
+        	dx[1:N].-=ifelse.((u.+dx[1:N]).>p.value/y/n, (u.+dx[1:N]).-p.value/y/n , 0.0 )
+		else
+			dx[1:N].-=ifelse.((u.+dx[1:N]).>p.value/n, (u.+dx[1:N]).-p.value/n , 0.0 )
+		end
     end
 
-    if p.institution=="ECu"
-        dx[1:N].-=ifelse.((u.+dx[1:N]).>p.target/p.N, (u.+dx[1:N]).-p.target/p.N , 0.0 )
-    end
-
-    if p.institution=="ECun" 
-        n=sum((u.+dx[1:N]).>0.0)
-        dx[1:N].-=ifelse.((u.+dx[1:N]).>p.target/n, (u.+dx[1:N]).-p.target/n , 0.0 )
-    end
  
 	# Why TQ after this line?
 	# This is done before TQ calc to ensure demand is zero when u is  at u\bar
@@ -71,8 +63,11 @@ function dudt(dx,x,p,t)
 
     #TRADABLE QUOTAS
 	if p.institution=="TQ"
-		supply=max(0.0,p.target-sum(u)*y)
-		if true # Only testing fastest implementation!
+		if p.target=="yield"
+			supply=max(0.0,p.value-sum(u)*y)
+		else
+			supply=max(0.0,p.value-sum(u))
+		end
 	        id=findall(dx[1:N].>0.0) # who wants to increase u => id
 	
 	         # available quotas, but in units of u
@@ -81,53 +76,12 @@ function dudt(dx,x,p,t)
 			if demand > supply # if demand is greater than supply, buyers have to share supply proportionally to their individual demand or willingness to pay.
 	            dx[id].=supply.*view(dx,id)./demand
 	        end  
-		else
-			demand=0
-			for i in 1:p.N
-				if dx[i]>0.0
-					demand=demand+dx[i]
-				end
-			end
-			if demand > supply
-				for i in 1:p.N
-					dx[i]=supply*dx[i]/demand
-				end
-			end
-		end
+
         # else they can just do as they please, i.e. dudt is not adjusted
 
 		# Dynamics of tradable quota price
 	    @inbounds dx[N+2]= constrain(β*(demand -supply),ϕ,0.0,Inf64,dt) 
 	end
-
-    if p.institution=="TQu"
-		supply=max(0.0,p.target-sum(u))
-		if false # Only testing fastest implementation!
-        id=findall(dx[1:N].>0.0) # who wants to increase u => id
-
-         # available quotas, but in units of u
-        #demand=sum(max.(0.0,view(ū,id).-(view(u,id).+view(dx,id)))) # demand, as in intending to increase u
-        demand=sum(view(dx,id)) 
-		else
-			demand=0
-			for i in 1:p.N
-				if dx[i]>0.0
-					demand=demand+dx[i]
-				end
-			end
-		end
-        if demand > supply # if demand is greater than supply, buyers have to share supply proportionally to their individual demand or willingness to pay.
-            dx[id].=supply.*view(dx,id)./demand
-        end  
-        # else they can just do as they please, i.e. dudt is not adjusted
-
-		# Dynamics of tradable quota price
-	    @inbounds dx[N+2]= constrain(β*(demand -supply),ϕ,0.0,Inf64,dt) 
-	end
-
-
-    
-    
 
     # The dynamic of the resource
     dx[N+1]=dydt*((1 -y)-sum(u)) *y
@@ -173,8 +127,8 @@ function sim(p; tend=(0.0,2000.0), y0=1.0, dydt=1.0,u0=fill(0.0/p.N,p.N), p0=0.0
 	if false#p.institution=="PA"
 		w̃=p.w̃
 		ū=p.ū
-        p.w̃=w̃./max(0.001,(1-(1-p.target))) # to avoid dividing by zero
-        p.ū=ū./(1+(1-p.target))
+        p.w̃=w̃./max(0.001,(1-(1-p.vaue))) # to avoid dividing by zero
+        p.ū=ū./(1+(1-p.value))
     end
     # sets up the problem,
     prob = ODEProblem(dudt,[u0;y0;p0],tend,p)
@@ -232,7 +186,7 @@ function sim(p; tend=(0.0,2000.0), y0=1.0, dydt=1.0,u0=fill(0.0/p.N,p.N), p0=0.0
 		c̃=0
 		p.wage_revenue = (p.ū .- p.u) .* p.w̃; 
         p.resource_revenue = p.u.*(p.y .- c̃);
-        p.trade_revenue=(p.target./p.y./p.N.-p.u).*p.ϕ
+        p.trade_revenue=(p.value./p.y./p.N.-p.u).*p.ϕ
         #R̃ₕᵣ= S.u.*(S.y .- S.w̃);
         p.total_revenue = p.wage_revenue .+  p.resource_revenue
 		p.gini=gini(p.total_revenue)
