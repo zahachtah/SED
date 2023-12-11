@@ -1,0 +1,241 @@
+constrain(du,u,minu,maxu,dt)=du.*dt.+u.<minu ? -u : du.*dt.+u.>maxu ? maxu-u : du
+
+function dudt(dx,x,p,t)
+    # extract the parameters from named tuple containers for simpler equation syntax
+    dydt=p.sim.dydt # used when y is held constant
+    N=p.N
+	ū=p.ū
+	w̃=p.w̃
+	α=p.α
+	#q=p.t
+	β=p.β
+	dt=p.sim.dt #parameters
+    
+    # extract the variables from state vector
+    u=view(x,1:N)   # actions
+    y=x[N+1]  		# resource level
+    ϕ=x[N+2] 		#quota price
+
+	# First get the non-institutional rate of change in u
+
+	
+    @inline dx[1:N]=α.*(y.-w̃.-ϕ)
+    # constrain dudt so that u can never leave the range [0.0, ū]
+    # performance: if we do this in place we can increase speed
+    # Also: this is done before TQ calc to ensure demand is zero when u is  at u\bar
+ 
+
+
+    # PERMITS & PROPERTY RIGHTS
+	
+    if p.institution=="PLL" || p.institution=="PHL" #if permits are used
+        n=Int64(round(p.target.*N)) # number of allowed permitholders (can we do this at scenario creation)
+        id=findall(u.+dx[1:N].>0.0)      # get all who would like to use resource
+        l=length(id)                  # number of potential resource users 
+        if l>n  # if number of actors that want to use resource are more than number of permits 
+            if p.institution=="PLL" 
+                r=l-n+1:l   # select the permit holders (given to high w)
+            elseif p.institution=="PHL"
+                r=1:n # select the permit holders (given to low w)
+            end
+            q=1:N
+            idq=q[q .∉ Ref(id[r])] #checks if qdy is in id[r] and returns the indices of q that are not in id[r]
+            dx[idq]=min.(0.0,-u[idq])
+        end
+    end
+    # One can have quota shared equally among all actors or only among those who want to use resource
+    if p.institution=="EC"
+        # NOTE: WHAT IF NOT ALL QUOTA IS USED? How to assign unused quotas to others
+        # If your intention will be higher than your individual quota, then adjust dx to be just at quota.
+        dx[1:N].-=ifelse.((u.+dx[1:N]).>p.target/y/p.N, (u.+dx[1:N]).-p.target/y/p.N , 0.0 )
+    end
+ 
+    if p.institution=="ECn"
+        n=sum((u.+dx[1:N]).>0.0)
+        dx[1:N].-=ifelse.((u.+dx[1:N]).>p.target/y/n, (u.+dx[1:N]).-p.target/y/n , 0.0 )
+    end
+
+    if p.institution=="ECu"
+        dx[1:N].-=ifelse.((u.+dx[1:N]).>p.target/p.N, (u.+dx[1:N]).-p.target/p.N , 0.0 )
+    end
+
+    if p.institution=="ECun" 
+        n=sum((u.+dx[1:N]).>0.0)
+        dx[1:N].-=ifelse.((u.+dx[1:N]).>p.target/n, (u.+dx[1:N]).-p.target/n , 0.0 )
+    end
+ 
+	# Why TQ after this line?
+	# This is done before TQ calc to ensure demand is zero when u is  at u\bar
+    @inline @inbounds dx[1:N].=constrain.(dx[1:N],u,0.0,ū,dt)
+    #constrain!.(dx[1:N],u,0.0,ū,dt) Testing an inplace version with potentially less memory allocation
+
+    #TRADABLE QUOTAS
+	if p.institution=="TQ"
+		supply=max(0.0,p.target-sum(u)*y)
+		if true # Only testing fastest implementation!
+	        id=findall(dx[1:N].>0.0) # who wants to increase u => id
+	
+	         # available quotas, but in units of u
+	        #demand=sum(max.(0.0,view(ū,id).-(view(u,id).+view(dx,id)))) # demand, as in intending to increase u
+	        demand=sum(view(dx,id)) 
+			if demand > supply # if demand is greater than supply, buyers have to share supply proportionally to their individual demand or willingness to pay.
+	            dx[id].=supply.*view(dx,id)./demand
+	        end  
+		else
+			demand=0
+			for i in 1:p.N
+				if dx[i]>0.0
+					demand=demand+dx[i]
+				end
+			end
+			if demand > supply
+				for i in 1:p.N
+					dx[i]=supply*dx[i]/demand
+				end
+			end
+		end
+        # else they can just do as they please, i.e. dudt is not adjusted
+
+		# Dynamics of tradable quota price
+	    @inbounds dx[N+2]= constrain(β*(demand -supply),ϕ,0.0,Inf64,dt) 
+	end
+
+    if p.institution=="TQu"
+		supply=max(0.0,p.target-sum(u))
+		if false # Only testing fastest implementation!
+        id=findall(dx[1:N].>0.0) # who wants to increase u => id
+
+         # available quotas, but in units of u
+        #demand=sum(max.(0.0,view(ū,id).-(view(u,id).+view(dx,id)))) # demand, as in intending to increase u
+        demand=sum(view(dx,id)) 
+		else
+			demand=0
+			for i in 1:p.N
+				if dx[i]>0.0
+					demand=demand+dx[i]
+				end
+			end
+		end
+        if demand > supply # if demand is greater than supply, buyers have to share supply proportionally to their individual demand or willingness to pay.
+            dx[id].=supply.*view(dx,id)./demand
+        end  
+        # else they can just do as they please, i.e. dudt is not adjusted
+
+		# Dynamics of tradable quota price
+	    @inbounds dx[N+2]= constrain(β*(demand -supply),ϕ,0.0,Inf64,dt) 
+	end
+
+
+    
+    
+
+    # The dynamic of the resource
+    dx[N+1]=dydt*((1 -y)-sum(u)) *y
+end
+
+"""
+    sim(p; tend=(0.0,2000.0), y0=1.0, dydt=1.0,u0=fill(0.0/p.N,p.N), p0=0.0,solution=false, terminate_steady_state=true)
+
+Main function to run a simulation with parameters provided by a scenario.
+
+### Arguments
+- `p`: Scenario parameters given by a Scenario struct, i.e., scenario() for default
+- `tend`: Tuple representing the start and end time for the simulation (default: (0.0,2000.0))
+- `y0`: Initial resource level (default: 1.0)
+- `dydt`: Initial rate of change of the resource (default: 1.0). Useful if one wants to check the outcome for a given resource set by y0, then set to 0.0.
+- `u0`: Initial effort level array. By default, it is an array filled with zeros of size `p.N`.
+- `p0`: Initial tradable quota price (default: 0.0)
+- `solution`: Boolean value to indicate if the function should return the solution object. If false, the function returns the solution vector (default: false).
+- `terminate_steady_state`: Boolean value to indicate if the function should terminate when reaching a steady state. If true, the function terminates when reaching a steady state (default: true).
+
+### Output
+`Simulation`: Returns a Simulation struct which consists of the following fields:
+- `t`: Vector of time points at which the solution was calculated
+- `y`: Vector of resource level at each time point
+- `ϕ`: Vector of tradable quota prices at each time point
+- `frac_u`: Vector of the fraction of total effort at each time point
+- `u`: Matrix with individual effort level at each time point
+- `final`: A nested struct containing several final state values including:
+    + `u`: Mean effort level over the periodic part of the solution
+    + `frac_u`: Fraction of total effort over the periodic part of the solution
+    + `y`: Mean resource level over the periodic part of the solution
+    + `ϕ`: Mean quota price over the periodic part of the solution
+    + `period`: Indices of the periodic part of the solution
+    + `time`: Time taken by the simulation
+    + `p`: Scenario parameters
+- `sol`: Solution object if the `solution` argument was set to true, otherwise nothing
+
+
+    """
+function sim(p; tend=(0.0,2000.0), y0=1.0, dydt=1.0,u0=fill(0.0/p.N,p.N), p0=0.0,solution=false,terminate_steady_state=true)
+	t0=time()
+    N=p.N
+	if false#p.institution=="PA"
+		w̃=p.w̃
+		ū=p.ū
+        p.w̃=w̃./max(0.001,(1-(1-p.target))) # to avoid dividing by zero
+        p.ū=ū./(1+(1-p.target))
+    end
+    # sets up the problem,
+    prob = ODEProblem(dudt,[u0;y0;p0],tend,p)
+
+    # solves the ODE
+    sol=solve(prob,adaptive=false, Euler(),saveat=0.1,callback=terminate_steady_state ? TerminateSteadyState(1e-6,1e-4) : nothing,dt=p.sim.dt)#  
+    poa=deepcopy(p)
+    poa.institution="OA"
+    DUDT=zeros(N+2)
+    dudt(DUDT,sol.u[end],poa,0.0)
+	individual=zeros(N,length(sol.t))
+    [individual[:,i]=sol.u[i][1:end-2] for i in 1:length(sol.t)]
+	#check for periodicity
+		yy=[u[N+1] for u in sol.u]
+		period=1:length(yy)
+
+		if var(yy)/mean(yy)>0.0001 && sol.t[end]==prob.tspan[2]
+            
+			try
+				period=findPeriod(yy)
+			catch
+				period=1:length(yy)
+			end
+			#=U=mean(sol[1:N,period],dims=2)[:]
+			Simulation(
+        	sol.t,
+        	[u[N+1] for u in sol.u],
+        	[u[end] for u in sol.u],
+        	[sum(u[findall(p.ū.>0.0)]./p.ū[findall(p.ū.>0.0)]./p.N) for u in sol.u],
+        	individual,
+			(u=mean(sol[1:N,period],dims=2)[:],up=sol[1:N,period],frac_u=sum(U./p.ū./p.N),y=mean(sol[N+1,period]),yp=sol[N+1,period],ϕ=mean(sol[end,period]),ϕp=sol[end,period],period=period,time=time()-t0,p=p,iu=DUDT[1:N]),
+        	solution ? sol : nothing)=#
+
+			
+		else
+			#=(
+        	sol.t,
+        	[u[N+1] for u in sol.u],
+        	[u[end] for u in sol.u],
+        	[sum(u[findall(p.ū.>0.0)]./p.ū[findall(p.ū.>0.0)]./p.N) for u in sol.u],# This makes sure that we are not accidentally dividing by zero! 
+        	individual,
+			(u=sol.u[end][1:N],frac_u=sum(sol.u[end][1:N]./p.ū./p.N),y=sol.u[end][end-1],ϕ=sol.u[end][end], period=1:length(sol.t),time=time()-t0,p=p,iu=DUDT[1:N]),
+        	solution ? sol : nothing)=#
+		end
+
+		p.u=sol.u[end][1:N]
+		p.U=sum(sol.u[end][findall(p.ū.>0.0)]./p.ū[findall(p.ū.>0.0)]./p.N)
+	    p.y=sol.u[end][N+1]
+	    p.ϕ=sol.u[end][N+2]
+		p.t=sol.t
+		p.t_u=[sol.u[t][i] for t in 1:length(sol.t), i in 1:p.N]#[u[1:N] for u in sol.u]
+	    p.t_y=[u[N+1] for u in sol.u]
+	    p.t_ϕ=[u[end] for u in sol.u]
+		p.t_U=[sum(u[findall(p.ū.>0.0)]./p.ū[findall(p.ū.>0.0)]./p.N) for u in sol.u]
+		c̃=0
+		p.wage_revenue = (p.ū .- p.u) .* p.w̃; 
+        p.resource_revenue = p.u.*(p.y .- c̃);
+        p.trade_revenue=(p.target./p.y./p.N.-p.u).*p.ϕ
+        #R̃ₕᵣ= S.u.*(S.y .- S.w̃);
+        p.total_revenue = p.wage_revenue .+  p.resource_revenue
+		p.gini=gini(p.total_revenue)
+	return p
+
+end
