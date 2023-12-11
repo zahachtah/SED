@@ -47,7 +47,7 @@ function dudt(dx,x,p,t)
 
  
     if p.institution=="EC"
-        n=sum((u.+dx[1:N]).>0.0)
+        n=sum((u.+dx[1:N]).>0.0) # this ensures that only those who want to use resource get quota
 		if p.target=="yield"
         	dx[1:N].-=ifelse.((u.+dx[1:N]).>p.value/y/n, (u.+dx[1:N]).-p.value/y/n , 0.0 )
 		else
