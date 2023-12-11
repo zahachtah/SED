@@ -6,6 +6,14 @@ function phaseplot(S;vector_field=false)
     f
 end
 
+function incomes(S;vector_field=false)
+    f=Figure()
+    a=Axis(f[1,1])
+    hidespines!(a)
+    incomes!(a,S)
+    f
+end
+
 function SEDplot(S,vx,vy; show_density=false, sort=true, markersize=5, labels=true, icons=false, icon_size=30, color=nothing)
 
     f=Figure()

@@ -45,10 +45,10 @@ function phaseplot!(A,S; show_required=true,show_potential=true,same_potential_c
 	
 		
 		(us,ur,y)=analytical(is)
-		if is.institution in ["TQ","EC","ECn"] && show_target
-	        lines!(A,y,is.target./y, color=:darkorange, linewidth=0.5)
-		elseif is.institution in ["TQu","ECu", "PLL","PHL"] && show_target
-	        lines!(A,y,fill(mean(is.target),length(y)), color=c, linewidth=0.5)
+		if is.target=="yield" && show_target
+	        lines!(A,y,is.value./y, color=:darkorange, linewidth=0.5)
+		elseif is.target=="effort" && show_target
+	        lines!(A,y,fill(mean(is.value),length(y)), color=c, linewidth=0.5)
 	    end
 	
 		#Trajectory plot
