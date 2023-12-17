@@ -38,7 +38,7 @@ end
 
 function dist!(s::SED, N::Int64)
     if s.min !== nothing && s.max !== nothing && s.rand==false
-        s.data= N==1 ? [(s.max-s.min)/2] : collect(range(s.min, stop=s.max, length=N))
+        s.data= N==1 ? [(s.max+s.min)/2] : collect(range(s.min, stop=s.max, length=N))
 	elseif s.min !== nothing && s.max !== nothing && s.rand==true
         s.data = s.min.+(s.max-s.min).*rand(N)
     elseif s.mean !== nothing && s.spread !== nothing && s.rand==false && s.distribution==:linear

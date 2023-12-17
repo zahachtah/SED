@@ -46,9 +46,9 @@ function phaseplot!(A,S; show_required=true,show_potential=true,same_potential_c
 		
 		(us,ur,y)=analytical(is)
 		if is.target=="yield" && show_target
-	        lines!(A,y,is.value./y, color=:darkorange, linewidth=0.5)
+	        lines!(A,y,is.value./y, color=:black, linewidth=0.5)
 		elseif is.target=="effort" && show_target
-	        lines!(A,y,fill(mean(is.value),length(y)), color=c, linewidth=0.5)
+	        lines!(A,y,fill(mean(is.value),length(y)), color=:black, linewidth=0.5)
 	    end
 	
 		#Trajectory plot
@@ -68,7 +68,7 @@ function phaseplot!(A,S; show_required=true,show_potential=true,same_potential_c
 			#Shows actors that opt out of resource use 
 			#scatter!(A,is.w̃[id],cumsum(x.u[id]./x.ū[id])/x.N,color=adjustColor(c,"l",0.15), markersize=open_access_not_profitable.*0.3)
 			
-			realized=scatter!(A,is.w̃[id],cumsum(is.u[id]./is.ū[id])/x.N,color=c, markersize=MS)
+			realized=scatter!(A,is.w̃[id],cumsum(is.u[id]./is.ū[id])/is.N,color=c, markersize=MS)
 			
 			#optout=scatter!(A,is.w̃[id],cumsum(optoutvector./is.ū)./is.N,color=adjustColor(c,"l",0.85), markersize=institutional_not_profitable)
 			
