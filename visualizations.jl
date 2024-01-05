@@ -46,9 +46,9 @@ function phaseplot!(A,S; show_required=true,show_potential=true,same_potential_c
 		
 		(us,ur,y)=analytical(is)
 		if is.target=="yield" && show_target
-	        lines!(A,y,is.value./y, color=:black, linewidth=0.5)
+	        lines!(A,y,is.value./y, color=c, linewidth=0.5, linestyle=:dash)
 		elseif is.target=="effort" && show_target
-	        lines!(A,y,fill(mean(is.value),length(y)), color=:black, linewidth=0.5)
+	        lines!(A,y,fill(mean(is.value),length(y)), color=c, linewidth=0.5, linestyle=:dash)
 	    end
 	
 		#Trajectory plot
@@ -68,7 +68,7 @@ function phaseplot!(A,S; show_required=true,show_potential=true,same_potential_c
 			#Shows actors that opt out of resource use 
 			#scatter!(A,is.w̃[id],cumsum(x.u[id]./x.ū[id])/x.N,color=adjustColor(c,"l",0.15), markersize=open_access_not_profitable.*0.3)
 			
-			realized=scatter!(A,is.w̃[id],cumsum(is.u[id]./is.ū[id])/is.N,color=c, markersize=MS)
+			scatter!(A,is.w̃[id],cumsum(is.u[id]./is.ū[id])/is.N,color=c, markersize=MS)
 			
 			#optout=scatter!(A,is.w̃[id],cumsum(optoutvector./is.ū)./is.N,color=adjustColor(c,"l",0.85), markersize=institutional_not_profitable)
 			
@@ -190,10 +190,13 @@ function incomes!(
     annotation_size=12,
     densityplot=false,
 	wage_indicator=false,
-	text_color=:black
+	text_color=:black,
+	anntext="",
+	texty=nothing
     )
     c = z.color
-    cw = HSL(c.h, c.s, 0.7)
+    cw = HSL(c.h, c.s, 0.8)
+	c=HSL(c.h, c.s, 0.45)
     mw = (z.w̃[end] - z.w̃[1]) / z.N
 
     if z.w̃[1] == z.w̃[end]
@@ -202,10 +205,10 @@ function incomes!(
 
     indexed ? nothing : fix_xlim ? xlims!(a, [0, 1]) : xlims!(a, [z.w̃[1], z.w̃[end]])
 
-    hideydecorations!(a)
-    hidespines!(a)
+    #hideydecorations!(a)
+    #hidespines!(a)
 
-    id = sortperm(z.total_revenue)
+    id = indexed ? collect(1:z.N) : sortperm(z.total_revenue)
     if densityplot
         pred = kde(z.total_revenue[id])
         band!(a, pred.x, pred.x .* 0, pred.density, color=(c, 0.5))
@@ -227,9 +230,16 @@ function incomes!(
 	end
 	#barplot!(a,collect(1:z.N),z.total_revenue[id],color=c, width=mw)
     if show_text
-        text!(a, 0.09, maximum(z.total_revenue) * 0.8, text="Gini: " * string(round(gini(z.total_revenue), digits=2)), font="Arial", align=(:left, :top), color=text_color, fontsize=annotation_size)
-        text!(a, 0.09, maximum(z.total_revenue), text="Total: " * string(round(sum(z.total_revenue), digits=2)), font="Arial", align=(:left, :top), color=text_color, fontsize=annotation_size)
-        text!(a, 0.09, maximum(z.total_revenue) * 0.9, text="Resource: " * string(round(sum(z.resource_revenue), digits=2)), font="Arial", align=(:left, :top), color=text_color, fontsize=annotation_size)
+		incometext=anntext*"\nT:" * string(round(sum(z.total_revenue), digits=2)) * " R:" * string(round(sum(z.resource_revenue), digits=2)) * " G:" * string(round(gini(z.total_revenue), digits=2))
+        a.title=incometext
+		a.titlesize=annotation_size
+		#a.titlefont="Arial"
+		a.titlegap=1
+		a.titlefont=:regular
+		#text!(a,0.09,1.0, space=:relative, text=incometext, font="Arial", align=(:left, :top), color=text_color, fontsize=annotation_size)
+		#text!(a, 0.09, maximum(z.total_revenue) * 0.8, text="Gini: " * string(round(gini(z.total_revenue), digits=2)), font="Arial", align=(:left, :top), color=text_color, fontsize=annotation_size)
+        #text!(a, 0.09, maximum(z.total_revenue), text="Total: " * string(round(sum(z.total_revenue), digits=2)), font="Arial", align=(:left, :top), color=text_color, fontsize=annotation_size)
+        #text!(a, 0.09, maximum(z.total_revenue) * 0.9, text="Resource: " * string(round(sum(z.resource_revenue), digits=2)), font="Arial", align=(:left, :top), color=text_color, fontsize=annotation_size)
     end
 end
 

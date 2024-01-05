@@ -1,4 +1,4 @@
-using Colors, Statistics, OrdinaryDiffEq, Distributions,CairoMakie, FileIO, Graphs, Random, KernelDensity, ColorSchemes, NetworkLayout
+using Colors, Statistics, OrdinaryDiffEq, Distributions,CairoMakie, FileIO, Graphs, Random, KernelDensity, ColorSchemes, NetworkLayout,NonlinearSolve
 using DiffEqCallbacks: TerminateSteadyState
 using Base: @kwdef
 import Base: show
@@ -10,3 +10,5 @@ include("institutions.jl")
 include("utils.jl")
 include("visualizations.jl")
 include("figures.jl")
+
+set_theme!(theme_light())

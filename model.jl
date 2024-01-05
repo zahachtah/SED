@@ -4,8 +4,8 @@ function dudt(dx,x,p,t)
     # extract the parameters from named tuple containers for simpler equation syntax
     dydt=p.sim.dydt # used when y is held constant
     N=p.N
-	ū=p.ū
-	w̃=p.w̃
+	ū=p.ū.*p.aū
+	w̃=p.w̃.*p.aw̃
 	α=p.α
 	#q=p.t
 	β=p.β
@@ -28,25 +28,26 @@ function dudt(dx,x,p,t)
 
     # PERMITS & PROPERTY RIGHTS
 	
-    if p.institution=="PLL" || p.institution=="PHL" #if permits are used
+    if p.institution=="Permits" #if permits are used
         n=Int64(round(p.value.*N)) # number of allowed permitholders (can we do this at scenario creation)
         id=findall(u.+dx[1:N].>0.0)      # get all who would like to use resource
         l=length(id)                  # number of potential resource users 
         if l>n  # if number of actors that want to use resource are more than number of permits 
-            if p.institution=="PLL" 
+			#println(p.target)
+            if p.target=="for high w̃" 
                 r=l-n+1:l   # select the permit holders (given to high w)
-            elseif p.institution=="PHL"
+            elseif p.target=="for low w̃"
                 r=1:n # select the permit holders (given to low w)
             end
             q=1:N
             idq=q[q .∉ Ref(id[r])] #checks if qdy is in id[r] and returns the indices of q that are not in id[r]
-            dx[idq]=min.(0.0,-u[idq])
+            dx[idq] .= min.(0.0, -u[idq])
         end
     end
     # One can have quota shared equally among all actors or only among those who want to use resource
 
  
-    if p.institution=="EC"
+    if p.institution=="Shared"
         n=sum((u.+dx[1:N]).>0.0) # this ensures that only those who want to use resource get quota
 		if p.target=="yield"
         	dx[1:N].-=ifelse.((u.+dx[1:N]).>p.value/y/n, (u.+dx[1:N]).-p.value/y/n , 0.0 )
@@ -62,7 +63,7 @@ function dudt(dx,x,p,t)
     #constrain!.(dx[1:N],u,0.0,ū,dt) Testing an inplace version with potentially less memory allocation
 
     #TRADABLE QUOTAS
-	if p.institution=="TQ"
+	if p.institution=="Tradable"
 		if p.target=="yield"
 			supply=max(0.0,p.value-sum(u)*y)
 		else
@@ -124,18 +125,13 @@ Main function to run a simulation with parameters provided by a scenario.
 function sim(p; tend=(0.0,2000.0), y0=1.0, dydt=1.0,u0=fill(0.0/p.N,p.N), p0=0.0,solution=false,terminate_steady_state=true)
 	t0=time()
     N=p.N
-	if false#p.institution=="PA"
-		w̃=p.w̃
-		ū=p.ū
-        p.w̃=w̃./max(0.001,(1-(1-p.vaue))) # to avoid dividing by zero
-        p.ū=ū./(1+(1-p.value))
-    end
+
     # sets up the problem,
     prob = ODEProblem(dudt,[u0;y0;p0],tend,p)
 
     # solves the ODE
     sol=solve(prob,adaptive=false, Euler(),saveat=0.1,callback=terminate_steady_state ? TerminateSteadyState(1e-6,1e-4) : nothing,dt=p.sim.dt)#  
-    poa=deepcopy(p)
+	poa=deepcopy(p)
     poa.institution="OA"
     DUDT=zeros(N+2)
     dudt(DUDT,sol.u[end],poa,0.0)
@@ -184,9 +180,9 @@ function sim(p; tend=(0.0,2000.0), y0=1.0, dydt=1.0,u0=fill(0.0/p.N,p.N), p0=0.0
 	    p.t_ϕ=[u[end] for u in sol.u]
 		p.t_U=[sum(u[findall(p.ū.>0.0)]./p.ū[findall(p.ū.>0.0)]./p.N) for u in sol.u]
 		c̃=0
-		p.wage_revenue = (p.ū .- p.u) .* p.w̃; 
-        p.resource_revenue = p.u.*(p.y .- c̃);
-        p.trade_revenue=(p.value./p.y./p.N.-p.u).*p.ϕ
+		p.wage_revenue = (p.ū .- p.u) .* p.w̃.*p.r.*p.p.*p.K; 
+        p.resource_revenue = p.u.*(p.y .- c̃).*p.r.*p.p.*p.K;
+        p.trade_revenue=(p.value./p.y./p.N.-p.u).*p.ϕ.*p.r.*p.p.*p.K
         #R̃ₕᵣ= S.u.*(S.y .- S.w̃);
         p.total_revenue = p.wage_revenue .+  p.resource_revenue
 		p.gini=gini(p.total_revenue)

@@ -10,6 +10,8 @@ mutable struct Scenario
     p
     w̃
     ū
+    aw̃
+    aū
     α
     u
     U
@@ -35,6 +37,29 @@ mutable struct Scenario
     caption
     color
 end
+
+function Base.show(io::IO, scenario::Scenario)
+    println(io, "Scenario:")
+    println(io, "=========")
+    println(io, "N: ", scenario.N)
+    println(io, "External Parameters: ", scenario.external)
+    println(io, "w: ", scenario.w)
+    println(io, "q: ", scenario.q)
+    println(io, "ē: ", scenario.ē)  # and so on for other fields...
+    println(io, "a: ", scenario.a) 
+    println(io, "r: ", scenario.r) 
+    println(io, "K: ", scenario.K) 
+    println(io, "p: ", scenario.p)
+    println(io, "w̃: ", scenario.w̃)
+    println(io, "ū: ", scenario.ū)
+    println(io, "aw̃: ", scenario.aw̃)
+    println(io, "aū: ", scenario.aū)
+    println(io, "α: ", scenario.α)
+    println(io, "Institution: ", scenario.institution)
+    println(io, "Target: ", scenario.target)
+end
+
+
 """
     scenario(;N=100, external=Dict(), ē=SED(min=1.0,max=1.0), q=SED(min=1.0/N,max=1.0/N),
              a=SED(min=1.0,max=1.0), w=SED(min=0.1/N,max=0.9/N), r=1.0, K=1.0, p=1.0,
@@ -94,16 +119,18 @@ function scenario(;
     w=SED(min=0.1/N,max=0.9/N),
     r=1.0,
     K=1.0,
-    p=1.0,
+    p=SED(min=1.0,max=1.0),
     # basic non-dimensionalized parameters, if set these override dimensionalized parameters
     w̃=nothing,
     ū=nothing,
+    aw̃=fill(1.0,N),
+    aū=fill(1.0,N),
     α=nothing,
     # institutional parameters
-    institution::String="OA",
-    β::Float64=institution=="TQ" ? 0.05 : 0.0,
+    institution::String="Open",
+    β::Float64=institution=="Tradable" ? 0.05 : 0.0,
     value::Float64=1.0,
-    target::String="effort",
+    target::String="access",
     #simulation parameters
     ts::Float64=0.0,
     ū0::Array{Float64,1}=fill(0.0,N),
@@ -114,7 +141,7 @@ function scenario(;
     label::String="",
     image::String="",
     caption::String="",
-    color::Union{Colorant,Nothing}=nothing,
+    color::Union{Colorant,Symbol,String,Nothing}=nothing,
     simulate::Bool=true
 )
 
@@ -149,6 +176,7 @@ function scenario(;
         end
 
     else
+        println(w)
         dist!(w,N)
         dist!(q,N)
         dist!(ē,N)
@@ -167,10 +195,9 @@ function scenario(;
 	
     # We just need a good recalc method to be able to adjust e.g. PA dependence!
 
-    if institution=="PA"
-        w̃=w̃./max(0.001,(1-(1-value))) # to avoid dividing by zero
-        ū=ū./(1+(1-value))
-        q_sum=sum(q)  # this needed?
+    if institution=="Protected"
+        w̃=w̃ ./max(0.001,(1-(1-value))) # to avoid dividing by zero
+        ū= ū ./(1+(1-value))
     end
 
 	color=color==nothing ? colorant"crimson" : color
@@ -195,6 +222,8 @@ function scenario(;
 	p,
 	w̃,
 	ū,
+    aw̃,
+	aū,
 	α,
 	u=[],
 	U=0,
@@ -224,9 +253,9 @@ function scenario(;
     if simulate
         #non-dimensional revenues
         c̃=0 #Yo, add c to scenario!
-        S.wage_revenue = (S.ū .- S.u) .* S.w̃; 
-        S.resource_revenue = S.u.*(S.y .- c̃);
-        S.trade_revenue=(S.value./S.y./S.N.-S.u).*S.ϕ
+        S.wage_revenue = (S.ū .- S.u) .* S.w̃.*S.r.*S.p.*S.K;
+        S.resource_revenue = S.u.*(S.y .- c̃).*S.r.*S.p.*S.K;
+        S.trade_revenue=(S.value./S.y./S.N.-S.u).*S.ϕ.*S.r.*S.p.*S.K;
         #R̃ₕᵣ= S.u.*(S.y .- S.w̃);
         S.total_revenue = S.wage_revenue .+  S.resource_revenue
         
@@ -236,6 +265,45 @@ function scenario(;
 	
 	#Scenario(N,w,q,ē,a,r,K,!isa(p,Array) ? fill(p,N) : p,w̃,ū,ū_sum,α,institution,T,t,target,β,ū0,y0,dt,dydt,label,image,caption,color)
 
+end
+
+function scenario(scenario::Scenario; kwargs...)
+    # Create a copy of the scenario to avoid mutating the original
+    s = deepcopy(scenario)
+
+    # Iterate over each keyword argument and update the corresponding field
+    for (key, value) in kwargs
+        if hasfield(typeof(s), key)
+            setfield!(s, key, value)
+        else
+            println("Warning: Scenario does not have a field named $key")
+        end
+    end
+
+    dist!(s.w,s.N)
+    dist!(s.q,s.N)
+    dist!(s.ē,s.N)
+    dist!(s.a,s.N)
+    dist!(s.p,s.N)
+    dist!(s.w̃,s.N)
+    dist!(s.ū,s.N)
+    dist!(s.α,s.N)
+    dist!(s.r,s.N)
+    dist!(s.K,s.N)
+
+
+    s.w̃==nothing ? s.w̃=SED(data=s.w./(s.K.*s.p.*s.q)) : isa(s.w̃,SED) ? s.w̃=dist!(s.w̃,s.N) : nothing
+    s.ū==nothing ? s.ū=SED(data=s.ē.*s.q./s.r) : isa(s.ū,SED) ? s.ū=dist!(s.ū,s.N) : nothing
+    s.α==nothing ? s.α=SED(data=(s.a.*s.p.*s.K.*s.q)./s.r) : isa(s.α,SED) ? s.α=dist!(s.α,s.N) : nothing
+
+    # We just need a good recalc method to be able to adjust e.g. PA dependence!
+
+    if institution=="Protected"
+        s.w̃=s.w̃./max(0.001,(1-(1-value))) # to avoid dividing by zero
+        s.ū=s.ū./(1+(1-value))
+    end
+
+    return s
 end
 
 function inputs(s::Scenario)

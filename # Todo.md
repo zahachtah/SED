@@ -1,13 +1,17 @@
 # Todo:
 
-- [ ] get_best_target function
-- [ ] get_best_institution function
+- [ ] LogNormal distributions both with rand and ordered.
+- [ ] Decide how to implement PA (in sim,deriv or scenario, and if scenario where to keep original values of K and r?)
+- [ ] implement PA, subsidy and tax on different targets!
+- [ ] implement reset scenario
+- [ ] Dimensional revenue going to solve the comparison problem??
+- [x] get_best_target function
+- [x] get_best_institution function
 - [ ] Next thing: add the dependency test into scenarios (as function?) so that dist can be called in the right order!
-- [x] Make marty's scenarios in new code!
 - [ ] pretty dependency plot
 - [ ] Fix periodicity detection
-- [ ] change PLL to PLw, i.e. permits for low w...etc
-- [ ] only for N=50 the target institution matches.....WHY?????
+- [x] change PLL to PLw, i.e. permits for low w...etc
+- [x] only for N=50 the target institution matches..... (bug in EC and TQ, fixed)
 
 
 ### NOTE NOTE NOTE !!!!
