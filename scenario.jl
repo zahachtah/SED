@@ -182,16 +182,16 @@ function scenario(;
         dist!(ē,N)
         dist!(a,N)
         dist!(p,N)
-        dist!(w̃,N)
-        dist!(ū,N)
-        dist!(α,N)
+        
+        
+        
         dist!(r,N)
         dist!(K,N)
     end
 	
-	w̃==nothing ? w̃=SED(data=w./(K.*p.*q)) : isa(w̃,SED) ? w̃=dist!(w̃,N) : nothing
-	ū==nothing ? ū=SED(data=ē.*q./r) : isa(ū,SED) ? ū=dist!(ū,N) : nothing
-	α==nothing ? α=SED(data=(a.*p.*K.*q)./r) : isa(α,SED) ? α=dist!(α,N) : nothing
+	w̃==nothing ? w̃=SED(data=w./(K.*p.*q)) : isa(w̃,SED) ? w̃=dist!(w̃,N) : dist!(w̃,N)
+	ū==nothing ? ū=SED(data=ē.*q./r) : isa(ū,SED) ? ū=dist!(ū,N) : dist!(ū,N)
+	α==nothing ? α=SED(data=(a.*p.*K.*q)./r) : isa(α,SED) ? α=dist!(α,N) : dist!(α,N)
 	
     # We just need a good recalc method to be able to adjust e.g. PA dependence!
 
@@ -251,7 +251,7 @@ function scenario(;
 
 	S= simulate ? sim(Scenario(s...)) : Scenario(s...)
     if simulate
-        #non-dimensional revenues
+        #dimensional revenues
         c̃=0 #Yo, add c to scenario!
         S.wage_revenue = (S.ū .- S.u) .* S.w̃.*S.r.*S.p.*S.K;
         S.resource_revenue = S.u.*(S.y .- c̃).*S.r.*S.p.*S.K;

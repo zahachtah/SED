@@ -5,7 +5,7 @@ potential_color=nothing
 potential_color==nothing ? potential_color=c : nothing #or ensure its a color?
 
 """
-function phaseplot!(A,S; show_required=true,show_potential=true,same_potential_color=true, show_realized=false,show_trajectory=false, regulated_dot_reduction=0.3, attractor_size=30, show_attractor=true,show_target=true, vector_field=false,vector_grid=20)
+function phaseplot!(A,S; show_required=true,show_potential=true,same_potential_color=true, show_realized=false,show_trajectory=false, regulated_dot_reduction=0.3, attractor_size=30, show_attractor=true,show_target=true, vector_field=false,vector_grid=20,show_vertical_potential=false)
 	
 	if !isa(S,Array)
 		S=[S]
@@ -33,6 +33,7 @@ function phaseplot!(A,S; show_required=true,show_potential=true,same_potential_c
 		c=p.color
 		MS=10
 		id=sortperm(is.w̃)
+		scatter!(A,[is.y],[is.U],color=HSL(c.h,c.s,c.l),markersize=show_attractor ? attractor_size : 0,strokecolor=:transparent,strokewidth=0,rotations=pi)
 		if vector_field
 			points = [Point2f(x/(vector_grid+1), y/(vector_grid+1)) for y in 1:vector_grid for x in 1:vector_grid]
 			rotations = [get_deriv_vector(p[1],p[2],is)[1] for p in points]
@@ -60,7 +61,10 @@ function phaseplot!(A,S; show_required=true,show_potential=true,same_potential_c
 		
 		optoutvector=[is.w̃[i]>is.y ? is.u[i] : is.u[i] for i in eachindex(is.w̃[id])] #for non-flattened curve: is.final.p.ū[i]
 		
-		show_potential ? potential=scatter!(A,y,ur,color=same_potential_color ? c : :gray, markersize=MS.*0.3) : nothing
+		if show_potential 
+			potential=scatter!(A,y,ur,color=same_potential_color ? c : :gray, markersize=MS.*0.3)
+			show_vertical_potential ? lines!(A,y,ur,color=same_potential_color ? c : :gray, linewidth=0.5) : nothing
+		end
 
 		if show_realized
 			inst=MarkerElement(marker = :circle, color = :black,strokecolor = c,strokewidth=1,markersize = MS)
@@ -76,9 +80,9 @@ function phaseplot!(A,S; show_required=true,show_potential=true,same_potential_c
 		end
 		
 		show_trajectory ? scatter!(A,[is.y],[is.U],color=:black,markersize=show_attractor ? 8 : 0,strokecolor=:transparent,strokewidth=0,rotations=pi) : nothing
-		scatter!(A,[is.y],[is.U],color=:transparent,markersize=show_attractor ? attractor_size : 0,strokecolor=c,strokewidth=2,rotations=pi)
+		#scatter!(A,[is.y],[is.U],color=:transparent,markersize=show_attractor ? attractor_size : 0,strokecolor=c,strokewidth=2,rotations=pi)
 		
-		show_required ? required=lines!(A,y,us,linewidth=1,markersize=1,color=same_potential_color ? c : :gray) : nothing
+		show_required ? required=lines!(A,y,us,linewidth=0.5,markersize=0.5,color=same_potential_color ? c : :gray) : nothing
 	end
 	ylims!(A,(-0.02,1.02))
 	xlims!(A,(0,1))

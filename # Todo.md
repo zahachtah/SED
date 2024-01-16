@@ -1,9 +1,12 @@
 # Todo:
 
-- [ ] LogNormal distributions both with rand and ordered.
+- [X] LogNormal distributions both with rand and ordered.
 - [ ] Decide how to implement PA (in sim,deriv or scenario, and if scenario where to keep original values of K and r?)
 - [ ] implement PA, subsidy and tax on different targets!
 - [ ] implement reset scenario
+- [ ] make best institution part of Scenario object
+- [ ] Single case fig6
+- [ ] optionally simplify fig6
 - [ ] Dimensional revenue going to solve the comparison problem??
 - [x] get_best_target function
 - [x] get_best_institution function

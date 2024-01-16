@@ -2,13 +2,53 @@ using Statistics
 using Base: @kwdef
 import Base: show
 
+"""
+    SED{T, N, A<:AbstractArray{T,N}}
+
+A mutable struct representing a stochastic or deterministic distribution of data.
+
+# Fields
+- `data::A`: The actual data array of type `A` that stores the distribution's values.
+- `min::Union{Nothing, Float64}`: The minimum value of the distribution. If `nothing`, the minimum is not specified.
+- `max::Union{Nothing, Float64}`: The maximum value of the distribution. If `nothing`, the maximum is not specified.
+- `mean::Union{Nothing, Float64}`: The mean (average) value of the distribution. If `nothing`, the mean is not specified.
+- `median::Union{Nothing, Float64}`: The median value of the distribution. If `nothing`, the median is not specified.
+- `sigma::Union{Nothing, Float64}`: The sigma (standard deviation) of the distribution. If `nothing`, the sigma is not specified.
+- `sum::Union{Nothing, Float64}`: The sum of all values in the distribution. If `nothing`, the sum is not calculated.
+- `rand::Bool`: A boolean flag to indicate whether the data should be randomly generated (`true`) or based on quantiles (`false`).
+- `normalize::Bool`: A boolean flag to indicate whether the data should be normalized.
+- `dependent::NamedTuple`: A named tuple to store dependent distributions or variables.
+- `distribution::Any`: The type of distribution, e.g., `Uniform`, `LogNormal`, or `Constant`.
+
+# Usage
+The `SED` struct is used to represent a distribution with specified characteristics like min, max, mean, etc. It allows for the creation of a data set that follows a specified distribution, which can be either deterministic or stochastic.
+
+# Example
+```julia
+sed = SED(min=0.1, max=1.0, distribution=Uniform)
+dist!(sed, 100)
+```
+This creates an SED instance with a uniform distribution between 0.1 and 1.0, and then generates 100 data points following this distribution.
+
+Function dist!
+
+The dist! function is a key part of working with SED. It generates or updates the data in the SED instance based on the specified distribution parameters and the number of data points N.
+
+Example
+```julia
+dist!(sed, 50)
+```
+This updates the sed instance to contain 50 data points following the previously specified distribution.
+
+When dist! is called, it first checks the type of distribution and then generates the data accordingly. If rand is true, the data points are randomly sampled from the distribution. Otherwise, they are deterministically generated based on quantiles. The function also handles normalization if normalize is set to true.
+"""
 @kwdef mutable struct SED{T, N, A<:AbstractArray{T,N}} <: AbstractArray{T,N}
     data::A = nothing
     min::Union{Nothing, Float64} = nothing
     max::Union{Nothing, Float64} = nothing
     mean::Union{Nothing, Float64} = nothing
     median::Union{Nothing, Float64} = nothing
-    spread::Union{Nothing, Float64} = nothing
+    sigma::Union{Nothing, Float64} = nothing
     sum::Union{Nothing, Float64} = nothing
     rand::Bool = false
     normalize::Bool = false
@@ -21,10 +61,31 @@ function show(io::IO, sed::SED{T, N, A}) where {T, N, A<:AbstractArray{T,N}}
     isnothing(sed.max) ? nothing : print(io, "Max:",sed.max," ")
     isnothing(sed.mean) ? nothing : print(io, "Mean:",sed.mean," ")
     isnothing(sed.median) ? nothing : print(io, "Median:",sed.median," ")
-    isnothing(sed.spread) ? nothing : print(io, "Spread:",sed.spread," ")
+    isnothing(sed.sigma) ? nothing : print(io, "Sigma:",sed.sigma," ")
     isnothing(sed.sum) ? nothing : print(io, "Sum:",sed.sum," ")
-    isnothing(sed.distribution) ? nothing  : print(io, "Distribution: ",sed.rand ? "random " : "",sed.distribution)
+    isnothing(sed.distribution) ? nothing  : print(io, "Distribution: ",sed.rand ? "random " : "",sed.normalize ? "normalize " : "",sed.distribution)
 end
+
+function astext(sed::SED{T, N, A}) where {T, N, A<:AbstractArray{T,N}}
+    io = IOBuffer()
+    
+    isnothing(sed.min) ? nothing : print(io, "Min: ", sed.min, " ")
+    isnothing(sed.max) ? nothing : print(io, "Max: ", sed.max, " ")
+    isnothing(sed.mean) ? nothing : print(io, "Mean: ", sed.mean, " ")
+    isnothing(sed.median) ? nothing : print(io, "Median: ", sed.median, " ")
+    isnothing(sed.sigma) ? nothing : print(io, "Sigma: ", sed.sigma, " ")
+    isnothing(sed.sum) ? nothing : print(io, "Sum: ", sed.sum, " ")
+    isnothing(sed.distribution) ? nothing : print(io,  sed.rand ? "random " : "",sed.normalize ? "normalize " : "", sed.distribution)
+
+    str = String(take!(io))
+    str = replace(str, "Distributions." => "")
+    str = replace(str, "{Float64}" => "")
+
+    close(io)
+    
+    return str
+end
+
 
 function dist(s::SED,N::Int64)
     dist!(s,N)
@@ -36,64 +97,77 @@ function dist!(s,N::Int64)
     return s
 end
 
-function distold!(s::SED, N::Int64)
-    if s.min !== nothing && s.max !== nothing && s.rand==false
-        s.data= N==1 ? [(s.max+s.min)/2] : collect(range(s.min, stop=s.max, length=N))
-	elseif s.min !== nothing && s.max !== nothing && s.rand==true
-        s.data = s.min.+(s.max-s.min).*rand(N)
-    elseif s.mean !== nothing && s.spread !== nothing && s.rand==false && s.distribution==:linear
-        s.data= N==1 ? [s.mean] : collect(range(s.mean-s.spread/2, stop=s.mean+s.spread/2, length=N))
-    elseif s.mean !== nothing && s.spread !== nothing && s.rand==true && s.distribution==:linear
-        s.data = s.mean.-s.spread/2 .+ s.spread*rand(N)
-    elseif s.mean !== nothing && s.spread !== nothing && s.rand==true && s.distribution==:lognormal
-        s.data= N==1 ? [s.mean] : rand(LogNormal(log(s.mean),s.spread),N)
+function lognormal(min; stop=1.0,length=10)
+    min==0.0 ? min=0.01 : nothing # Note, I adjust min to not be ==0
+    min>stop ? stop=min+0.01 : nothing
+    if length==1
+      return [min]
+    else
+      #lr=norminvcdf.(collect(range(0.0,stop=1.0,length=length+2))[2:end-1])
+      lr=quantile.(Normal(0.0,2.0),collect(range(1/length,stop=1.0-1/length,length=length)))
+      lr.-=lr[1]
+      lr./=lr[end]
+      lr.*=(log(stop)-log(min))
+      lr.+=log(min)
+      return exp.(lr)
     end
+end
+
+function dist!(s::SED, N::Int64)
+    rev=false
+
+    if s.distribution==LogNormal
+        if s.min !== nothing && s.max !== nothing
+            rev=s.min>s.max
+            if s.max!=s.min
+                temp=lognormal(minimum([s.min,s.max]),stop=maximum([s.min,s.max]),length=N)
+                medianLN=median(temp)
+                spreadLN=std(log.(temp))
+                s.distribution=LogNormal(log(medianLN),spreadLN)
+            else
+                s.distribution=Constant(s.min)
+            end
+        elseif s.mean!== nothing && s.sigma!==nothing 
+            rev= s.sigma<0
+            s.distribution=s.sigma!=0.0 ? LogNormal(log(s.mean)-abs(s.sigma)^2/2,abs(s.sigma)) : Constant(s.mean)
+        elseif s.median!== nothing && s.sigma!==nothing
+            rev= s.sigma<0
+            s.distribution=s.sigma!=0.0 ? LogNormal(log(s.median),abs(s.sigma)) : Constant(s.median)
+        end
+        if s.rand==true
+            s.data=rand(s.distribution,N)
+        else
+            s.data=rev ? reverse(quantile.(s.distribution,range(1/N, stop=1-1/N, length=N))) : quantile.(s.distribution,range(1/N, stop=1-1/N, length=N))
+        end
+
+    elseif s.distribution==Uniform
+        if s.min !== nothing && s.max !== nothing
+            rev=s.min>s.max
+            if s.max!=s.min
+                s.distribution=Uniform(minimum([s.min,s.max]),maximum([s.min,s.max]))
+            else
+                s.distribution=Constant(s.min)
+            end
+        elseif s.mean!== nothing && s.sigma!==nothing 
+            rev= s.sigma<0
+            s.distribution=s.sigma!=0.0 ? Uniform(s.mean-abs(s.sigma)/2,s.mean+abs(s.sigma)/2) : Constant(s.mean)
+        elseif s.median!== nothing && s.sigma!==nothing
+            rev= s.sigma<0
+            s.distribution=s.sigma!=0.0 ? Uniform(s.median-abs(s.sigma)/2,s.median+abs(s.sigma)/2) : Constant(s.median)
+        end
+        if s.rand==true
+            s.data=rand(s.distribution,N)
+        else
+            s.data=rev ? reverse(quantile.(s.distribution,range(1/N, stop=1-1/N, length=N))) : quantile.(s.distribution,range(1/N, stop=1-1/N, length=N))
+        end
+    elseif s.distribution==Constant
+        s.distribution=Constant(s.min)
+    end
+    
     s.normalize ? s.data=s.data./N : nothing
     return s
 end# Define a default constructor for when no arguments are given
 
-function dist!(s::SED, N::Int64)
-    println(s)
-    if s.min !== nothing && s.max !== nothing && s.max!=s.min
-        if s.distribution==LogNormal
-        # Nonlinear problem to find μ and σ of the lognormal distribution given min and max of 1/N and 1-1/N quantiles (is there an analytical?)    
-        f(u,p)=quantile.(LogNormal(u[1],abs(u[2])),[1/p[3],1-1/p[3]]).-[p[1],p[2]]
-        sol = solve(NonlinearProblem(f, [0.1,0.5], [s.min,s.max,N]))
-        s.distribution=LogNormal(sol.u[1],sol.u[2])
-        elseif s.distribution==Uniform
-            s.distribution=Uniform(s.min,s.max)
-        end
-    elseif s.mean!== nothing && s.spread!==nothing && s.spread!=0.0
-        if s.distribution==LogNormal
-            s.distribution=LogNormal(log(s.mean)-s.spread^2/2,s.spread)
-        elseif s.distribution==Uniform
-            s.distribution=Uniform(s.mean-s.spread/2,s.mean+s.spread/2)
-        end
-    elseif s.median!== nothing && s.spread!==nothing && s.spread!=0.0
-        if s.distribution==LogNormal
-            s.distribution=LogNormal(log(s.median),s.spread)
-        elseif s.distribution==Uniform
-            s.distribution=Uniform(s.mean-abs(s.spread)/2,s.mean+abs(s.spread)/2)
-        end
-        # move this to the end and leave the "intended" distribution as is
-    elseif s.min==s.max
-        s.distribution=Dirac(s.min) 
-    elseif s.mean!=nothing && s.spread==0.0
-        s.distribution=Dirac(s.mean) 
-    elseif s.median!=nothing && s.spread==0.0
-        s.distribution=Dirac(s.median) 
-    end
-
-    if s.rand==true
-        s.data=rand(s.distribution,N)
-    else
-        s.data=quantile.(s.distribution,(s.spread !== nothing && s.spread<0) ? reverse(range(1/N, stop=1-1/N, length=N)) : range(1/N, stop=1-1/N, length=N))
-    end
-    
-
-    s.normalize ? s.data=s.data./N : nothing
-    return s
-end
 
 
 function SED(; data=nothing, min=nothing, max=nothing, kwargs...)
@@ -125,7 +199,7 @@ function Base.similar(a::SED{T, N, A}, ::Type{T}, dims::Dims) where {T, N, A<:Ab
         max = a.max,
         mean = a.mean,
         median = a.median,
-        spread = a.spread,
+        sigma = a.sigma,
         sum = a.sum,
         rand = a.rand,
         normalize = a.normalize,
@@ -134,3 +208,7 @@ function Base.similar(a::SED{T, N, A}, ::Type{T}, dims::Dims) where {T, N, A<:Ab
     )
 end
 Base.iterate(a::SED, state...) = iterate(a.data, state...)
+
+function pdf(s::SED)
+    [pdf(s.distribution,xx) for xx in s]
+end

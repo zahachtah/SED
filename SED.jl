@@ -1,7 +1,10 @@
-using Colors, Statistics, OrdinaryDiffEq, Distributions,CairoMakie, FileIO, Graphs, Random, KernelDensity, ColorSchemes, NetworkLayout,NonlinearSolve
+using Colors, Statistics, OrdinaryDiffEq, Distributions,CairoMakie, FileIO, Graphs, Random, KernelDensity, ColorSchemes, NetworkLayout
 using DiffEqCallbacks: TerminateSteadyState
 using Base: @kwdef
 import Base: show
+import Distributions: pdf
+
+Constant=Dirac
 
 include("diversity.jl")
 include("scenario.jl")
