@@ -176,15 +176,18 @@ function scenario(;
         end
 
     else
-        println(w)
+        isa(w,Number) ? w=SED(mean=w,sigma=0.0) : nothing
+        isa(q,Number) ? q=SED(mean=q,sigma=0.0) : nothing
+        isa(ē,Number) ? ē=SED(mean=ē,sigma=0.0) : nothing
+        isa(a,Number) ? a=SED(mean=a,sigma=0.0) : nothing
+        isa(p,Number) ? p=SED(mean=p,sigma=0.0) : nothing
+        isa(r,Number) ? r=SED(mean=r,sigma=0.0) : nothing
+        isa(K,Number) ? K=SED(mean=K,sigma=0.0) : nothing
         dist!(w,N)
         dist!(q,N)
         dist!(ē,N)
         dist!(a,N)
         dist!(p,N)
-        
-        
-        
         dist!(r,N)
         dist!(K,N)
     end
