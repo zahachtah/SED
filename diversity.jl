@@ -2,6 +2,8 @@ using Statistics
 using Base: @kwdef
 import Base: show
 
+Constant=Dirac
+
 """
     SED{T, N, A<:AbstractArray{T,N}}
 
@@ -158,10 +160,16 @@ function dist!(s::SED, N::Int64)
         if s.rand==true
             s.data=rand(s.distribution,N)
         else
-            s.data=rev ? reverse(quantile.(s.distribution,range(1/N, stop=1-1/N, length=N))) : quantile.(s.distribution,range(1/N, stop=1-1/N, length=N))
+            s.data=rev ? reverse(quantile.(s.distribution,N==1 ? [0.5] : range(1/N, stop=1-1/N, length=N))) : quantile.(s.distribution,N==1 ? [0.5] : range(1/N, stop=1-1/N, length=N))
         end
     elseif s.distribution==Constant
         s.distribution=Constant(s.min)
+    elseif s.distribution==Exponential
+        s.distribution=Exponential(s.mean)
+        s.data=s.rand==true ? rand(s.distribution,N) : quantile.(s.distribution,N==1 ? [0.5] : range(1/N, stop=1-1/N, length=N))
+    elseif s.distribution==Beta
+        s.distribution=Beta(s.min,s.max)
+        s.data=s.rand==true ? rand(s.distribution,N) : quantile.(s.distribution,N==1 ? [0.5] : range(1/N, stop=1-1/N, length=N))
     end
     
     s.normalize ? s.data=s.data./N : nothing

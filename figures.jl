@@ -891,17 +891,17 @@ function sed(;N1=20,N2=200,w_dist=LogNormal,ms=1)
     display(f)
 end
 
-function arrow_arc!(ax, origin, radius, start_angle, stop_angle; linewidth=1, color=:black)
+function arrow_arc!(ax, origin, radius, start_angle, stop_angle; linewidth=1, color=:black,flip_arrow=false,linestyle=:dot)
     # Draw the arc
-    arc!(ax, origin, radius, start_angle, stop_angle, linewidth=linewidth, color=color)
+    arc!(ax, origin, radius, start_angle, stop_angle, linewidth=linewidth, color=color;linestyle)
 
     # Function to calculate a point on the circle
     point_on_circle(θ) = origin .+ radius * Point2f(cos(θ), sin(θ))
 
     # Calculate the direction of the arrow at the start and end of the arc
-    start_dir = Point2f(cos(start_angle + π/2), sin(start_angle + π/2))
-    end_dir = Point2f(cos(stop_angle - π/2), sin(stop_angle - π/2))
-    dx=0.000000001
+    start_dir = Point2f(cos(start_angle + π/2 + (flip_arrow ? pi/2 : 0)), sin(start_angle + π/2+ (flip_arrow ? pi/2 : 0)))
+    end_dir = Point2f(cos(stop_angle - π/2 + (flip_arrow ? pi : 0)), sin(stop_angle - π/2+ (flip_arrow ? pi : 0)))
+    dx=0.001
     # Add arrow at the start and end of the arc
     # Adjust the multiplier for start_dir and end_dir to control the arrow orientation
     arrows!(ax, [point_on_circle(start_angle)[1]],[point_on_circle(start_angle)[2]], [start_dir[1]]*dx,[start_dir[2]]*dx, color=color, linewidth=linewidth)
@@ -910,13 +910,16 @@ end
 
 function region_of_control(;N=1000, distribution=LogNormal)
     dc=1.1
-    f=Figure(size=(1000,1000))
+    scale=0.7
+    f=Figure(size=(1800*scale,1200*scale))
     ax1=Axis(f[1,1])
     ax2=Axis(f[1,2])
     ax3=Axis(f[2,1])
     ax4=Axis(f[2,2])
+    ax5=Axis(f[1,3])
+    ax6=Axis(f[2,3])
     myscheme = ColorScheme([colorant"forestgreen",colorant"darkorange", colorant"steelblue"],
-    "custom", "twotone, red and green")
+    "custom", "a name")
     for u in [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.92,1.07,1.26,1.5,1.87,2.5,3.75,8.0]
         s=scenario(w̃=SED(mean=0.3,sigma=0.0),    ū=SED(mean=u,sigma=0.0, normalize=true), color=u<0.8 ? :forestgreen : :steelblue;N)
         du=scenario(w̃=SED(mean=0.3,sigma=0.0),    ū=SED(mean=u*dc,sigma=0.0, normalize=true), color=u<0.8 ? :forestgreen : :steelblue;N)
@@ -929,20 +932,35 @@ function region_of_control(;N=1000, distribution=LogNormal)
         duV=(sum(du.total_revenue)-sum(s.total_revenue))/dc
         s.color=convert(HSL,get(myscheme,abs(dwV)/(abs(dwV)+abs(duV))))
         phaseplot!(ax3,s,show_realized=false, show_attractor=true,show_vertical_potential=true)
-
+        distribution=Uniform
         sLN=scenario(w̃=SED(mean=0.3,sigma=0.4,distribution=distribution),    ū=SED(mean=u,sigma=0.0, normalize=true);N)
         du=scenario(w̃=SED(mean=0.3,sigma=0.4,distribution=distribution),    ū=SED(mean=u*dc,sigma=0.0, normalize=true);N)
         dw=scenario(w̃=SED(mean=0.3*dc,sigma=0.4,distribution=distribution),    ū=SED(mean=u,sigma=0.0, normalize=true);N)
         dwV=(sum(dw.resource_revenue)-sum(sLN.resource_revenue))/(1-dc)
         duV=(sum(du.resource_revenue)-sum(sLN.resource_revenue))/(1-dc) 
-        println(abs(dwV)/(abs(dwV)+abs(duV)))
+    
         sLN.color=convert(HSL,get(myscheme,abs(dwV)/(abs(dwV)+abs(duV))))
         phaseplot!(ax2,sLN,show_realized=false, show_attractor=true,show_vertical_potential=true)
         dwV=(sum(dw.total_revenue)-sum(sLN.total_revenue))/(1-dc)
         duV=(sum(du.total_revenue)-sum(sLN.total_revenue))/(1-dc)
-        println(abs(dwV)/(abs(dwV)+abs(duV)))
+    
         sLN.color=convert(HSL,get(myscheme,abs(dwV)/(abs(dwV)+abs(duV))))
         phaseplot!(ax4,sLN,show_realized=false, show_attractor=true,show_vertical_potential=true)
+        distribution=LogNormal
+        sLN=scenario(w̃=SED(mean=0.3,sigma=0.4,distribution=distribution),    ū=SED(mean=u,sigma=0.0, normalize=true);N)
+        du=scenario(w̃=SED(mean=0.3,sigma=0.4,distribution=distribution),    ū=SED(mean=u*dc,sigma=0.0, normalize=true);N)
+        dw=scenario(w̃=SED(mean=0.3*dc,sigma=0.4,distribution=distribution),    ū=SED(mean=u,sigma=0.0, normalize=true);N)
+        dwV=(sum(dw.resource_revenue)-sum(sLN.resource_revenue))/(1-dc)
+        duV=(sum(du.resource_revenue)-sum(sLN.resource_revenue))/(1-dc) 
+        
+        sLN.color=convert(HSL,get(myscheme,abs(dwV)/(abs(dwV)+abs(duV))))
+        phaseplot!(ax5,sLN,show_realized=false, show_attractor=true,show_vertical_potential=true)
+        dwV=(sum(dw.total_revenue)-sum(sLN.total_revenue))/(1-dc)
+        duV=(sum(du.total_revenue)-sum(sLN.total_revenue))/(1-dc)
+    
+        sLN.color=convert(HSL,get(myscheme,abs(dwV)/(abs(dwV)+abs(duV))))
+        phaseplot!(ax6,sLN,show_realized=false, show_attractor=true,show_vertical_potential=true)
+   
     end
     arrows!(ax1,[0.3],[0.5],[0.14],[0.0],linewidth=2.0,color=:steelblue)
     arrows!(ax1,[0.3],[0.5],[-0.14],[0.0],linewidth=2.0,color=:steelblue)
@@ -951,16 +969,17 @@ function region_of_control(;N=1000, distribution=LogNormal)
     arrow_arc!(ax1,Point2f(1, 0),0.9,pi-0.96-0.01,pi/2+0.01,linewidth=2.0,color=:forestgreen)
     text!(ax1,0.47,0.45,text="mean incentive\ncontrols resource", color=:steelblue,fontsize=20)
     text!(ax1,0.60,0.65,text="mean impact\ncontrols resource", color=:forestgreen,fontsize=20,rotation=0.32)
-    text!(ax2,0.37,0.45,text="Mixed control of\nmean incentive and impact", color=:black,fontsize=20)
+    #text!(ax2,0.37,0.45,text="Mixed control of\nmean incentive and impact", color=:black,fontsize=20)
    
     #text!(ax2,0.37,0.25,text="when does individual u affect \n total revenues?", color=:black,fontsize=20)
-    Colorbar(f[1:2, 3],limits = (0, 1), colormap = myscheme,flipaxis = false,ticks=([0,1],["impact","incentive"]))
-    Label(f[1,0],text="Resource revenue",fontsize=20, tellwidth=false)
-    Label(f[2,0],text="Total revenue",fontsize=20,tellwidth=false)
+    Colorbar(f[1:2, 4],limits = (0, 1), colormap = myscheme,flipaxis = true,ticks=([0,1],["impact","incentive"]))
+    Label(f[1,0],text="Resource revenue",fontsize=20, tellheight=false,rotation=pi/2)
+    Label(f[2,0],text="Total revenue",fontsize=20,tellheight=false,rotation=pi/2)
     Label(f[0,1],text="No diversity",fontsize=20,tellwidth=false)
-    Label(f[0,2],text="Realistic distribution",fontsize=20,tellwidth=false)
-    Label(f[0,3],text="Control",fontsize=20,tellwidth=false,halign=:right)
-    Label(f[3,1:2],text="Resource level",fontsize=20,tellwidth=false)
+    Label(f[0,2],text="Linear distribution",fontsize=20,tellwidth=false)
+    Label(f[0,3],text="Realistic distribution",fontsize=20,tellwidth=false)
+    Label(f[0,4],text="Control",fontsize=20,tellwidth=false,halign=:left)
+    Label(f[3,1:3],text="Resource level",fontsize=20,tellwidth=false)
     save("graphics/region_of_control.png",f)
     f
 end
@@ -1149,4 +1168,99 @@ function newFigure3(;distribution=Uniform, title_font="Arial", annotation_font="
     incomes!(income_distribution,s)
 
     f
+end
+
+function actor_density(;distribution=Uniform)
+    scale=0.7
+    f=Figure(size=(1200*scale,450*scale))
+    one_actor=Axis(f[1,1], title="Single actor/No diversity")
+    five_actor=Axis(f[1,2],title="Five Actors")
+    many_actor=Axis(f[1,3],title="Many Actors")
+    one_s=scenario(w̃=SED(mean=0.5,sigma=0.9,distribution=distribution),    ū=SED(mean=1,sigma=0.0, normalize=true),N=1)
+    five_s=scenario(w̃=SED(mean=0.5,sigma=0.9,distribution=distribution),    ū=SED(mean=1,sigma=0.0, normalize=true),N=5)
+    many_s=scenario(w̃=SED(mean=0.5,sigma=0.9,distribution=distribution),    ū=SED(mean=1,sigma=0.0, normalize=true),N=1000)
+    phaseplot!(one_actor,one_s,show_realized=false, show_attractor=true,show_vertical_potential=true)
+    phaseplot!(five_actor,five_s,show_realized=false, show_attractor=true,show_vertical_potential=true)
+    phaseplot!(many_actor,many_s,show_realized=false, show_attractor=true,show_vertical_potential=true)
+    
+    [hidespines!(a) for a in [one_actor,five_actor,many_actor]]
+    save("graphics/actor_density.png",f)
+    f   
+end
+
+function potential_realized_sustained(;distribution=Uniform,N=20)
+    scale=0.7
+    myscheme = ColorScheme([colorant"white",colorant"crimson"],
+    "custom", "a name")
+    f=Figure(size=(scale*1200,scale*430))
+    phase_plot_PS=Axis(f[1,1], title="Potential and Sustained")
+    phase_plot_RS=Axis(f[1,2],title="Realised and Sustained")
+    individual=Axis(f[1,3],limits = ((0, 1), nothing),ylabel="time →",xlabel="w̃",title="individual uᵢ over time",xticks=(0:0.5:1,["0","0.5","1"]))
+    [hidespines!(a) for a in [phase_plot_PS,phase_plot_RS,individual]]
+   #income=Axis(f[2,1],xlabel="actor",ylabel="Income")
+    #many_actor=Axis(f[1,3])
+    phase_s=scenario(w̃=SED(mean=0.5,sigma=0.9,distribution=distribution),    ū=SED(mean=1,sigma=0.0, normalize=true);N)
+    phaseplot!(phase_plot_PS,phase_s,show_realized=false, show_attractor=true,show_vertical_potential=true,show_legend=:ct)
+    phaseplot!(phase_plot_RS,phase_s,show_realized=true,show_potential=false, show_attractor=true,show_vertical_potential=true,show_trajectory=true,show_legend=:rt)
+    individual_u!(individual,phase_s,rot=true)
+    Colorbar(f[1,4],ticks=([0,1],["0","ū"]),limits=(0,1),colormap=myscheme,flipaxis=true)
+    #incomes!(income,phase_s)
+    #phaseplot!(five_actor,five_s,show_realized=false, show_attractor=true,show_vertical_potential=true)
+    #phaseplot!(many_actor,many_s,show_realized=false, show_attractor=true,show_vertical_potential=true)
+    save("graphics/potential_realized_sustained.png",f)
+    f   
+end
+
+function convexities(;distribution=Uniform,N=200)
+    scale=0.7
+    myscheme = ColorScheme([colorant"white",colorant"crimson"],
+    "custom", "a name")
+    f=Figure(size=(scale*800,scale*430))
+    phase_plot_PS=Axis(f[1,1], title="Linear")
+    phase_plot_RS=Axis(f[1,2],title="Convexities")
+    [hidespines!(a) for a in [phase_plot_PS,phase_plot_RS,]]
+   #income=Axis(f[2,1],xlabel="actor",ylabel="Income")
+    #many_actor=Axis(f[1,3])
+    #arrows!(phase_plot_PS,[0.33],[0.3],[-0.2],[0.0],linewidth=2.0,color=:crimson,linestyle=:dot)
+    
+    arrows!(phase_plot_PS,[0.13],[0.3],[0.4],[0.0],linewidth=2.0,color=:crimson,linestyle=:dot)
+    
+    phase_s=scenario(w̃=SED(min=0.1,max=0.9,distribution=distribution),    ū=SED(mean=1,sigma=0.0, normalize=true),color=:gray;N)
+    phaseplot!(phase_plot_PS,phase_s,show_realized=false, show_sustained=false,show_attractor=true,show_vertical_potential=true,attractor_color=:crimson)
+    phase_s.color=convert(HSL,colorant"crimson")
+    phaseplot!(phase_plot_PS,phase_s,show_realized=false, show_sustained=false,show_attractor=true,show_vertical_potential=true,attractor_color=:crimson)
+  
+    phase_s=scenario(w̃=SED(min=0.5,max=0.5,distribution=distribution),    ū=SED(mean=1,sigma=0.0, normalize=true),color=:gray;N)
+    phaseplot!(phase_plot_PS,phase_s,show_realized=false,show_potential=false,show_sustained=true, show_attractor=true,show_vertical_potential=true,attractor_color=:crimson)
+    phase_s.color=convert(HSL,colorant"crimson")
+    #phaseplot!(phase_plot_PS,phase_s,show_realized=false,show_sustained=false, show_attractor=true,show_vertical_potential=true,attractor_color=:crimson)
+    arrow_arc!(phase_plot_PS,Point2f(0.5, 0.5),0.4,0+0.21,pi/2-0.21,linewidth=2.0,color=:crimson,flip_arrow=true,linestyle=:dot)
+    arrow_arc!(phase_plot_PS,Point2f(1.0, 0.0),1.1,pi-0.3-0.21,pi/2+0.3+0.21,linewidth=2.0,color=:gray,flip_arrow=true,linestyle=:dot)
+    text!(phase_plot_PS,0.37,0.28,text="mean(w̃)",font="Arial", align=(:left, :top), color=:crimson, fontsize=10)
+    text!(phase_plot_PS,0.76,0.55,text="var(w̃)",font="Arial", align=(:left, :top), color=:crimson, fontsize=10)
+    text!(phase_plot_PS,0.1,0.55,text="mean(ū)",font="Arial", align=(:left, :top), color=:gray, fontsize=10)
+    #=
+
+    W=[SED(min=0.01,max=0.99,distribution=LogNormal),SED(min=5,max=1,distribution=Beta)]
+    U=[SED(mean=0.5,distribution=Exponential, normalize=true),SED(min=5,max=1,distribution=LogNormal,normalize=true)]
+    
+    [phaseplot!(phase_plot_RS,scenario(w̃=w,ū=u;N),show_realized=false,show_potential=true, show_attractor=true,show_vertical_potential=true) for w in W, u in U]
+  =#
+    s=scenario(w̃=SED(min=0.01,max=0.99,distribution=LogNormal),    ū=ū=SED(mean=0.5,distribution=Exponential, normalize=true),color=:gray;N)
+    phaseplot!(phase_plot_RS,s,show_realized=false,show_sustained=false,show_potential=true, show_attractor=true,show_vertical_potential=true,attractor_color=:forestgreen)
+    
+    s=scenario(w̃=SED(min=5,max=1,distribution=Beta),    ū=SED(min=5,max=1,distribution=LogNormal,normalize=true),color=:gray;N)
+    phaseplot!(phase_plot_RS,s,show_realized=false,show_potential=true, show_attractor=true,show_vertical_potential=true,attractor_color=:steelblue)
+    
+    s=scenario(w̃=SED(min=0.01,max=0.99,distribution=LogNormal),    ū=SED(min=5,max=1,distribution=LogNormal, normalize=true),color=:gray;N)
+    phaseplot!(phase_plot_RS,s,show_realized=false,show_potential=true, show_attractor=true,show_vertical_potential=true,attractor_color=:darkorange)
+    
+    s=scenario(w̃=SED(min=5,max=1,distribution=Beta),    ū=SED(mean=0.5,distribution=Exponential, normalize=true),color=:gray;N)
+    phaseplot!(phase_plot_RS,s,show_realized=false,show_potential=true, show_attractor=true,show_vertical_potential=true,attractor_color=:pink)
+    
+     #incomes!(income,phase_s)
+    #phaseplot!(five_actor,five_s,show_realized=false, show_attractor=true,show_vertical_potential=true)
+    #phaseplot!(many_actor,many_s,show_realized=false, show_attractor=true,show_vertical_potential=true)
+    save("graphics/convexities.png",f)
+    f   
 end
