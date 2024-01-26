@@ -1215,29 +1215,27 @@ function convexities(;distribution=Uniform,N=200)
     scale=0.7
     myscheme = ColorScheme([colorant"white",colorant"crimson"],
     "custom", "a name")
-    f=Figure(size=(scale*800,scale*430))
-    phase_plot_PS=Axis(f[1,1], title="Linear")
-    phase_plot_RS=Axis(f[1,2],title="Convexities")
+    f=Figure(size=(scale*1200,scale*480))
+    phase_plot_PS=Axis(f[1,1])
+    phase_plot_RS=Axis(f[1,2])
     [hidespines!(a) for a in [phase_plot_PS,phase_plot_RS,]]
-   #income=Axis(f[2,1],xlabel="actor",ylabel="Income")
-    #many_actor=Axis(f[1,3])
-    #arrows!(phase_plot_PS,[0.33],[0.3],[-0.2],[0.0],linewidth=2.0,color=:crimson,linestyle=:dot)
-    
-    arrows!(phase_plot_PS,[0.13],[0.3],[0.4],[0.0],linewidth=2.0,color=:crimson,linestyle=:dot)
+    incomes=f[1,3]=GridLayout()
+   
+    arrows!(phase_plot_PS,[0.13],[0.3],[0.4],[0.0],linewidth=2.0,color=:black,linestyle=:dot)
     
     phase_s=scenario(w̃=SED(min=0.1,max=0.9,distribution=distribution),    ū=SED(mean=1,sigma=0.0, normalize=true),color=:gray;N)
-    phaseplot!(phase_plot_PS,phase_s,show_realized=false, show_sustained=false,show_attractor=true,show_vertical_potential=true,attractor_color=:crimson)
-    phase_s.color=convert(HSL,colorant"crimson")
-    phaseplot!(phase_plot_PS,phase_s,show_realized=false, show_sustained=false,show_attractor=true,show_vertical_potential=true,attractor_color=:crimson)
+    phaseplot!(phase_plot_PS,phase_s,show_realized=false, show_sustained=false,show_attractor=true,show_vertical_potential=true,attractor_color=:black)
+    phase_s.color=convert(HSL,colorant"black")
+    phaseplot!(phase_plot_PS,phase_s,show_realized=false, show_sustained=false,show_attractor=true,show_vertical_potential=true,attractor_color=:black)
   
     phase_s=scenario(w̃=SED(min=0.5,max=0.5,distribution=distribution),    ū=SED(mean=1,sigma=0.0, normalize=true),color=:gray;N)
-    phaseplot!(phase_plot_PS,phase_s,show_realized=false,show_potential=false,show_sustained=true, show_attractor=true,show_vertical_potential=true,attractor_color=:crimson)
-    phase_s.color=convert(HSL,colorant"crimson")
+    phaseplot!(phase_plot_PS,phase_s,show_realized=false,show_potential=false,show_sustained=true, show_attractor=true,show_vertical_potential=true,attractor_color=:black)
+    phase_s.color=convert(HSL,colorant"black")
     #phaseplot!(phase_plot_PS,phase_s,show_realized=false,show_sustained=false, show_attractor=true,show_vertical_potential=true,attractor_color=:crimson)
-    arrow_arc!(phase_plot_PS,Point2f(0.5, 0.5),0.4,0+0.21,pi/2-0.21,linewidth=2.0,color=:crimson,flip_arrow=true,linestyle=:dot)
+    arrow_arc!(phase_plot_PS,Point2f(0.5, 0.5),0.4,0+0.21,pi/2-0.21,linewidth=2.0,color=:black,flip_arrow=true,linestyle=:dot)
     arrow_arc!(phase_plot_PS,Point2f(1.0, 0.0),1.1,pi-0.3-0.21,pi/2+0.3+0.21,linewidth=2.0,color=:gray,flip_arrow=true,linestyle=:dot)
-    text!(phase_plot_PS,0.37,0.28,text="mean(w̃)",font="Arial", align=(:left, :top), color=:crimson, fontsize=10)
-    text!(phase_plot_PS,0.76,0.55,text="var(w̃)",font="Arial", align=(:left, :top), color=:crimson, fontsize=10)
+    text!(phase_plot_PS,0.37,0.28,text="mean(w̃)",font="Arial", align=(:left, :top), color=:black, fontsize=10)
+    text!(phase_plot_PS,0.76,0.55,text="var(w̃)",font="Arial", align=(:left, :top), color=:black, fontsize=10)
     text!(phase_plot_PS,0.1,0.55,text="mean(ū)",font="Arial", align=(:left, :top), color=:gray, fontsize=10)
     #=
 
@@ -1246,18 +1244,34 @@ function convexities(;distribution=Uniform,N=200)
     
     [phaseplot!(phase_plot_RS,scenario(w̃=w,ū=u;N),show_realized=false,show_potential=true, show_attractor=true,show_vertical_potential=true) for w in W, u in U]
   =#
-    s=scenario(w̃=SED(min=0.01,max=0.99,distribution=LogNormal),    ū=ū=SED(mean=0.5,distribution=Exponential, normalize=true),color=:gray;N)
-    phaseplot!(phase_plot_RS,s,show_realized=false,show_sustained=false,show_potential=true, show_attractor=true,show_vertical_potential=true,attractor_color=:forestgreen)
+    s1=scenario(w̃=SED(min=0.01,max=0.99,distribution=LogNormal),    ū=ū=SED(mean=0.5,distribution=Exponential, normalize=true),color=:gray;N)
+    phaseplot!(phase_plot_RS,s1,show_realized=false,show_sustained=false,show_potential=true, show_attractor=true,show_vertical_potential=true,attractor_color=:forestgreen)
     
-    s=scenario(w̃=SED(min=5,max=1,distribution=Beta),    ū=SED(min=5,max=1,distribution=LogNormal,normalize=true),color=:gray;N)
-    phaseplot!(phase_plot_RS,s,show_realized=false,show_potential=true, show_attractor=true,show_vertical_potential=true,attractor_color=:steelblue)
+    s2=scenario(w̃=SED(min=5,max=1,distribution=Beta),    ū=SED(min=5,max=1,distribution=LogNormal,normalize=true),color=:gray;N)
+    phaseplot!(phase_plot_RS,s2,show_realized=false,show_potential=true, show_attractor=true,show_vertical_potential=true,attractor_color=:steelblue)
     
-    s=scenario(w̃=SED(min=0.01,max=0.99,distribution=LogNormal),    ū=SED(min=5,max=1,distribution=LogNormal, normalize=true),color=:gray;N)
-    phaseplot!(phase_plot_RS,s,show_realized=false,show_potential=true, show_attractor=true,show_vertical_potential=true,attractor_color=:darkorange)
+    s3=scenario(w̃=SED(min=0.01,max=0.99,distribution=LogNormal),    ū=SED(min=5,max=1,distribution=LogNormal, normalize=true),color=:gray;N)
+    phaseplot!(phase_plot_RS,s3,show_realized=false,show_potential=true, show_attractor=true,show_vertical_potential=true,attractor_color=:darkorange)
     
-    s=scenario(w̃=SED(min=5,max=1,distribution=Beta),    ū=SED(mean=0.5,distribution=Exponential, normalize=true),color=:gray;N)
-    phaseplot!(phase_plot_RS,s,show_realized=false,show_potential=true, show_attractor=true,show_vertical_potential=true,attractor_color=:pink)
+    s4=scenario(w̃=SED(min=5,max=1,distribution=Beta),    ū=SED(mean=0.5,distribution=Exponential, normalize=true),color=:gray;N)
+    phaseplot!(phase_plot_RS,s4,show_realized=false,show_potential=true, show_attractor=true,show_vertical_potential=true,attractor_color=:crimson)
     
+    a1=Axis(incomes[1,1])
+    a2=Axis(incomes[1,2])
+    a3=Axis(incomes[2,1])
+    a4=Axis(incomes[2,2])
+    [hidespines!(a) for a in [a1,a2,a3,a4]]
+    [hidedecorations!(a) for a in [a1,a2,a3,a4]]
+
+
+    for  (a,s,c) in zip([a1,a2,a3,a4],[s1,s2,s3,s4],[colorant"forestgreen",colorant"steelblue",colorant"darkorange",colorant"crimson"])
+        s.color=convert(HSL,c)
+        incomes!(a,s,show_text=false)
+        #scatter!(a,[0.1],[0.9],color=c,markersize=20, space=:relative)
+    end
+    Label(f[0,1],text="Linear",fontsize=20, tellwidth=false)
+    Label(f[0,2],text="Convexities",fontsize=20, tellwidth=false)
+    Label(f[0,3],text="Incomes",fontsize=20, tellwidth=false)
      #incomes!(income,phase_s)
     #phaseplot!(five_actor,five_s,show_realized=false, show_attractor=true,show_vertical_potential=true)
     #phaseplot!(many_actor,many_s,show_realized=false, show_attractor=true,show_vertical_potential=true)
