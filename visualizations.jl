@@ -5,7 +5,7 @@ potential_color=nothing
 potential_color==nothing ? potential_color=c : nothing #or ensure its a color?
 
 """
-function phaseplot!(A,S; show_sustained=true,show_potential=true,same_potential_color=true, show_realized=false,show_trajectory=false, regulated_dot_reduction=0.3, attractor_size=30, show_attractor=true,show_target=true, vector_field=false,vector_grid=20,show_vertical_potential=false, attractor_color=nothing, show_legend=nothing)
+function phaseplot!(A,S; show_sustained=true,show_potential=true,same_potential_color=true, show_realized=false,show_trajectory=false, regulated_dot_reduction=0.3, attractor_size=30, show_attractor=true,show_target=true, vector_field=false,vector_grid=20,show_vertical_potential=false, attractor_color=nothing, show_legend=nothing, attractor_to_legend=false)
 
 	if !isa(S,Array)
 		S=[S]
