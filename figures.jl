@@ -335,7 +335,7 @@ function figure6(S::Array{Scenario};size=120,institutions=[("Open","access"),("P
     resource=[]
     gini=[]
     LS=[]
-    #Label(cases[1,0], "Covariances",fontsize=16,rotation=pi/2)
+    #Label(cases[1,0], "Covariances",fontsize=16)
     for (i,s) in enumerate(S)
         
         if showimages
@@ -537,7 +537,7 @@ function figure6(S::Array{Scenario};size=120,institutions=[("Open","access"),("P
         incomes!(Igini,s,anntext=GI[1]*" "*GI[2]*" @ "*string(round(GI[3],digits=2)),annotation_size=10)
         resource_revenues ? linkaxes!([Iopen,Itotal,Iresource,Igini]...) : linkaxes!([Iopen,Itotal,Igini]...)
     end
-    #b=cases[0:2,0]=GridLayout(f[1, 1], tellwidth = false, tellheight = false, halign = :right, valign = :bottom)
+    #b=cases[0:2,0]=GridLayout(f[1, 1], tellwidth = false, tellwidth = false, halign = :right, valign = :bottom)
     #Box(b, color = "#eeeeee", strokecolor = :transparent)
     Label(cases[1:(1+(showimages ? 1 : 0) + (covariations ? 1 : 0)),0], "Scenarios",fontsize=20,color=:gray, rotation=pi/2)
     #Box(institutions_plots[1:3,0], color = "#eeeeee", strokecolor = :transparent)
@@ -882,17 +882,17 @@ function sed(;N1=20,N2=200,w_dist=LogNormal,ms=1)
     display(f)
 end
 
-function arrow_arc!(ax, origin, radius, start_angle, stop_angle; linewidth=1, color=:black)
+function arrow_arc!(ax, origin, radius, start_angle, stop_angle; linewidth=1, color=:black,flip_arrow=false,linestyle=:dot)
     # Draw the arc
-    arc!(ax, origin, radius, start_angle, stop_angle, linewidth=linewidth, color=color)
+    arc!(ax, origin, radius, start_angle, stop_angle, linewidth=linewidth, color=color;linestyle)
 
     # Function to calculate a point on the circle
     point_on_circle(θ) = origin .+ radius * Point2f(cos(θ), sin(θ))
 
     # Calculate the direction of the arrow at the start and end of the arc
-    start_dir = Point2f(cos(start_angle + π/2), sin(start_angle + π/2))
-    end_dir = Point2f(cos(stop_angle - π/2), sin(stop_angle - π/2))
-    dx=0.000000001
+    start_dir = Point2f(cos(start_angle + π/2 + (flip_arrow ? pi/2 : 0)), sin(start_angle + π/2+ (flip_arrow ? pi/2 : 0)))
+    end_dir = Point2f(cos(stop_angle - π/2 + (flip_arrow ? pi : 0)), sin(stop_angle - π/2+ (flip_arrow ? pi : 0)))
+    dx=0.001
     # Add arrow at the start and end of the arc
     # Adjust the multiplier for start_dir and end_dir to control the arrow orientation
     arrows!(ax, [point_on_circle(start_angle)[1]],[point_on_circle(start_angle)[2]], [start_dir[1]]*dx,[start_dir[2]]*dx, color=color, linewidth=linewidth)
@@ -901,13 +901,16 @@ end
 
 function region_of_control(;N=1000, distribution=LogNormal)
     dc=1.1
-    f=Figure(size=(1000,1000))
+    scale=0.7
+    f=Figure(size=(1800*scale,1200*scale))
     ax1=Axis(f[1,1])
     ax2=Axis(f[1,2])
     ax3=Axis(f[2,1])
     ax4=Axis(f[2,2])
+    ax5=Axis(f[1,3])
+    ax6=Axis(f[2,3])
     myscheme = ColorScheme([colorant"forestgreen",colorant"darkorange", colorant"steelblue"],
-    "custom", "twotone, red and green")
+    "custom", "a name")
     for u in [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.92,1.07,1.26,1.5,1.87,2.5,3.75,8.0]
         s=scenario(w̃=SED(mean=0.3,sigma=0.0),    ū=SED(mean=u,sigma=0.0, normalize=true), color=u<0.8 ? :forestgreen : :steelblue;N)
         du=scenario(w̃=SED(mean=0.3,sigma=0.0),    ū=SED(mean=u*dc,sigma=0.0, normalize=true), color=u<0.8 ? :forestgreen : :steelblue;N)
@@ -920,20 +923,35 @@ function region_of_control(;N=1000, distribution=LogNormal)
         duV=(sum(du.total_revenue)-sum(s.total_revenue))/dc
         s.color=convert(HSL,get(myscheme,abs(dwV)/(abs(dwV)+abs(duV))))
         phaseplot!(ax3,s,show_realized=false, show_attractor=true,show_vertical_potential=true)
-
+        distribution=Uniform
         sLN=scenario(w̃=SED(mean=0.3,sigma=0.4,distribution=distribution),    ū=SED(mean=u,sigma=0.0, normalize=true);N)
         du=scenario(w̃=SED(mean=0.3,sigma=0.4,distribution=distribution),    ū=SED(mean=u*dc,sigma=0.0, normalize=true);N)
         dw=scenario(w̃=SED(mean=0.3*dc,sigma=0.4,distribution=distribution),    ū=SED(mean=u,sigma=0.0, normalize=true);N)
         dwV=(sum(dw.resource_revenue)-sum(sLN.resource_revenue))/(1-dc)
         duV=(sum(du.resource_revenue)-sum(sLN.resource_revenue))/(1-dc) 
-        println(abs(dwV)/(abs(dwV)+abs(duV)))
+    
         sLN.color=convert(HSL,get(myscheme,abs(dwV)/(abs(dwV)+abs(duV))))
         phaseplot!(ax2,sLN,show_realized=false, show_attractor=true,show_vertical_potential=true)
         dwV=(sum(dw.total_revenue)-sum(sLN.total_revenue))/(1-dc)
         duV=(sum(du.total_revenue)-sum(sLN.total_revenue))/(1-dc)
-        println(abs(dwV)/(abs(dwV)+abs(duV)))
+    
         sLN.color=convert(HSL,get(myscheme,abs(dwV)/(abs(dwV)+abs(duV))))
         phaseplot!(ax4,sLN,show_realized=false, show_attractor=true,show_vertical_potential=true)
+        distribution=LogNormal
+        sLN=scenario(w̃=SED(mean=0.3,sigma=0.4,distribution=distribution),    ū=SED(mean=u,sigma=0.0, normalize=true);N)
+        du=scenario(w̃=SED(mean=0.3,sigma=0.4,distribution=distribution),    ū=SED(mean=u*dc,sigma=0.0, normalize=true);N)
+        dw=scenario(w̃=SED(mean=0.3*dc,sigma=0.4,distribution=distribution),    ū=SED(mean=u,sigma=0.0, normalize=true);N)
+        dwV=(sum(dw.resource_revenue)-sum(sLN.resource_revenue))/(1-dc)
+        duV=(sum(du.resource_revenue)-sum(sLN.resource_revenue))/(1-dc) 
+        
+        sLN.color=convert(HSL,get(myscheme,abs(dwV)/(abs(dwV)+abs(duV))))
+        phaseplot!(ax5,sLN,show_realized=false, show_attractor=true,show_vertical_potential=true)
+        dwV=(sum(dw.total_revenue)-sum(sLN.total_revenue))/(1-dc)
+        duV=(sum(du.total_revenue)-sum(sLN.total_revenue))/(1-dc)
+    
+        sLN.color=convert(HSL,get(myscheme,abs(dwV)/(abs(dwV)+abs(duV))))
+        phaseplot!(ax6,sLN,show_realized=false, show_attractor=true,show_vertical_potential=true)
+   
     end
     arrows!(ax1,[0.3],[0.5],[0.14],[0.0],linewidth=2.0,color=:steelblue)
     arrows!(ax1,[0.3],[0.5],[-0.14],[0.0],linewidth=2.0,color=:steelblue)
@@ -942,16 +960,324 @@ function region_of_control(;N=1000, distribution=LogNormal)
     arrow_arc!(ax1,Point2f(1, 0),0.9,pi-0.96-0.01,pi/2+0.01,linewidth=2.0,color=:forestgreen)
     text!(ax1,0.47,0.45,text="mean incentive\ncontrols resource", color=:steelblue,fontsize=20)
     text!(ax1,0.60,0.65,text="mean impact\ncontrols resource", color=:forestgreen,fontsize=20,rotation=0.32)
-    text!(ax2,0.37,0.45,text="Mixed control of\nmean incentive and impact", color=:black,fontsize=20)
+    #text!(ax2,0.37,0.45,text="Mixed control of\nmean incentive and impact", color=:black,fontsize=20)
    
     #text!(ax2,0.37,0.25,text="when does individual u affect \n total revenues?", color=:black,fontsize=20)
-    Colorbar(f[1:2, 3],limits = (0, 1), colormap = myscheme,flipaxis = false,ticks=([0,1],["impact","incentive"]))
-    Label(f[1,0],text="Resource revenue",rotation=pi/2,fontsize=20, tellheight=false)
-    Label(f[2,0],text="Total revenue",rotation=pi/2,fontsize=20,tellheight=false)
+    Colorbar(f[1:2, 4],limits = (0, 1), colormap = myscheme,flipaxis = true,ticks=([0,1],["impact","incentive"]))
+    Label(f[1,0],text="Resource revenue",fontsize=20, tellheight=false,rotation=pi/2)
+    Label(f[2,0],text="Total revenue",fontsize=20,tellheight=false,rotation=pi/2)
     Label(f[0,1],text="No diversity",fontsize=20,tellwidth=false)
-    Label(f[0,2],text="Realistic distribution",fontsize=20,tellwidth=false)
-    Label(f[0,3],text="Control",fontsize=20,tellwidth=false,halign=:right)
-    Label(f[3,1:2],text="Resource level",fontsize=20,tellwidth=false)
+    Label(f[0,2],text="Linear distribution",fontsize=20,tellwidth=false)
+    Label(f[0,3],text="Realistic distribution",fontsize=20,tellwidth=false)
+    Label(f[0,4],text="Control",fontsize=20,tellwidth=false,halign=:left)
+    Label(f[3,1:3],text="Resource level",fontsize=20,tellwidth=false)
     save("graphics/region_of_control.png",f)
     f
+end
+
+function figure3()
+
+	function get_deriv_vector(y,u,z)
+		p=z.final.p
+		du=zeros(p.N+2)
+		usum=cumsum(p.ū)
+		Q=findall(usum.<=u)
+		n=length(Q)
+		deltau=usum[min(p.N,Q[end]+1)]-u
+		U=zeros(p.N+2)
+		U[Q]=p.ū[Q]
+		U[min(p.N,n+1)]=deltau
+		U[p.N+1]=y
+		dudt(du,U,p,0)
+		radian_angle = atan(sum(du[1:p.N]),du[p.N+1])
+    	#rad2deg(radian_angle)+180
+		#(du[p.N+1],sum(du[1:p.N]))
+		radian_angle-pi/2,sqrt(sum(du[1:p.N])^2+du[p.N+1]^2)
+	end
+
+
+	
+	N=200
+	fig3=Figure(resolution=(1000,800))
+	ax11_fig3=Axis(fig3[1,2], title="Impact potential",yticks = 0:1,titlefont=font)#, titlecolor=:black
+	hidexdecorations!(ax11_fig3)
+	ax21_fig3=Axis(fig3[2,2], title="covar Impact - Incentive ",yticks = 0:1,titlefont=font)
+	hidexdecorations!(ax21_fig3)
+	Behavioural_adaptability=Axis(fig3[3,3], title="Behavioural adaptability",xticks = 0:1,yticks = 0:1,titlefont=font)
+	ax12_fig3=Axis(fig3[1,1], title="Inequality (slope^-1)",titlefont=font)
+	hidexdecorations!(ax12_fig3)
+	hideydecorations!(ax12_fig3)
+	ax22_fig3=Axis(fig3[2,1], title="Development (position)",titlefont=font)
+	hidexdecorations!(ax22_fig3)
+	hideydecorations!(ax22_fig3)
+	ax32_fig3=Axis(fig3[3,1], title="Development & Inequality",xticks = 0:1,titlefont=font)
+	hideydecorations!(ax32_fig3)
+	ax13_fig3=Axis(fig3[1,3], title="Phase plane dynamics",yticks = 0:1,xticks = 0:1,titlefont=font)
+	ax23_fig3=Axis(fig3[2,3], xscale = identity,title="Individual actors responses",titlefont=font)
+	#ax33_fig3=Axis(fig3[3,3],title="Income distribution",titlefont=font)
+	
+	#hideydecorations!(ax23_fig3)
+	ax23_fig3.ylabel="resource use"
+	#ax33_fig3=Axis(fig3[3,4], title="ū")
+
+
+
+	#Main Phaseplot
+	s13=sim(scenario(a=5.5,r=1.0,w=SED(min=0.15,max=0.85,distribution=LogNormal,normalize=true),color=convert(HSL,colorant"crimson");N))#, ē=Linear(1.9,0.1)
+	#=
+	points = [Point2f(x/11, y/11) for y in 1:10 for x in 1:10]
+	rotations = [get_deriv_vector(p[1],p[2],s13)[1] for p in points]
+	markersize13 = [(get_deriv_vector(p[1],p[2],s13)[2]*20)^0.2*15 for p in points]
+
+	scatter!(ax13_fig3,points, rotations = rotations, markersize = markersize13, marker = '↑', color=:lightgray)
+	=#
+	phaseplot!(ax13_fig3,s13,vector_field=false)
+
+	# Individual u's
+	testbands=false
+	cbarPal = :rainbow2
+	cmap = cgrad(colorschemes[cbarPal], s13.N, categorical = true)
+    #period=s13.period
+	cs=cumsum(s13.u,dims=1)
+    for i in 1:s13.N
+		if testbands
+			band!(ax23_fig3,s13.t[period[2:end]].+1,i==1 ? 0. *cs[i,period[2:end]] :  cs[i-1,period[2:end]],cs[i,period[2:end]], color=cmap[i])
+		else
+        lines!(ax23_fig3,s13.t.+1,s13.u[i,:], color=cmap[i],linestyle=:dot)#./s13.final.p.ū[i]
+		end
+    end
+	Colorbar(fig3[2,4] , label="Incentive level, w̃", limits = (minimum(s13.w̃), maximum(s13.w̃)), colormap = :rainbow2,halign=:left,tellwidth=true)
+
+
+
+	
+		#income distribution
+
+
+
+	#Base scenario with dynamics
+	phaseplot!(ax13_fig3,s13,show_trajectory=true)
+
+	#Increasing inequalsity
+	phaseplot!(ax12_fig3,sim(scenario(a=1,w=SED(min=0.5,max=0.5,distribution=LogNormal,normalize=true),color=convert(HSL,colorant"crimson");N)),show_trajectory=false, attractor_size=40,show_required=false,show_attractor=false)
+	phaseplot!(ax12_fig3,sim(scenario(w=SED(min=0.33,max=0.75,distribution=LogNormal,normalize=true),color=convert(HSL,colorant"steelblue");N)),show_trajectory=false, attractor_size=30,show_required=false,show_attractor=false)
+	phaseplot!(ax12_fig3,sim(scenario(w=SED(min=0.15,max=1.69,distribution=LogNormal,normalize=true),color=convert(HSL,colorant"forestgreen");N)),show_trajectory=false, attractor_size=20,show_required=false,show_attractor=false)
+	lines!(ax12_fig3,[0.5,0.5],[0.0,1.0],color=:crimson)
+	text!(ax12_fig3,0.6,0.7,text="Some actors will\nnot participate\neven with max resource",font="Gloria Hallelujah", fontsize=10,align=(:left, :top), color=:black)
+
+	#Increasing wealth
+	phaseplot!(ax22_fig3,sim(scenario(w=SED(min=0.35,max=0.55,distribution=LogNormal,normalize=true),color=convert(HSL,colorant"crimson");N)),show_trajectory=false,show_required=false,show_attractor=false)
+	phaseplot!(ax22_fig3,sim(scenario(w=SED(min=0.1,max=0.4,distribution=LogNormal,normalize=true),color=convert(HSL,colorant"steelblue");N)),show_trajectory=false,show_required=false,show_attractor=false)
+	phaseplot!(ax22_fig3,sim(scenario(w=SED(min=0.6,max=0.9,distribution=LogNormal,normalize=true),color=convert(HSL,colorant"forestgreen");N)),show_trajectory=false,show_required=false,show_attractor=false)
+	#text!(ax22_fig3,0.2,0.2,text="increasing wealth",font="Gloria Hallelujah", align=(:left, :top), color=:black)
+	#arrows!(ax22_fig3,0.2, 0.1, 0.5, 0)
+	#text!(ax22_fig3, 0.5, 0.4, text=L"\tilde{w}=\frac{w}{q p K}", align=(:left, :top), color=:black)
+
+	#Increasing inequality & dev
+	phaseplot!(ax32_fig3,sim(scenario(w=SED(min=0.05,max=0.3,distribution=LogNormal,normalize=true),color=convert(HSL,colorant"crimson");N)),show_trajectory=false,show_required=false,show_attractor=false)
+	phaseplot!(ax32_fig3,sim(scenario(w=SED(min=0.05,max=0.95,distribution=LogNormal,normalize=true),color=convert(HSL,colorant"steelblue");N)),show_trajectory=false,show_required=false,show_attractor=false)
+	phaseplot!(ax32_fig3,sim(scenario(w=SED(min=0.05,max=2.25,distribution=LogNormal,normalize=true),color=convert(HSL,colorant"forestgreen");N)),show_trajectory=false,show_required=false,show_attractor=false)
+	text!(ax32_fig3,0.55,0.75,text="high",font="Gloria Hallelujah", align=(:left, :top), color=:forestgreen)
+	text!(ax32_fig3,0.09,1.07,text="low",font="Gloria Hallelujah", align=(:left, :top), color=:crimson)
+	text!(ax32_fig3,0.12,0.04,text="<- low end stuck",font="Gloria Hallelujah", align=(:left, :bottom), color=:gray)
+
+	# Increasing impact potential
+	phaseplot!(ax11_fig3,sim(scenario(w=SED(min=0.35,max=0.55,distribution=LogNormal,normalize=true),color=convert(HSL,colorant"crimson");N)),show_trajectory=false)
+	phaseplot!(ax11_fig3,sim(scenario(w=SED(min=0.35,max=0.55,distribution=LogNormal,normalize=true),ē=SED(min=0.4,max=0.4),color=convert(HSL,colorant"steelblue");N)),show_trajectory=false)
+	phaseplot!(ax11_fig3,sim(scenario(w=SED(min=0.35,max=0.55,distribution=LogNormal,normalize=true),ē=SED(min=1.6,max=1.6),color=convert(HSL,colorant"forestgreen");N)),show_trajectory=false)
+		text!(ax11_fig3,0.55,0.3,text="high",font="Gloria Hallelujah", align=(:left, :top), color=:forestgreen)
+	text!(ax11_fig3,0.8,0.85,text="low",font="Gloria Hallelujah", align=(:left, :top), color=:steelblue)
+	text!(ax11_fig3,0.56,0.95,text="↑ maximum resource reduction",font="Gloria Hallelujah", align=(:left, :top), color=:gray, fontsize=10)
+	text!(ax11_fig3,0.0,0.7,text="<- fraction use that crashes resource",font="Gloria Hallelujah", align=(:left, :top), color=:gray, fontsize=10)
+
+	# bending impact potential
+	phaseplot!(ax21_fig3,sim(scenario(w=SED(min=0.35,max=0.55,distribution=LogNormal,normalize=true),color=convert(HSL,colorant"crimson");N)),show_trajectory=false)
+	phaseplot!(ax21_fig3,sim(scenario(w=SED(min=0.35,max=0.55,distribution=LogNormal,normalize=true),ē=SED(min=0.1,max=1.9),color=convert(HSL,colorant"steelblue");N)),show_trajectory=false)
+	phaseplot!(ax21_fig3,sim(scenario(w=SED(min=0.35,max=0.55,distribution=LogNormal,normalize=true),ē=SED(min=1.9,max=0.1),color=convert(HSL,colorant"forestgreen");N)),show_trajectory=false)
+	text!(ax21_fig3,0.05,0.4,text="positive",font="Gloria Hallelujah", align=(:left, :top), color=:forestgreen)
+	text!(ax21_fig3,0.6,0.8,text="negative",font="Gloria Hallelujah", align=(:left, :top), color=:steelblue)
+
+	# Dynamics
+	phaseplot!(Behavioural_adaptability,sim(scenario(w=SED(min=0.35,max=0.55,distribution=LogNormal,normalize=true),a=0.5,color=convert(HSL,colorant"crimson");N)))
+	phaseplot!(Behavioural_adaptability,sim(scenario(w=SED(min=0.35,max=0.55,distribution=LogNormal,normalize=true),a=2,color=convert(HSL,colorant"steelblue");N)))
+	text!(Behavioural_adaptability,0.8,0.85,text="low",font="Gloria Hallelujah", align=(:left, :top), color=:steelblue)
+	text!(Behavioural_adaptability,0.7,0.65,text="high",font="Gloria Hallelujah", align=(:left, :top), color=:crimson)
+	
+
+
+
+	fig3
+end
+
+
+function show_diversity(a;N=20,distribution=Uniform)
+    s=scenario(a=1,w=SED(min=0.5,max=0.5,normalize=true;distribution),color=convert(HSL,colorant"crimson");N)
+    phaseplot!(a,s)
+    s=scenario(a=1,w=SED(min=0.3,max=0.7,normalize=true;distribution),color=convert(HSL,colorant"crimson");N)
+    phaseplot!(a,s)
+    s=scenario(a=1,w=SED(min=0.1,max=0.9,normalize=true;distribution),color=convert(HSL,colorant"crimson");N)
+    phaseplot!(a,s)
+end
+
+function newFigure3(;distribution=Uniform, title_font="Arial", annotation_font="Gloria Hallelujah",N=100,scale=1.0,vector_grid=20)
+    f=Figure(resolution=(1200*scale,800*scale))
+    A=Dict()
+    basic_dynamics=Axis(f[1,1],title="System Dynamics",titlefont=title_font)
+    individual_dynamics=Axis(f[2,1],title="Behavioural adaptability",titlefont=title_font)
+    income_distribution=Axis(f[3,1],title="Impact level, ē",titlefont=title_font)
+    test=Axis(f[1,2],title="Individual dynamics",titlefont=title_font)
+    A[1,3]=Axis(f[1,3],title="Development & Inequality",titlefont=title_font)
+    A[1,4]=Axis(f[1,4],title="Impact potential",titlefont=title_font)
+    A[1,5]=Axis(f[1,5],title="covar Impact - Incentive ",titlefont=title_font)
+
+    A[2,2]=Axis(f[2,2],title="Phase plane dynamics",titlefont=title_font)
+    A[2,3]=Axis(f[2,3],title="Individual actors responses",titlefont=font)
+    A[2,4]=Axis(f[2,4],title="Income distribution",titlefont=title_font)
+    A[2,5]=Axis(f[2,5],title="Incentive level, w̃",titlefont=title_font)
+    
+    A[3,2]=Axis(f[3,2],title="Resource use, ū",titlefont=title_font)
+    A[3,3]=Axis(f[3,3],title="Resource level, y",titlefont=title_font)
+    A[3,4]=Axis(f[3,4],title="Resource use, u",titlefont=title_font)
+    A[3,5]=Axis(f[3,5],title="Resource use, u",titlefont=title_font)
+
+    Ax=[basic_dynamics,individual_dynamics,income_distribution,test]
+    [push!(Ax,A[i]) for i in eachindex(A)]
+    [hidespines!(Ax[i]) for i in eachindex(Ax)]
+    [hidedecorations!(Ax[i]) for i in eachindex(Ax)]
+
+    Label(f[0,1],text="Dynamics",fontsize=20, tellwidth=false)
+    Label(f[0,2],text="Incentives",fontsize=20, tellwidth=false)
+    Label(f[0,3],text="Impacts",fontsize=20, tellwidth=false)
+    Label(f[0,4],text="Actors",fontsize=20, tellwidth=false)
+    Label(f[0,5],text="Sensitivity",fontsize=20, tellwidth=false)
+    
+    #Basic dynamnics
+    s=scenario(a=5.5,r=1.0,w=SED(min=0.15,max=0.85,distribution=LogNormal,normalize=true),color=convert(HSL,colorant"crimson");N)
+    phaseplot!(basic_dynamics,s,show_trajectory=true, attractor_size=40,show_required=true,show_attractor=true,vector_field=true;vector_grid)
+
+    individual_u!(individual_dynamics,s)
+    incomes!(income_distribution,s)
+
+    f
+end
+
+function actor_density(;distribution=Uniform)
+    scale=0.7
+    f=Figure(size=(1200*scale,450*scale))
+    one_actor=Axis(f[1,1], title="Single actor/No diversity")
+    five_actor=Axis(f[1,2],title="Five Actors")
+    many_actor=Axis(f[1,3],title="Many Actors")
+    one_s=scenario(w̃=SED(mean=0.5,sigma=0.9,distribution=distribution),    ū=SED(mean=1,sigma=0.0, normalize=true),N=1)
+    five_s=scenario(w̃=SED(mean=0.5,sigma=0.9,distribution=distribution),    ū=SED(mean=1,sigma=0.0, normalize=true),N=5)
+    many_s=scenario(w̃=SED(mean=0.5,sigma=0.9,distribution=distribution),    ū=SED(mean=1,sigma=0.0, normalize=true),N=1000)
+    phaseplot!(one_actor,one_s,show_realized=false, show_attractor=true,show_vertical_potential=true)
+    phaseplot!(five_actor,five_s,show_realized=false, show_attractor=true,show_vertical_potential=true)
+    phaseplot!(many_actor,many_s,show_realized=false, show_attractor=true,show_vertical_potential=true)
+    
+    [hidespines!(a) for a in [one_actor,five_actor,many_actor]]
+    save("graphics/actor_density.png",f)
+    f   
+end
+
+function potential_realized_sustained(;distribution=Uniform,N=20)
+    scale=0.7
+    myscheme = ColorScheme([colorant"white",colorant"crimson"],
+    "custom", "a name")
+    f=Figure(size=(scale*1200,scale*430))
+    phase_plot_PS=Axis(f[1:2,1], title="Potential and Sustained")
+    phase_plot_RS=Axis(f[1:2,2],title="Realised and Sustained")
+    individual=Axis(f[2,3],limits = ((0, 1), nothing),ylabel="time →",xlabel="w̃",title="individual uᵢ over time",xticks=(0:0.5:1,["0","0.5","1"]))
+   incomes=Axis(f[1,3],xlabel="actor",ylabel="Income")
+    [hidespines!(a) for a in [phase_plot_PS,phase_plot_RS,individual]]
+   #income=Axis(f[2,1],xlabel="actor",ylabel="Income")
+    #many_actor=Axis(f[1,3])
+    phase_s=scenario(w̃=SED(mean=0.5,sigma=0.9,distribution=distribution),    ū=SED(mean=1,sigma=0.0, normalize=true);N)
+    phaseplot!(phase_plot_PS,phase_s,show_realized=false, show_attractor=true,show_vertical_potential=true,show_legend=:ct)
+    phaseplot!(phase_plot_RS,phase_s,show_realized=true,show_potential=false, show_attractor=true,show_vertical_potential=true,show_trajectory=true,show_legend=:rt)
+    individual_u!(individual,phase_s,rot=true)
+    incomes!(incomes,phase_s)
+    Colorbar(f[2,4],ticks=([0,1],["0","ū"]),limits=(0,1),colormap=myscheme,flipaxis=true)
+    #incomes!(income,phase_s)
+    #phaseplot!(five_actor,five_s,show_realized=false, show_attractor=true,show_vertical_potential=true)
+    #phaseplot!(many_actor,many_s,show_realized=false, show_attractor=true,show_vertical_potential=true)
+    save("graphics/potential_realized_sustained.png",f)
+    f   
+end
+
+function convexities(;distribution=Uniform,N=200)
+    scale=0.7
+    myscheme = ColorScheme([colorant"white",colorant"crimson"],
+    "custom", "a name")
+    f=Figure(size=(scale*1200,scale*480))
+    phase_plot_PS=Axis(f[1,1])
+    phase_plot_RS=Axis(f[1,2])
+    [hidespines!(a) for a in [phase_plot_PS,phase_plot_RS,]]
+    incomes=f[1,3]=GridLayout()
+   
+    arrows!(phase_plot_PS,[0.11],[0.2],[0.4],[0.0],linewidth=2.0,color=:black,linestyle=:dot)
+    arrows!(phase_plot_PS,[0.62],[0.29],[0.08],[0.11],linewidth=2.0,color=:gray,linestyle=:dot)
+    
+    phase_s=scenario(w̃=SED(min=0.1,max=0.9,distribution=distribution),    ū=SED(mean=1,sigma=0.0, normalize=true),color=:gray;N)
+    phaseplot!(phase_plot_PS,phase_s,show_realized=false, show_sustained=false,show_attractor=true,show_vertical_potential=true,attractor_color=:black)
+    phase_s.color=convert(HSL,colorant"black")
+    phaseplot!(phase_plot_PS,phase_s,show_realized=false, show_sustained=false,show_attractor=true,show_vertical_potential=true,attractor_color=:black)
+  
+    phase_s=scenario(w̃=SED(min=0.5,max=0.5,distribution=distribution),    ū=SED(mean=1,sigma=0.0, normalize=true),color=:gray;N)
+    phaseplot!(phase_plot_PS,phase_s,show_realized=false,show_potential=false,show_sustained=true, show_attractor=true,show_vertical_potential=true,attractor_color=:black)
+    phase_s.color=convert(HSL,colorant"black")
+
+    phase_s=scenario(w̃=SED(min=0.5,max=0.5,distribution=distribution),    ū=SED(mean=1,sigma=1.0, normalize=true),color=:gray;N)
+    phaseplot!(phase_plot_PS,phase_s,show_realized=false,show_potential=false,show_sustained=true, show_attractor=false,show_vertical_potential=false,attractor_color=:black)
+    phase_s.color=convert(HSL,colorant"black")
+    phase_s=scenario(w̃=SED(min=0.5,max=0.5,distribution=distribution),    ū=SED(mean=1,sigma=-1.0, normalize=true),color=:gray;N)
+    phaseplot!(phase_plot_PS,phase_s,show_realized=false,show_potential=false,show_sustained=true, show_attractor=false,show_vertical_potential=false,attractor_color=:black)
+    phase_s.color=convert(HSL,colorant"black")
+    #phaseplot!(phase_plot_PS,phase_s,show_realized=false,show_sustained=false, show_attractor=true,show_vertical_potential=true,attractor_color=:crimson)
+    arrow_arc!(phase_plot_PS,Point2f(0.5, 0.5),0.4,0+0.21,pi/2-0.21,linewidth=2.0,color=:black,flip_arrow=true,linestyle=:dot)
+    arrow_arc!(phase_plot_PS,Point2f(1.0, 0.0),1.1,pi-0.3-0.21,pi/2+0.3+0.21,linewidth=2.0,color=:gray,flip_arrow=true,linestyle=:dot)
+    text!(phase_plot_PS,0.37,0.18,text="position:\nmean(w̃)",font="Arial", align=(:left, :top), color=:black, fontsize=10)
+    text!(phase_plot_PS,0.68,0.66,text="slope:\nvar(w̃)",font="Arial", align=(:left, :top), color=:black, fontsize=10)
+    text!(phase_plot_PS,0.1,0.55,text="tilt\nmean(ū)",font="Arial", align=(:left, :top), color=:gray, fontsize=10)
+    text!(phase_plot_PS,0.77,0.45,text="convexity:\nvar(ū)",font="Arial", align=(:left, :top), color=:gray, fontsize=10)
+    #=
+
+    W=[SED(min=0.01,max=0.99,distribution=LogNormal),SED(min=5,max=1,distribution=Beta)]
+    U=[SED(mean=0.5,distribution=Exponential, normalize=true),SED(min=5,max=1,distribution=LogNormal,normalize=true)]
+    
+    [phaseplot!(phase_plot_RS,scenario(w̃=w,ū=u;N),show_realized=false,show_potential=true, show_attractor=true,show_vertical_potential=true) for w in W, u in U]
+  =#
+    s1=scenario(w̃=SED(min=0.01,max=0.99,distribution=LogNormal),    ū=ū=SED(mean=0.5,distribution=Exponential, normalize=true),color=:gray;N)
+    phaseplot!(phase_plot_RS,s1,show_realized=false,show_sustained=false,show_potential=true, show_attractor=true,show_vertical_potential=true,attractor_color=:forestgreen)
+    
+    s2=scenario(w̃=SED(min=5,max=1,distribution=Beta),    ū=SED(min=5,max=1,distribution=LogNormal,normalize=true),color=:gray;N)
+    phaseplot!(phase_plot_RS,s2,show_realized=false,show_potential=true, show_attractor=true,show_vertical_potential=true,attractor_color=:steelblue)
+    
+    s3=scenario(w̃=SED(min=0.01,max=0.99,distribution=LogNormal),    ū=SED(min=5,max=1,distribution=LogNormal, normalize=true),color=:gray;N)
+    phaseplot!(phase_plot_RS,s3,show_realized=false,show_potential=true, show_attractor=true,show_vertical_potential=true,attractor_color=:darkorange)
+    
+    s4=scenario(w̃=SED(min=5,max=1,distribution=Beta),    ū=SED(mean=0.5,distribution=Exponential, normalize=true),color=:gray;N)
+    phaseplot!(phase_plot_RS,s4,show_realized=false,show_potential=true, show_attractor=true,show_vertical_potential=true,attractor_color=:crimson)
+    
+    
+    a1=Axis(incomes[1,1])
+    a2=Axis(incomes[1,2])
+    a3=Axis(incomes[2,1])
+    a4=Axis(incomes[2,2])
+    [hidespines!(a) for a in [a1,a2,a3,a4]]
+    [hidedecorations!(a) for a in [a1,a2,a3,a4]]
+
+
+    for  (a,s,c) in zip([a1,a2,a3,a4],[s1,s2,s3,s4],[colorant"forestgreen",colorant"steelblue",colorant"darkorange",colorant"crimson"])
+        s.color=convert(HSL,c)
+        incomes!(a,s,show_text=false, indexed=true)
+        #scatter!(a,[0.1],[0.9],color=c,markersize=20, space=:relative)
+    end
+    Label(f[0,1],text="Shape factors",fontsize=20, tellwidth=false)
+    Label(f[0,2],text="Scenarios",fontsize=20, tellwidth=false)
+    Label(f[0,3],text="Incomes",fontsize=20, tellwidth=false)
+     #incomes!(income,phase_s)
+    #phaseplot!(five_actor,five_s,show_realized=false, show_attractor=true,show_vertical_potential=true)
+    #phaseplot!(many_actor,many_s,show_realized=false, show_attractor=true,show_vertical_potential=true)
+    save("graphics/convexities.png",f)
+    f   
 end

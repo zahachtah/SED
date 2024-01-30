@@ -5,8 +5,8 @@ potential_color=nothing
 potential_color==nothing ? potential_color=c : nothing #or ensure its a color?
 
 """
-function phaseplot!(A,S; show_required=true,show_potential=true,same_potential_color=true, show_realized=false,show_trajectory=false, regulated_dot_reduction=0.3, attractor_size=30, show_attractor=true,show_target=true, vector_field=false,vector_grid=20,show_vertical_potential=false)
-	
+function phaseplot!(A,S; show_sustained=true,show_potential=true,same_potential_color=true, show_realized=false,show_trajectory=false, regulated_dot_reduction=0.3, attractor_size=30, show_attractor=true,show_target=true, vector_field=false,vector_grid=20,show_vertical_potential=false, attractor_color=nothing, show_legend=nothing, attractor_to_legend=false)
+
 	if !isa(S,Array)
 		S=[S]
 	end
@@ -33,7 +33,7 @@ function phaseplot!(A,S; show_required=true,show_potential=true,same_potential_c
 		c=p.color
 		MS=10
 		id=sortperm(is.w̃)
-		scatter!(A,[is.y],[is.U],color=HSL(c.h,c.s,c.l),markersize=show_attractor ? attractor_size : 0,strokecolor=:transparent,strokewidth=0,rotations=pi)
+		scatter!(A,[is.y],[is.U],color=attractor_color==nothing ? HSL(c.h,c.s,c.l) : attractor_color,markersize=show_attractor ? attractor_size : 0,strokecolor=:transparent,strokewidth=0,rotations=pi)
 		if vector_field
 			points = [Point2f(x/(vector_grid+1), y/(vector_grid+1)) for y in 1:vector_grid for x in 1:vector_grid]
 			rotations = [get_deriv_vector(p[1],p[2],is)[1] for p in points]
@@ -53,7 +53,7 @@ function phaseplot!(A,S; show_required=true,show_potential=true,same_potential_c
 	    end
 	
 		#Trajectory plot
-		show_trajectory ? lines!(A,is.t_y,is.t_U,color=c, linewidth=1,linestyle=:dash) : nothing
+		show_trajectory ? lines!(A,is.t_y,is.t_U,color=c, linewidth=1,linestyle=:dash, label="Trajectory") : nothing
 		
 		institutional_impact=(is.y.-is.w̃ .>0 .&& is.ū.-is.u.>1e-5).*MS*regulated_dot_reduction
 		institutional_not_profitable=(is.y.-is.w̃ .<0 ).*MS*1.11
@@ -63,7 +63,7 @@ function phaseplot!(A,S; show_required=true,show_potential=true,same_potential_c
 		
 		if show_potential 
 			potential=scatter!(A,y,ur,color=same_potential_color ? c : :gray, markersize=MS.*0.3)
-			show_vertical_potential ? lines!(A,y,ur,color=same_potential_color ? c : :gray, linewidth=0.5) : nothing
+			show_vertical_potential ? lines!(A,y,ur,color=same_potential_color ? c : :gray, linewidth=MS.*0.2,label="P(y)") : nothing
 		end
 
 		if show_realized
@@ -72,7 +72,7 @@ function phaseplot!(A,S; show_required=true,show_potential=true,same_potential_c
 			#Shows actors that opt out of resource use 
 			#scatter!(A,is.w̃[id],cumsum(x.u[id]./x.ū[id])/x.N,color=adjustColor(c,"l",0.15), markersize=open_access_not_profitable.*0.3)
 			
-			scatter!(A,is.w̃[id],cumsum(is.u[id]./is.ū[id])/is.N,color=c, markersize=MS)
+			realized=scatter!(A,is.w̃[id],cumsum(is.u[id]./is.ū[id])/is.N,color=c, markersize=MS,label="R(y)")
 			
 			#optout=scatter!(A,is.w̃[id],cumsum(optoutvector./is.ū)./is.N,color=adjustColor(c,"l",0.85), markersize=institutional_not_profitable)
 			
@@ -82,10 +82,11 @@ function phaseplot!(A,S; show_required=true,show_potential=true,same_potential_c
 		show_trajectory ? scatter!(A,[is.y],[is.U],color=:black,markersize=show_attractor ? 8 : 0,strokecolor=:transparent,strokewidth=0,rotations=pi) : nothing
 		#scatter!(A,[is.y],[is.U],color=:transparent,markersize=show_attractor ? attractor_size : 0,strokecolor=c,strokewidth=2,rotations=pi)
 		
-		show_required ? required=lines!(A,y,us,linewidth=0.5,markersize=0.5,color=same_potential_color ? c : :gray) : nothing
+		show_sustained ? sustained=lines!(A,y,us,linewidth=0.5,markersize=0.5,color=same_potential_color ? c : :gray,label="S(y)") : nothing
 	end
 	ylims!(A,(-0.02,1.02))
 	xlims!(A,(0,1))
+	show_legend!=nothing ? axislegend(A,framevisible = false,position=show_legend) : nothing
 end
 
 	"""
@@ -177,11 +178,16 @@ end
 	    return L
 end
 
-function individual_u!(a,S;labels=true)
+function individual_u!(a,S;labels=true,rot=false)
 	# divide by S.ū
 	id=sortperm(S.w̃)
+	if rot
+		heatmap!(a,S.w̃[id],S.t,rotl90(S.t_u[:,reverse(id)]),colormap=cgrad([:white,S.color]))
+		!labels ? hidedecorations!(a) : nothing
+	else
 	heatmap!(a,S.t,S.w̃[id],S.t_u[:,id],colormap=cgrad([:white,S.color]))
 	!labels ? hidedecorations!(a) : nothing
+	end
 	hidespines!(a)
 end
 

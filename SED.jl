@@ -4,7 +4,7 @@ using Base: @kwdef
 import Base: show
 import Distributions: pdf
 
-Constant=Dirac
+
 
 include("diversity.jl")
 include("scenario.jl")

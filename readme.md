@@ -1,4 +1,4 @@
-# Socioeconomic diversity
+# SED: (Socio-economic || Social-ecological) diversity
 ## Parameters as distributions
 ## Resource use scenarios
 ![base model parameters](/graphics/ModelFigure.png)
