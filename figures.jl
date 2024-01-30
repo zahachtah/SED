@@ -810,15 +810,6 @@ f
 =#
 
 
-for i in 1:20
-    f=Figure()
-    a=Axis(f[1,1])
-    b=Axis(f[1,2])
-    s=scenario(w̃=SED(median=0.2,sigma=0.2,distribution=LogNormal),ū=SED(mean=0.2+i/20,sigma=0.0,normalize=true),N=20)
-    phaseplot!(a,s,show_realized=true)
-    incomes!(b,s)
-    display(f)
-end
 
 
 function sed(;N1=20,N2=200,w_dist=LogNormal,ms=1)
