@@ -1,8 +1,11 @@
-function phaseplot(S;vector_field=false, show_realized=false)
+function phaseplot(S;vector_field=false, show_realized=false, saveas="")
     f=Figure()
     a=Axis(f[1,1])
     hidespines!(a)
     phaseplot!(a,S,show_trajectory=true;vector_field,show_realized)
+    if saveas!=""
+        save("graphics/"*saveas,f)
+    end
     f
 end
 
@@ -1280,4 +1283,56 @@ function convexities(;distribution=Uniform,N=200)
     #phaseplot!(many_actor,many_s,show_realized=false, show_attractor=true,show_vertical_potential=true)
     save("graphics/convexities.png",f)
     f   
+end
+
+function jhfeglkh()
+    x = y = -10:0.11:10
+y1d = sin.(x) ./ x
+# 3D heatmap
+sinc2d(x, y) = sin.(sqrt.(x .^ 2 + y .^ 2)) ./ sqrt.(x .^ 2 + y .^ 2)
+fxy = [sinc2d(x, y) for x in x, y in y]
+
+fig = Figure(size = (600, 400))
+ax1 = Axis(fig[1, 1], xlabel = "x", ylabel = "f(x)", xgridvisible = true,
+    ygridvisible = true)
+lines!(ax1, x, y1d, color = :red, label = "sinc(x)")
+axislegend()
+# inset
+ax2 = Axis(fig, bbox = BBox(140, 260, 260, 350), xticklabelsize = 12,
+    yticklabelsize = 12, title = "inset  at (140, 260, 260, 350)")
+hmap = heatmap!(ax2, x, y, fxy, colormap = :Spectral_11)
+Colorbar(fig[1, 1], hmap, label = "sinc(x,y)", labelpadding = 5,
+    tellheight = false, tellwidth = false, ticklabelsize = 12,
+    width = 10, height = Relative(1.5 / 4),
+    halign = :right, valign = :center)
+limits!(ax2, -10, 10, -10, 10)
+hidespines!(ax2)
+ax2.yticks = [-10, 0, 10]
+ax2.xticks = [-10, 0, 10]
+fig
+end
+
+function diversity()
+    f=Figure(size=(1000,1000))
+    a=Axis(f[1,1])
+    hidedecorations!(a)
+    hidespines!(a)
+    #left, right, bottom and top
+    a1=Axis(f, bbox = BBox(140, 260, 260, 350))
+    scatter!(a1,rand(10))
+    a2=Axis(f, bbox = BBox(540, 860, 660, 950))
+    scatter!(a2,rand(10))
+    f
+end
+
+function bezier()
+
+   
+
+    
+    batsymbol_string = "M96.84 141.998c-4.947-23.457-20.359-32.211-25.862-13.887-11.822-22.963-37.961-16.135-22.041 6.289-3.005-1.295-5.872-2.682-8.538-4.191-8.646-5.318-15.259-11.314-19.774-17.586-3.237-5.07-4.994-10.541-4.994-16.229 0-19.774 21.115-36.758 50.861-43.694.446-.078.909-.154 1.372-.231-22.657 30.039 9.386 50.985 15.258 24.645l2.528-24.367 5.086 6.52H103.205l5.07-6.52 2.543 24.367c5.842 26.278 37.746 5.502 15.414-24.429 29.777 6.951 50.891 23.936 50.891 43.709 0 15.136-12.406 28.651-31.609 37.267 14.842-21.822-10.867-28.266-22.549-5.549-5.502-18.325-21.147-9.341-26.125 13.886z"
+
+    batsymbol = BezierPath(batsymbol_string, fit = true, flipy = true)
+    
+    scatter(1:10, marker = batsymbol, markersize = 50, color = :black)
 end

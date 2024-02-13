@@ -19,6 +19,29 @@ function dudt(dx,x,p,t)
 	# First get the non-institutional rate of change in u
 
 	
+    @inline dx[1:N]=α.*(y.-w̃)
+	dx[N+1]=dydt*((1 -y)-sum(u)) *y	
+end
+
+function dudt(dx,x,p,t)
+    # extract the parameters from named tuple containers for simpler equation syntax
+    dydt=p.sim.dydt # used when y is held constant
+    N=p.N
+	ū=p.ū.*p.aū
+	w̃=p.w̃.*p.aw̃
+	α=p.α
+	#q=p.t
+	β=p.β
+	dt=p.sim.dt #parameters
+    
+    # extract the variables from state vector
+    u=view(x,1:N)   # actions
+    y=x[N+1]  		# resource level
+    ϕ=x[N+2] 		#quota price
+
+	# First get the non-institutional rate of change in u
+
+	
     @inline dx[1:N]=α.*(y.-w̃.-ϕ)
     # constrain dudt so that u can never leave the range [0.0, ū]
     # performance: if we do this in place we can increase speed
@@ -88,8 +111,29 @@ function dudt(dx,x,p,t)
     dx[N+1]=dydt*((1 -y)-sum(u)) *y
 end
 
+function stage_limiter!(u, integrator, p, t)
+	# if u is regulated then
+	#    calculate violation of u
+	#    How are initial Quota distributed?
+	#    depending on some parameter, e.g. status: w, incentive: w̃ or skill: q -> 0 or 1
+	#    depending on share of Quota
+	#    trading Quota
+
+	#    change parameters
+
+	#    change situation
+
+    # Apply some constraint or modification at each stage
+
+
+	u[1:p.N].=ifelse.(u[1:p.N].<0.0,0.0,ifelse.(u[1:p.N].>p.ū,p.ū,u[1:p.N]))
+	#println(extrema(u[1:p.N]))
+	# clamp!(u[1:p.N],0.0,p.ū)
+
+end
+
 """
-    sim(p; tend=(0.0,2000.0), y0=1.0, dydt=1.0,u0=fill(0.0/p.N,p.N), p0=0.0,solution=false, terminate_steady_state=true)
+sim(p; tend=(0.0,2000.0), y0=1.0, dydt=1.0,u0=fill(0.0/p.N,p.N), p0=0.0,solution=false, terminate_steady_state=true)
 
 Main function to run a simulation with parameters provided by a scenario.
 
@@ -130,7 +174,9 @@ function sim(p; tend=(0.0,2000.0), y0=1.0, dydt=1.0,u0=fill(0.0/p.N,p.N), p0=0.0
     prob = ODEProblem(dudt,[u0;y0;p0],tend,p)
 
     # solves the ODE
-    sol=solve(prob,adaptive=false, Euler(),saveat=0.1,callback=terminate_steady_state ? TerminateSteadyState(1e-6,1e-4) : nothing,dt=p.sim.dt)#  
+    #sol=solve(prob,adaptive=false, Euler(),saveat=0.1,callback=terminate_steady_state ? TerminateSteadyState(1e-6,1e-4) : nothing,dt=p.sim.dt)#  
+	sol=solve(prob,SSPRK43(;stage_limiter!),reltol=1e-10,callback=terminate_steady_state ? TerminateSteadyState(1e-6,1e-4) : nothing)
+	
 	poa=deepcopy(p)
     poa.institution="OA"
     DUDT=zeros(N+2)

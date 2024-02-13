@@ -17,9 +17,10 @@ function phaseplot!(A,S; show_sustained=true,show_potential=true,same_potential_
 		usum=cumsum(z.ū)
 		Q=findall(usum.<=u)
 		n=length(Q)
-		deltau=usum[min(z.N,Q[end]+1)]-u
 		U=zeros(z.N+2)
-		U[Q]=z.ū[Q]
+		
+		deltau=length(Q)>0 ? usum[min(z.N,Q[end]+1)]-u : 0
+		length(Q)>0 ? U[Q]=z.ū[Q] : nothing
 		U[min(z.N,n+1)]=deltau
 		U[z.N+1]=y
 		dudt(du,U,z,0)
@@ -33,7 +34,7 @@ function phaseplot!(A,S; show_sustained=true,show_potential=true,same_potential_
 		c=p.color
 		MS=10
 		id=sortperm(is.w̃)
-		scatter!(A,[is.y],[is.U],color=attractor_color==nothing ? HSL(c.h,c.s,c.l) : attractor_color,markersize=show_attractor ? attractor_size : 0,strokecolor=:transparent,strokewidth=0,rotations=pi)
+		scatter!(A,[is.y],[is.U],color=attractor_color==nothing ? HSLA(c.h,c.s,c.l,0.3) : attractor_color,markersize=show_attractor ? attractor_size : 0,strokecolor=:transparent,strokewidth=0,rotations=pi)
 		if vector_field
 			points = [Point2f(x/(vector_grid+1), y/(vector_grid+1)) for y in 1:vector_grid for x in 1:vector_grid]
 			rotations = [get_deriv_vector(p[1],p[2],is)[1] for p in points]

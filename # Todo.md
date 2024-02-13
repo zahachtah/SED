@@ -1,5 +1,6 @@
 # Todo:
 
+- [] Seems the vector_field is not spot on compared to the trajectory. review this!
 - [X] LogNormal distributions both with rand and ordered.
 - [ ] Decide how to implement PA (in sim,deriv or scenario, and if scenario where to keep original values of K and r?)
 - [ ] implement PA, subsidy and tax on different targets!
