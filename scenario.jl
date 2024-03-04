@@ -127,7 +127,7 @@ function scenario(;
     aū=fill(1.0,N),
     α=nothing,
     # institutional parameters
-    institution::String="Open",
+    institution="Open",
     β::Float64=institution=="Tradable" ? 0.05 : 0.0,
     value::Float64=1.0,
     target::String="access",
@@ -257,7 +257,7 @@ function scenario(;
         #dimensional revenues
         c̃=0 #Yo, add c to scenario!
         S.wage_revenue = (S.ū .- S.u) .* S.w̃.*S.r.*S.p.*S.K;
-        S.resource_revenue = S.u.*(S.y .- c̃).*S.r.*S.p.*S.K;
+        S.resource_revenue = S.u.*(S.y*0.7 .- c̃).*S.r.*S.p.*S.K;
         S.trade_revenue=(S.value./S.y./S.N.-S.u).*S.ϕ.*S.r.*S.p.*S.K;
         #R̃ₕᵣ= S.u.*(S.y .- S.w̃);
         S.total_revenue = S.wage_revenue .+  S.resource_revenue

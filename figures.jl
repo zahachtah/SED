@@ -9,11 +9,11 @@ function phaseplot(S;vector_field=false, show_realized=false, saveas="")
     f
 end
 
-function incomes(S)
+function incomes(S; indexed=true)
     f=Figure()
     a=Axis(f[1,1])
     hidespines!(a)
-    incomes!(a,S)
+    incomes!(a,S;indexed)
     f
 end
 

@@ -13,17 +13,25 @@ function dudt(dx,x,p,t)
     
     # extract the variables from state vector
     u=view(x,1:N)   # actions
-    y=x[N+1]  		# resource level
-    ϕ=x[N+2] 		#quota price
+    #y=mean(x[N+1:end-1]) # if one wants to use spatial models of resource dynamics 		
+    y=x[N+1]  
+	yp=x[N+2]      # resource level
+	ϕ=x[N+3] 		#quota price
 
 	# First get the non-institutional rate of change in u
+	f=0.8
+	d=0.2
 
+	# NOTE NOTE NOTE: added 0.7 (f=0.3) to resource income calculation in scenarios.jl, change that
+
+	# DO we need the dydt still? probably, for calculating attractor for fixed y
 	
-    @inline dx[1:N]=α.*(y.-w̃)
-	dx[N+1]=dydt*((1 -y)-sum(u)) *y	
+    @inline dx[1:N]=α.*(y*(1-f).-w̃)
+	dx[N+1]=dydt*(((1 -y)-sum(u)/(1-f)) *y+((1-f)!=0 ? f/(1-f)*d*(yp-y) : 0))	
+	dx[N+2]=dydt*(((1 -yp)) *yp+(f!=0 ? (1-f)/f*d*(y-yp) : 0))
 end
 
-function dudt(dx,x,p,t)
+function dudt_old(dx,x,p,t)
     # extract the parameters from named tuple containers for simpler equation syntax
     dydt=p.sim.dydt # used when y is held constant
     N=p.N
@@ -112,6 +120,7 @@ function dudt(dx,x,p,t)
 end
 
 function stage_limiter!(u, integrator, p, t)
+	U=zeros(Float64,p.N)
 	# if u is regulated then
 	#    calculate violation of u
 	#    How are initial Quota distributed?
@@ -125,8 +134,16 @@ function stage_limiter!(u, integrator, p, t)
 
     # Apply some constraint or modification at each stage
 
+	#(:sol, :u, :du, :k, :t, :dt, :f, :p, :uprev, :uprev2, :duprev, :tprev, :alg, :dtcache, :dtchangeable, :dtpropose, :tdir, :eigen_est, :EEst, :qold, :q11, :erracc, :dtacc, :success_iter, :iter, :saveiter, :saveiter_dense, :cache, :callback_cache, :kshortsize, :force_stepfail, :last_stepfail, :just_hit_tstop, :do_error_check, :event_last_time, :vector_event_last_time, :last_event_error, :accept_step, :isout, :reeval_fsal, :u_modified, :reinitialize, :isdae, :opts, :stats, :initializealg, :differential_vars, :fsalfirst, :fsallast)
 
-	u[1:p.N].=ifelse.(u[1:p.N].<0.0,0.0,ifelse.(u[1:p.N].>p.ū,p.ū,u[1:p.N]))
+	# 1: calculate Use rights
+	# U=Q/N; U=Q/y/N; U=fixed array; U=update array
+	# 2: calculate violation min(0.0,u_i-U_i)
+	#println(mod(t,365).<100 ? 0 : 1)
+	p.institution!="Open" ? p.institution.use_rights(U,u,t,p) : U.=p.ū
+	
+	u[1:p.N].=ifelse.(u[1:p.N].<0.0,0.0,ifelse.(u[1:p.N].>U,U,ifelse.(u[1:p.N].>p.ū,p.ū,u[1:p.N])))
+	#println([integrator.dt])
 	#println(extrema(u[1:p.N]))
 	# clamp!(u[1:p.N],0.0,p.ū)
 
@@ -171,7 +188,7 @@ function sim(p; tend=(0.0,2000.0), y0=1.0, dydt=1.0,u0=fill(0.0/p.N,p.N), p0=0.0
     N=p.N
 
     # sets up the problem,
-    prob = ODEProblem(dudt,[u0;y0;p0],tend,p)
+    prob = ODEProblem(dudt,[u0;y0;y0;p0],tend,p)
 
     # solves the ODE
     #sol=solve(prob,adaptive=false, Euler(),saveat=0.1,callback=terminate_steady_state ? TerminateSteadyState(1e-6,1e-4) : nothing,dt=p.sim.dt)#  
@@ -179,10 +196,10 @@ function sim(p; tend=(0.0,2000.0), y0=1.0, dydt=1.0,u0=fill(0.0/p.N,p.N), p0=0.0
 	
 	poa=deepcopy(p)
     poa.institution="OA"
-    DUDT=zeros(N+2)
+    DUDT=zeros(N+3)
     dudt(DUDT,sol.u[end],poa,0.0)
 	individual=zeros(N,length(sol.t))
-    [individual[:,i]=sol.u[i][1:end-2] for i in 1:length(sol.t)]
+    [individual[:,i]=sol.u[i][1:N] for i in 1:length(sol.t)]
 	#check for periodicity
 		yy=[u[N+1] for u in sol.u]
 		period=1:length(yy)
@@ -219,7 +236,7 @@ function sim(p; tend=(0.0,2000.0), y0=1.0, dydt=1.0,u0=fill(0.0/p.N,p.N), p0=0.0
 		p.u=sol.u[end][1:N]
 		p.U=sum(sol.u[end][findall(p.ū.>0.0)]./p.ū[findall(p.ū.>0.0)]./p.N)
 	    p.y=sol.u[end][N+1]
-	    p.ϕ=sol.u[end][N+2]
+	    p.ϕ=sol.u[end][end]
 		p.t=sol.t
 		p.t_u=[sol.u[t][i] for t in 1:length(sol.t), i in 1:p.N]#[u[1:N] for u in sol.u]
 	    p.t_y=[u[N+1] for u in sol.u]
@@ -232,6 +249,7 @@ function sim(p; tend=(0.0,2000.0), y0=1.0, dydt=1.0,u0=fill(0.0/p.N,p.N), p0=0.0
         #R̃ₕᵣ= S.u.*(S.y .- S.w̃);
         p.total_revenue = p.wage_revenue .+  p.resource_revenue
 		p.gini=gini(p.total_revenue)
+		println(sol.u[end][(N+1):(N+2)])
 	return p
 
 end

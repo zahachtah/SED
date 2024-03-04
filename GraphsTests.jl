@@ -138,3 +138,21 @@ end
         text!(test,0.1,0.9,text="Test label inside",space = :relative)
         f
     end
+
+
+    N=10
+    value=0.5
+    n=Int64(round(N*value)) #target(t,u,p)=2
+    u=0.1*collect(1:N).-0.1
+    q=rand(N)
+
+    #violation(t,u,p)
+    A=u.>0.0 # should be u.>U
+    id=findall(A)
+    vn=length(id)-n
+    V=zeros(N)
+    vid=id[sortperm(q[id],rev=false)[1:vn]]
+    V[vid]=u[vid]  # ? -U
+    V
+
+    # How to calculate rule violation under tradable individual use rights
