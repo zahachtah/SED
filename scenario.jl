@@ -7,6 +7,8 @@ mutable struct Scenario
     a
     r
     K
+    protected
+    dispersal
     p
     w̃
     ū
@@ -49,6 +51,8 @@ function Base.show(io::IO, scenario::Scenario)
     println(io, "a: ", scenario.a) 
     println(io, "r: ", scenario.r) 
     println(io, "K: ", scenario.K) 
+    println(io, "protected: ", scenario.protected)
+    println(io, "dispersal: ", scenario.dispersal)
     println(io, "p: ", scenario.p)
     println(io, "w̃: ", scenario.w̃)
     println(io, "ū: ", scenario.ū)
@@ -78,6 +82,8 @@ Simulates a scenario based on various parameters. The function adjusts these par
 - `w::SED`, 
 - `r::Float64`, 
 - `K::Float64`, 
+- `protected::Float64`,
+- `dispersal::Float64`,
 - `p::Float64`: 
 
 # Basic non-dimensionalized parameters
@@ -119,6 +125,8 @@ function scenario(;
     w=SED(min=0.1/N,max=0.9/N),
     r=1.0,
     K=1.0,
+    protected=0.0,
+    dispersal=0.0,
     p=SED(min=1.0,max=1.0),
     # basic non-dimensionalized parameters, if set these override dimensionalized parameters
     w̃=nothing,
@@ -198,11 +206,6 @@ function scenario(;
 	
     # We just need a good recalc method to be able to adjust e.g. PA dependence!
 
-    if institution=="Protected"
-        w̃=w̃ ./max(0.001,(1-(1-value))) # to avoid dividing by zero
-        ū= ū ./(1+(1-value))
-    end
-
 	color=color==nothing ? colorant"crimson" : color
 	if isa(color,RGB)
 		color=convert(HSL,color)
@@ -222,6 +225,8 @@ function scenario(;
 	a,
 	r,
 	K,
+    protected,
+    dispersal,
 	p,
 	w̃,
 	ū,
@@ -252,15 +257,11 @@ function scenario(;
 	caption,
 	color)
 
-	S= simulate ? sim(Scenario(s...)) : Scenario(s...)
+	S=Scenario(s...)
     if simulate
         #dimensional revenues
-        c̃=0 #Yo, add c to scenario!
-        S.wage_revenue = (S.ū .- S.u) .* S.w̃.*S.r.*S.p.*S.K;
-        S.resource_revenue = S.u.*(S.y*0.7 .- c̃).*S.r.*S.p.*S.K;
-        S.trade_revenue=(S.value./S.y./S.N.-S.u).*S.ϕ.*S.r.*S.p.*S.K;
-        #R̃ₕᵣ= S.u.*(S.y .- S.w̃);
-        S.total_revenue = S.wage_revenue .+  S.resource_revenue
+        sim!(S) 
+        revenues!(S)
         
     end
     
@@ -269,6 +270,17 @@ function scenario(;
 	#Scenario(N,w,q,ē,a,r,K,!isa(p,Array) ? fill(p,N) : p,w̃,ū,ū_sum,α,institution,T,t,target,β,ū0,y0,dt,dydt,label,image,caption,color)
 
 end
+
+function revenues!(S::Scenario)
+    #dimensional revenues
+    c̃=0 #Yo, add c to scenario!
+    S.wage_revenue = (S.ū .- S.u) .* S.w̃.*S.r.*S.p.*S.K;
+    S.resource_revenue = S.u.*(S.y*(1.0-S.protected) .- c̃).*S.r.*S.p.*S.K;
+    S.trade_revenue=(S.value./(S.y*(1.0-S.protected))./S.N.-S.u).*S.ϕ.*S.r.*S.p.*S.K;
+    #R̃ₕᵣ= S.u.*(S.y .- S.w̃);
+    S.total_revenue = S.wage_revenue .+  S.resource_revenue
+end
+
 
 function scenario(scenario::Scenario; kwargs...)
     # Create a copy of the scenario to avoid mutating the original
@@ -288,6 +300,7 @@ function scenario(scenario::Scenario; kwargs...)
     dist!(s.ē,s.N)
     dist!(s.a,s.N)
     dist!(s.p,s.N)
+    println(s.w̃)
     dist!(s.w̃,s.N)
     dist!(s.ū,s.N)
     dist!(s.α,s.N)
@@ -301,11 +314,7 @@ function scenario(scenario::Scenario; kwargs...)
 
     # We just need a good recalc method to be able to adjust e.g. PA dependence!
 
-    if institution=="Protected"
-        s.w̃=s.w̃./max(0.001,(1-(1-value))) # to avoid dividing by zero
-        s.ū=s.ū./(1+(1-value))
-    end
-
+println("older scenario update")
     return s
 end
 
@@ -390,5 +399,108 @@ function dependencies(external, w, q, ē, a, p, r, K)
     end
     
     return variable_order
+end
+
+function scenario(
+    original::Scenario;
+    N=nothing,
+    external=nothing,
+    w=nothing,
+    q=nothing,
+    ē=nothing,
+    a=nothing,
+    r=nothing,
+    K=nothing,
+    protected=nothing,
+    dispersal=nothing,
+    p=nothing,
+    w̃=nothing,
+    ū=nothing,
+    aw̃=nothing,
+    aū=nothing,
+    α=nothing,
+    u=nothing,
+    U=nothing,
+    y=nothing,
+    ϕ=nothing,
+    t=nothing,
+    t_u=nothing,
+    t_U=nothing,
+    t_y=nothing,
+    t_ϕ=nothing,
+    total_revenue=nothing,
+    resource_revenue=nothing,
+    wage_revenue=nothing,
+    trade_revenue=nothing,
+    gini=nothing,
+    institution=nothing,
+    target=nothing,
+    value=nothing,
+    β=nothing,
+    sim=nothing,
+    label=nothing,
+    image=nothing,
+    caption=nothing,
+    color=nothing
+)
+println(s.w̃)
+    # Create a new copy of the original scenario
+    updated = deepcopy(original)
+    println(updated.w̃.value)
+    # Update fields if a new value is provided (not nothing)
+    N !== nothing && (updated.N = N)
+    external !== nothing && (updated.external = external)
+    w !== nothing && (updated.w = w)
+    q !== nothing && (updated.q = q)
+    ē !== nothing && (updated.ē = ē)
+    a !== nothing && (updated.a = a)
+    r !== nothing && (updated.r = r)
+    K !== nothing && (updated.K = K)
+    protected !== nothing && (updated.protected = protected)
+    dispersal !== nothing && (updated.dispersal = dispersal)
+    p !== nothing && (updated.p = p)
+    w̃ !== nothing && (updated.w̃ = w̃)
+    ū !== nothing && (updated.ū = ū)
+    aw̃ !== nothing && (updated.aw̃ = aw̃)
+    aū !== nothing && (updated.aū = aū)
+    α !== nothing && (updated.α = α)
+    u !== nothing && (updated.u = u)
+    U !== nothing && (updated.U = U)
+    y !== nothing && (updated.y = y)
+    ϕ !== nothing && (updated.ϕ = ϕ)
+    t !== nothing && (updated.t = t)
+    t_u !== nothing && (updated.t_u = t_u)
+    t_U !== nothing && (updated.t_U = t_U)
+    t_y !== nothing && (updated.t_y = t_y)
+    t_ϕ !== nothing && (updated.t_ϕ = t_ϕ)
+    total_revenue !== nothing && (updated.total_revenue = total_revenue)
+    resource_revenue !== nothing && (updated.resource_revenue = resource_revenue)
+    wage_revenue !== nothing && (updated.wage_revenue = wage_revenue)
+    trade_revenue !== nothing && (updated.trade_revenue = trade_revenue)
+    gini !== nothing && (updated.gini = gini)
+    institution !== nothing && (updated.institution = institution)
+    target !== nothing && (updated.target = target)
+    value !== nothing && (updated.value = value)
+    β !== nothing && (updated.β = β)
+    sim !== nothing && (updated.sim = sim)
+    label !== nothing && (updated.label = label)
+    image !== nothing && (updated.image = image)
+    caption !== nothing && (updated.caption = caption)
+    color !== nothing && (updated.color = color)
+
+    dist!(updated.w,updated.N)
+    dist!(updated.q,updated.N)
+    dist!(updated.ē,updated.N)
+    dist!(updated.a,updated.N)
+    dist!(updated.p,updated.N)
+    dist!(updated.r,updated.N)
+    dist!(updated.K,updated.N)
+    println(updated.w̃)
+    dist!(updated.w̃,updated.N)
+    dist!(updated.ū,updated.N)
+    dist!(updated.α,updated.N)
+
+    println("Scenario updated")
+    return updated
 end
 

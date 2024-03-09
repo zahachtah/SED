@@ -19,16 +19,16 @@ function dudt(dx,x,p,t)
 	ϕ=x[N+3] 		#quota price
 
 	# First get the non-institutional rate of change in u
-	f=0.8
+	f=0.0
 	d=0.2
 
 	# NOTE NOTE NOTE: added 0.7 (f=0.3) to resource income calculation in scenarios.jl, change that
 
 	# DO we need the dydt still? probably, for calculating attractor for fixed y
 	
-    @inline dx[1:N]=α.*(y*(1-f).-w̃)
-	dx[N+1]=dydt*(((1 -y)-sum(u)/(1-f)) *y+((1-f)!=0 ? f/(1-f)*d*(yp-y) : 0))	
-	dx[N+2]=dydt*(((1 -yp)) *yp+(f!=0 ? (1-f)/f*d*(y-yp) : 0))
+    @inline dx[1:N]=α.*(y*(1-p.protected).-w̃)
+	dx[N+1]=dydt*(((1 -y)-sum(u)/(1-p.protected)) *y+((1-p.protected)!=0 ? p.protected/(1-p.protected)*p.dispersal*(yp-y) : 0))	
+	dx[N+2]=dydt*(((1 -yp)) *yp+(p.protected!=0 ? (1-p.protected)/p.protected*p.dispersal*(y-yp) : 0))
 end
 
 function dudt_old(dx,x,p,t)
@@ -183,7 +183,7 @@ Main function to run a simulation with parameters provided by a scenario.
 
 
     """
-function sim(p; tend=(0.0,2000.0), y0=1.0, dydt=1.0,u0=fill(0.0/p.N,p.N), p0=0.0,solution=false,terminate_steady_state=true)
+function sim!(p; tend=(0.0,2000.0), y0=1.0, dydt=1.0,u0=fill(0.0/p.N,p.N), p0=0.0,solution=false,terminate_steady_state=true)
 	t0=time()
     N=p.N
 
@@ -244,12 +244,11 @@ function sim(p; tend=(0.0,2000.0), y0=1.0, dydt=1.0,u0=fill(0.0/p.N,p.N), p0=0.0
 		p.t_U=[sum(u[findall(p.ū.>0.0)]./p.ū[findall(p.ū.>0.0)]./p.N) for u in sol.u]
 		c̃=0
 		p.wage_revenue = (p.ū .- p.u) .* p.w̃.*p.r.*p.p.*p.K; 
-        p.resource_revenue = p.u.*(p.y .- c̃).*p.r.*p.p.*p.K;
-        p.trade_revenue=(p.value./p.y./p.N.-p.u).*p.ϕ.*p.r.*p.p.*p.K
+        p.resource_revenue = p.u.*((p.y.*(1-p.protected)) .- c̃).*p.r.*p.p.*p.K;
+        p.trade_revenue=(p.value./(p.y.*(1-p.protected))./p.N.-p.u).*p.ϕ.*p.r.*p.p.*p.K
         #R̃ₕᵣ= S.u.*(S.y .- S.w̃);
         p.total_revenue = p.wage_revenue .+  p.resource_revenue
 		p.gini=gini(p.total_revenue)
-		println(sol.u[end][(N+1):(N+2)])
 	return p
 
 end

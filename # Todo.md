@@ -1,7 +1,14 @@
 # Todo:
-Two basic types of institutions:
-1. monitoring and sanctioning of behaviour, behavioural intervention
-2. changing incentive and impact structures
+
+
+The thing about diversity
+
+you can set data, you can derive data, and you can make data from a distribution
+
+you set and derive data before you call dist!
+
+for external you do that, for w\tilde   you calculate those
+-> if r K q are not nothing && w\tilde has no data then derive?
 
 Use rights (how much to use)
 infrastructure regulations (what to use)
