@@ -1336,3 +1336,68 @@ function bezier()
     
     scatter(1:10, marker = batsymbol, markersize = 50, color = :black)
 end
+
+
+function SI_figure_PA_yield(;R=100)
+    # institution="PA"
+    # target="dispersal"
+    # value
+
+    # institutions=[protected_area(fraction::Float64)]
+    # institutions=[permits(fraction::Float64, target::String, selection::symbol, reverse::Bool)]
+    # institutions=[tax(fraction::Float64, target::String, selection::symbol, reverse::Bool)]
+    # institutions=[subsidy(fraction::Float64, target::String, selection::symbol, reverse::Bool)]
+    # institutions=[norm(strength::Float64)]
+    f=Figure()
+    a=Axis(f[1,1:2])
+    b=Axis(f[2,1])
+    c=Axis(f[2,2])
+    s=scenario(q=SED(mean=1.5,sigma=0,normalize=true),w=SED(min=0.01,max=0.1,normalize=true,distribution=LogNormal), dispersal=0.4)
+    dist!(s)
+    for i in 0:R
+        s.protected=i/R
+        #s.aw̃.=1/(1-s.protected)
+        sim!(s)
+        
+        phaseplot!(a,s,attractor_size=2+i/R*10)
+        scatter!(b,i/10,sum(s.resource_revenue), markersize=2,color=:forestgreen)
+        scatter!(c,i/10,sum(s.total_revenue), markersize=2,color=:steelblue)
+        ylims!(b,0,nothing)
+        ylims!(c,0,nothing)
+    end
+    f
+end
+
+function SI_figure_PA_yield2(;R=100, minw=0.01,k=3, dispersal=0.2)
+    # institution="PA"
+    # target="dispersal"
+    # value
+
+    # institutions=[protected_area(fraction::Float64)]
+    # institutions=[permits(fraction::Float64, target::String, selection::symbol, reverse::Bool)]
+    # institutions=[tax(fraction::Float64, target::String, selection::symbol, reverse::Bool)]
+    # institutions=[subsidy(fraction::Float64, target::String, selection::symbol, reverse::Bool)]
+    # institutions=[norm(strength::Float64)]
+    f=Figure(size=(800,800))
+
+    mw=range(0.01,stop=0.9,length=k)
+    mq=range(0.25,stop=4.0,length=k)
+    for a=1:k
+        for b=1:k
+            ax=Axis(f[a,b])
+            a<k ? hidexdecorations!(ax) : nothing
+            b>1 ? hideydecorations!(ax) : nothing
+            #hidespines!(ax)
+            s=scenario(q=SED(mean=mq[b],sigma=0,normalize=true),w=SED(min=minw,max=minw+mw[a],normalize=true,distribution=LogNormal); dispersal)
+            dist!(s)
+            for i in 0:R
+                s.protected=i/R
+                sim!(s)
+                scatter!(ax,i/R,sum(s.resource_revenue), markersize=2,color=:forestgreen)
+                scatter!(ax,i/R,sum(s.total_revenue), markersize=2,color=:steelblue)
+
+            end
+        end
+    end
+    f
+end

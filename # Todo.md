@@ -3,6 +3,17 @@
 
 The thing about diversity
 
+set w\tilde u\bar with SED
+
+set w\tilde u\bar with data -> SED.data (distribution=manual) (!! no SED?!!)
+
+set w\tilde u\bar with external
+
+set dimensional with SED -> set w\tilde u\bar -> SED.data (distriution=derived)
+
+recalc!() know graph order
+
+
 you can set data, you can derive data, and you can make data from a distribution
 
 you set and derive data before you call dist!

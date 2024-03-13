@@ -16,11 +16,8 @@ function dudt(dx,x,p,t)
     #y=mean(x[N+1:end-1]) # if one wants to use spatial models of resource dynamics 		
     y=x[N+1]  
 	yp=x[N+2]      # resource level
-	ϕ=x[N+3] 		#quota price
+	ϕ=x[N+3] 		#trade price
 
-	# First get the non-institutional rate of change in u
-	f=0.0
-	d=0.2
 
 	# NOTE NOTE NOTE: added 0.7 (f=0.3) to resource income calculation in scenarios.jl, change that
 
@@ -243,11 +240,13 @@ function sim!(p; tend=(0.0,2000.0), y0=1.0, dydt=1.0,u0=fill(0.0/p.N,p.N), p0=0.
 	    p.t_ϕ=[u[end] for u in sol.u]
 		p.t_U=[sum(u[findall(p.ū.>0.0)]./p.ū[findall(p.ū.>0.0)]./p.N) for u in sol.u]
 		c̃=0
-		p.wage_revenue = (p.ū .- p.u) .* p.w̃.*p.r.*p.p.*p.K; 
+		revenues!(p)
+		#=
+		p.wage_revenue = (p.ū.*p.aū .- p.u) .* p.w̃.*p.aw̃.*p.r.*p.p.*p.K; 
         p.resource_revenue = p.u.*((p.y.*(1-p.protected)) .- c̃).*p.r.*p.p.*p.K;
         p.trade_revenue=(p.value./(p.y.*(1-p.protected))./p.N.-p.u).*p.ϕ.*p.r.*p.p.*p.K
         #R̃ₕᵣ= S.u.*(S.y .- S.w̃);
-        p.total_revenue = p.wage_revenue .+  p.resource_revenue
+        p.total_revenue = p.wage_revenue .+  p.resource_revenue=#
 		p.gini=gini(p.total_revenue)
 	return p
 

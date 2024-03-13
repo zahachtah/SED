@@ -15,6 +15,7 @@ mutable struct Scenario
     aw̃
     aū
     α
+    g
     u
     U
     y
@@ -91,6 +92,8 @@ Simulates a scenario based on various parameters. The function adjusts these par
 - `ū::Union{Float64,Nothing}`, The impact ratio
 - `α::Union{Float64,Nothing}`: The rate ratio
 
+- `g::Graph : the directed graph of parameter dependence
+
 # Institutional parameters
 - `institution::String`: Type of institution (default: "OA").
 - `β::Float64`: Institutional parameter, conditional based on the institution type (default: 0.05 for "TQ", else 0.0).
@@ -115,13 +118,64 @@ Simulates a scenario based on various parameters. The function adjusts these par
 ```julia
 scenario_result = scenario(N=200, institution="TQ", simulate=true)
 """
+
 function scenario(;
     # basic dimensionalized parameters
     N::Int=100,
     external=(;),
     ē=SED(min=1.0,max=1.0),
     q=SED(min=1.0/N,max=1.0/N),
-    a=SED(min=1.0,max=1.0),
+    a=SED(min=1000.0,max=1000.0),
+    w=SED(min=0.1/N,max=0.9/N),
+    r=1.0,
+    K=1.0,
+    protected=0.0,
+    dispersal=0.0,
+    p=SED(min=1.0,max=1.0),
+    # basic non-dimensionalized parameters, if set these override dimensionalized parameters
+    w̃=SED(distribution=Derived),
+    ū=SED(distribution=Derived),
+    aw̃=fill(1.0,N),
+    aū=fill(1.0,N),
+    g=DiGraph(),
+    α=SED(distribution=Derived),
+    # institutional parameters
+    institution="Open",
+    β::Float64=institution=="Tradable" ? 0.05 : 0.0,
+    value::Float64=1.0,
+    target::String="access",
+    #simulation parameters
+    ts::Float64=0.0,
+    ū0::Array{Float64,1}=fill(0.0,N),
+    y0::Float64=1.0,
+    dydt::Float64=1.0,
+    dt::Float64=0.01,
+    # visualzaion parameters
+    label::String="",
+    image::String="",
+    caption::String="",
+    color::Union{Colorant,Symbol,String,Nothing}=nothing,
+    simulate::Bool=true
+)
+    # Set default outputs
+    t=[];t_u=[];t_U=[];t_y=[];t_ϕ=[];total_revenue=[];resource_revenue=[];wage_revenue=[];trade_revenue=[];gini=0;sim=(;ū0,y0,dt,dydt);u=[];U=0;y=0.0;ϕ=0.0
+
+    color = isa(color, Nothing) ? convert(HSL, colorant"crimson") : isa(color, RGB) ? convert(HSL, color) : isa(color, String) ? convert(HSL, parse(Colorant, color)) : isa(color, Symbol) ? convert(HSL, parse(Colorant, string(color))) : color
+
+
+    S=Scenario(N,external,w,q,ē,a,r,K,protected,dispersal,p,w̃,ū,aw̃,aū,α,g,u,U,y,ϕ,t,t_u,t_U,t_y,t_ϕ,total_revenue,resource_revenue,wage_revenue,trade_revenue,gini,institution,target,value,β,sim,label,image,caption,color)
+   
+	return S
+end
+
+
+function scenario2(;
+    # basic dimensionalized parameters
+    N::Int=100,
+    external=(;),
+    ē=SED(min=1.0,max=1.0),
+    q=SED(min=1.0/N,max=1.0/N),
+    a=SED(min=100.0,max=100.0),
     w=SED(min=0.1/N,max=0.9/N),
     r=1.0,
     K=1.0,
@@ -133,6 +187,7 @@ function scenario(;
     ū=nothing,
     aw̃=fill(1.0,N),
     aū=fill(1.0,N),
+    g=DiGraph(),
     α=nothing,
     # institutional parameters
     institution="Open",
@@ -165,7 +220,6 @@ function scenario(;
     has_dependencies=sum([isa(var,SED) ? length(var.dependent)>0 : false for var in [w,q,ē,a,p,r,K]])>0
 
     if  false
-        g = DiGraph()
         add_vertex!(g) # for w
         add_vertex!(g) # for q
         add_vertex!(g) # for ē
@@ -184,6 +238,8 @@ function scenario(;
         end
 
     else
+        #MOVE THIS CHECK INTO DIST?
+
         isa(w,Number) ? w=SED(mean=w,sigma=0.0) : nothing
         isa(q,Number) ? q=SED(mean=q,sigma=0.0) : nothing
         isa(ē,Number) ? ē=SED(mean=ē,sigma=0.0) : nothing
@@ -198,12 +254,14 @@ function scenario(;
         dist!(p,N)
         dist!(r,N)
         dist!(K,N)
+        println(typeof(w))
     end
 	
+    println("test1 ",w̃)
 	w̃==nothing ? w̃=SED(data=w./(K.*p.*q)) : isa(w̃,SED) ? w̃=dist!(w̃,N) : dist!(w̃,N)
 	ū==nothing ? ū=SED(data=ē.*q./r) : isa(ū,SED) ? ū=dist!(ū,N) : dist!(ū,N)
-	α==nothing ? α=SED(data=(a.*p.*K.*q)./r) : isa(α,SED) ? α=dist!(α,N) : dist!(α,N)
-	
+	α==nothing ? α=SED(data=(a.*p.*K.*q.^2)./r.^2) : isa(α,SED) ? α=dist!(α,N) : dist!(α,N)
+    println(w.data)
     # We just need a good recalc method to be able to adjust e.g. PA dependence!
 
 	color=color==nothing ? colorant"crimson" : color
@@ -233,6 +291,7 @@ function scenario(;
     aw̃,
 	aū,
 	α,
+    g,
 	u=[],
 	U=0,
 	y=0.0,
@@ -258,6 +317,9 @@ function scenario(;
 	color)
 
 	S=Scenario(s...)
+
+# HAVE A DIST!(S::SCENARIO) FUNCTION THAT RECALCULATES ALL THE SEDS IN THE SCENARIO
+
     if simulate
         #dimensional revenues
         sim!(S) 
@@ -271,10 +333,49 @@ function scenario(;
 
 end
 
+function dist!(s::Scenario)
+
+    # for all dimensional variables, check if they are SED and if so recalculate the distribution
+    for key in [:w,:q,:ē,:a,:p,:r,:K]
+        if isa(getfield(s,key),SED) 
+
+            dist!(getfield(s,key),s.N) 
+
+        end
+    end
+
+
+    # first check if dimensional variables for w̃ and ū  are defined
+
+    if s.w̃.distribution==Derived
+        s.w̃.data=s.w./(s.K.*s.p.*s.q)
+    else
+        if isa(s.w̃,SED)
+            dist!(s.w̃,s.N)
+        end
+    end
+
+    if s.ū.distribution==Derived
+        s.ū.data=s.ē.*s.q./s.r
+    else
+        if isa(s.ū,SED)
+            dist!(s.ū,s.N)
+        end
+    end
+
+    if s.α.distribution==Derived
+        s.α.data=(s.a.*s.p.*s.K.*s.q.^2)./s.r.^2
+    else
+        if isa(s.α,SED)
+            dist!(s.α,s.N)
+        end
+    end
+end
+
 function revenues!(S::Scenario)
     #dimensional revenues
     c̃=0 #Yo, add c to scenario!
-    S.wage_revenue = (S.ū .- S.u) .* S.w̃.*S.r.*S.p.*S.K;
+    S.wage_revenue = (S.ū.*S.aū .- S.u) .* S.w̃.*S.aw̃.*S.r.*S.p.*S.K;
     S.resource_revenue = S.u.*(S.y*(1.0-S.protected) .- c̃).*S.r.*S.p.*S.K;
     S.trade_revenue=(S.value./(S.y*(1.0-S.protected))./S.N.-S.u).*S.ϕ.*S.r.*S.p.*S.K;
     #R̃ₕᵣ= S.u.*(S.y .- S.w̃);
@@ -300,7 +401,6 @@ function scenario(scenario::Scenario; kwargs...)
     dist!(s.ē,s.N)
     dist!(s.a,s.N)
     dist!(s.p,s.N)
-    println(s.w̃)
     dist!(s.w̃,s.N)
     dist!(s.ū,s.N)
     dist!(s.α,s.N)
@@ -443,10 +543,9 @@ function scenario(
     caption=nothing,
     color=nothing
 )
-println(s.w̃)
+
     # Create a new copy of the original scenario
     updated = deepcopy(original)
-    println(updated.w̃.value)
     # Update fields if a new value is provided (not nothing)
     N !== nothing && (updated.N = N)
     external !== nothing && (updated.external = external)
@@ -495,12 +594,11 @@ println(s.w̃)
     dist!(updated.p,updated.N)
     dist!(updated.r,updated.N)
     dist!(updated.K,updated.N)
-    println(updated.w̃)
     dist!(updated.w̃,updated.N)
     dist!(updated.ū,updated.N)
     dist!(updated.α,updated.N)
 
-    println("Scenario updated")
+
     return updated
 end
 
