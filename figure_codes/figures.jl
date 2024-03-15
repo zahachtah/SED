@@ -1338,37 +1338,9 @@ function bezier()
 end
 
 
-function SI_figure_PA_yield(;R=100)
-    # institution="PA"
-    # target="dispersal"
-    # value
 
-    # institutions=[protected_area(fraction::Float64)]
-    # institutions=[permits(fraction::Float64, target::String, selection::symbol, reverse::Bool)]
-    # institutions=[tax(fraction::Float64, target::String, selection::symbol, reverse::Bool)]
-    # institutions=[subsidy(fraction::Float64, target::String, selection::symbol, reverse::Bool)]
-    # institutions=[norm(strength::Float64)]
-    f=Figure()
-    a=Axis(f[1,1:2])
-    b=Axis(f[2,1])
-    c=Axis(f[2,2])
-    s=scenario(q=SED(mean=1.5,sigma=0,normalize=true),w=SED(min=0.01,max=0.1,normalize=true,distribution=LogNormal), dispersal=0.4)
-    dist!(s)
-    for i in 0:R
-        s.protected=i/R
-        #s.aw̃.=1/(1-s.protected)
-        sim!(s)
-        
-        phaseplot!(a,s,attractor_size=2+i/R*10)
-        scatter!(b,i/10,sum(s.resource_revenue), markersize=2,color=:forestgreen)
-        scatter!(c,i/10,sum(s.total_revenue), markersize=2,color=:steelblue)
-        ylims!(b,0,nothing)
-        ylims!(c,0,nothing)
-    end
-    f
-end
 
-function SI_figure_PA_yield2(;R=100, minw=0.01,k=3, dispersal=0.2)
+function SI_figure_PA_yield(;R=100, minw=0.01,k=3, dispersal=0.2)
     # institution="PA"
     # target="dispersal"
     # value
@@ -1380,24 +1352,43 @@ function SI_figure_PA_yield2(;R=100, minw=0.01,k=3, dispersal=0.2)
     # institutions=[norm(strength::Float64)]
     f=Figure(size=(800,800))
 
-    mw=range(0.01,stop=0.9,length=k)
-    mq=range(0.25,stop=4.0,length=k)
+    mw=range(0.1,stop=0.9,length=k)
+    mq=range(0.5,stop=2,length=k)
     for a=1:k
+        Label(f[a,0],text="max w̃ = $(round(mw[a],digits=1))",fontsize=16, tellheight=false, rotation=pi/2)
         for b=1:k
+            
+            a==1 ? Label(f[0,b],text="sum q = $(round(mq[b],digits=2))",fontsize=16, tellwidth=false) : nothing
             ax=Axis(f[a,b])
             a<k ? hidexdecorations!(ax) : nothing
             b>1 ? hideydecorations!(ax) : nothing
             #hidespines!(ax)
-            s=scenario(q=SED(mean=mq[b],sigma=0,normalize=true),w=SED(min=minw,max=minw+mw[a],normalize=true,distribution=LogNormal); dispersal)
+            #s=scenario(q=SED(mean=mq[b],sigma=0,normalize=true),w=SED(min=minw,max=minw+mw[a],normalize=true,distribution=LogNormal),color=:lightgray; dispersal)
+            s=scenario(ū=SED(mean=mq[b],sigma=0,normalize=true),w̃=SED(min=minw,max=minw+mw[a],normalize=false,distribution=LogNormal),color=:lightgray; dispersal)
             dist!(s)
+            sim!(s)
+            phaseplot!(ax,s,attractor_color=:black, attractor_size=10)
+            t=[]
+            r=[]
             for i in 0:R
+                #print([mq[b],mw[a],i],"\r")
                 s.protected=i/R
-                sim!(s)
-                scatter!(ax,i/R,sum(s.resource_revenue), markersize=2,color=:forestgreen)
-                scatter!(ax,i/R,sum(s.total_revenue), markersize=2,color=:steelblue)
 
+                sim!(s)
+
+                push!(t,sum(s.total_revenue))
+                push!(r,sum(s.resource_revenue))
             end
+            
+            l1=lines!(ax,collect((0:R)./R),Float64.(r)./0.33, linewidth=3,color=:forestgreen, label="Resource")
+            l2=lines!(ax,collect((0:R)./R),Float64.(t)./0.33, linewidth=3,color=:darkorange,label="Total")
+            print(argmax(r),"\r")
+            argmax(r)!=1 ? scatter!(ax,[argmax(r)/R],[maximum(r)/0.33], markersize=10,color=:forestgreen) : nothing
+            argmax(t)!=1 ? scatter!(ax,[argmax(t)/R],[maximum(t)/0.33], markersize=10,color=:darkorange) : nothing
+            #a==1 && b==k ? Legend(f,ax,[l1,l2],["Resource","Total"],"Revenues",valign=:top,halign=:right) : nothing
         end
     end
+    Label(f[k+1,1:k],text="fraction Protected Area",fontsize=16, tellwidth=false)
+    save("graphics/SI_figure_PA_yield.png",f)
     f
 end

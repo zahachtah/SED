@@ -12,6 +12,6 @@ include("model.jl")
 include("institutions.jl")
 include("utils.jl")
 include("visualizations.jl")
-include("figures.jl")
+include("figure_codes/figures.jl")
 
-set_theme!(theme_light())
+#set_theme!(theme_light())
