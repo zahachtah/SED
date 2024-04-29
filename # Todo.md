@@ -1,5 +1,9 @@
 # Todo:
 
+1) make sure getBestInst works and add a general goal function with defaults
+2) Make it easier to update SED parameters
+
+
 
 The thing about diversity
 

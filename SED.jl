@@ -14,4 +14,4 @@ include("utils.jl")
 include("visualizations.jl")
 include("figure_codes/figures.jl")
 
-#set_theme!(theme_light())
+set_theme!(theme_light())

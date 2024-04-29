@@ -52,14 +52,15 @@ function Base.show(io::IO, scenario::Scenario)
     println(io, "a: ", scenario.a) 
     println(io, "r: ", scenario.r) 
     println(io, "K: ", scenario.K) 
-    println(io, "protected: ", scenario.protected)
-    println(io, "dispersal: ", scenario.dispersal)
     println(io, "p: ", scenario.p)
     println(io, "w̃: ", scenario.w̃)
     println(io, "ū: ", scenario.ū)
-    println(io, "aw̃: ", scenario.aw̃)
-    println(io, "aū: ", scenario.aū)
     println(io, "α: ", scenario.α)
+    #println(io, "aw̃: ", scenario.aw̃)
+    #println(io, "aū: ", scenario.aū)
+    println(io, "protected: ", scenario.protected)
+    println(io, "dispersal: ", scenario.dispersal)
+    
     println(io, "Institution: ", scenario.institution)
     println(io, "Target: ", scenario.target)
 end
@@ -95,7 +96,7 @@ Simulates a scenario based on various parameters. The function adjusts these par
 - `g::Graph : the directed graph of parameter dependence
 
 # Institutional parameters
-- `institution::String`: Type of institution (default: "OA").
+- `institution::Institution`: Type of institution (default: []).
 - `β::Float64`: Institutional parameter, conditional based on the institution type (default: 0.05 for "TQ", else 0.0).
 - `target::Float64`, `signal::String`: Institutional parameters (default: target=1.0, signal="effort").
 
@@ -140,7 +141,7 @@ function scenario(;
     g=DiGraph(),
     α=SED(distribution=Derived),
     # institutional parameters
-    institution="Open",
+    institution=[],
     β::Float64=institution=="Tradable" ? 0.05 : 0.0,
     value::Float64=1.0,
     target::String="access",

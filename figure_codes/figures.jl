@@ -1340,7 +1340,7 @@ end
 
 
 
-function SI_figure_PA_yield(;R=100, minw=0.01,k=3, dispersal=0.2)
+function SI_figure_PA_yield(;R=100, minw=0.01,k=3, dispersal=0.2, save_fig=false)
     # institution="PA"
     # target="dispersal"
     # value
@@ -1353,7 +1353,7 @@ function SI_figure_PA_yield(;R=100, minw=0.01,k=3, dispersal=0.2)
     f=Figure(size=(800,800))
 
     mw=range(0.1,stop=0.9,length=k)
-    mq=range(0.5,stop=2,length=k)
+    mq=range(0.6,stop=1.4,length=k)
     for a=1:k
         Label(f[a,0],text="max w̃ = $(round(mw[a],digits=1))",fontsize=16, tellheight=false, rotation=pi/2)
         for b=1:k
@@ -1364,24 +1364,29 @@ function SI_figure_PA_yield(;R=100, minw=0.01,k=3, dispersal=0.2)
             b>1 ? hideydecorations!(ax) : nothing
             #hidespines!(ax)
             #s=scenario(q=SED(mean=mq[b],sigma=0,normalize=true),w=SED(min=minw,max=minw+mw[a],normalize=true,distribution=LogNormal),color=:lightgray; dispersal)
-            s=scenario(ū=SED(mean=mq[b],sigma=0,normalize=true),w̃=SED(min=minw,max=minw+mw[a],normalize=false,distribution=LogNormal),color=:lightgray; dispersal)
+            s=scenario(  ū=SED(mean=mq[b],sigma=0,normalize=true),w̃=SED(min=minw,max=minw+mw[a],normalize=false,distribution=LogNormal),color=:lightgray; dispersal)
             dist!(s)
             sim!(s)
             phaseplot!(ax,s,attractor_color=:black, attractor_size=10)
             t=[]
             r=[]
+            y=[]
+            U=[]
             for i in 0:R
                 #print([mq[b],mw[a],i],"\r")
                 s.protected=i/R
-
+                #s.aw̃=fill(1.0+i/R*0.5,s.N)
                 sim!(s)
-
+                push!(U,sum(s.u)/sum(s.ū))
+                push!(y,s.y)
                 push!(t,sum(s.total_revenue))
                 push!(r,sum(s.resource_revenue))
             end
-            
+            #phaseplot!(ax,s,attractor_color=:black, attractor_size=10) need to add aw and au to show the change
+            scatter!(ax,Float64.(y),Float64.(U), markersize=3,color=:black)
             l1=lines!(ax,collect((0:R)./R),Float64.(r)./0.33, linewidth=3,color=:forestgreen, label="Resource")
             l2=lines!(ax,collect((0:R)./R),Float64.(t)./0.33, linewidth=3,color=:darkorange,label="Total")
+            
             print(argmax(r),"\r")
             argmax(r)!=1 ? scatter!(ax,[argmax(r)/R],[maximum(r)/0.33], markersize=10,color=:forestgreen) : nothing
             argmax(t)!=1 ? scatter!(ax,[argmax(t)/R],[maximum(t)/0.33], markersize=10,color=:darkorange) : nothing
@@ -1389,6 +1394,6 @@ function SI_figure_PA_yield(;R=100, minw=0.01,k=3, dispersal=0.2)
         end
     end
     Label(f[k+1,1:k],text="fraction Protected Area",fontsize=16, tellwidth=false)
-    save("graphics/SI_figure_PA_yield.png",f)
+    save_fig ? save("graphics/SI_figure_PA_yield.png",f) : nothing
     f
 end

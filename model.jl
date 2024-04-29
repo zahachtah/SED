@@ -1,7 +1,9 @@
 constrain(du,u,minu,maxu,dt)=du.*dt.+u.<minu ? -u : du.*dt.+u.>maxu ? maxu-u : du
 
 function dudt(dx,x,p,t)
-    # extract the parameters from named tuple containers for simpler equation syntax
+	
+
+	# extract the parameters from named tuple containers for simpler equation syntax
     dydt=p.sim.dydt # used when y is held constant
     N=p.N
 	ū=p.ū.*p.aū
@@ -18,14 +20,14 @@ function dudt(dx,x,p,t)
 	yp=x[N+2]      # resource level
 	ϕ=x[N+3] 		#trade price
 
-
 	# NOTE NOTE NOTE: added 0.7 (f=0.3) to resource income calculation in scenarios.jl, change that
 
 	# DO we need the dydt still? probably, for calculating attractor for fixed y
 	
-    @inline dx[1:N]=α.*(y*(1-p.protected).-w̃)
+    @inline dx[1:N]=α.*(y*(1-p.protected).-w̃.-ϕ)
 	dx[N+1]=dydt*(((1 -y)-sum(u)/(1-p.protected)) *y+((1-p.protected)!=0 ? p.protected/(1-p.protected)*p.dispersal*(yp-y) : 0))	
 	dx[N+2]=dydt*(((1 -yp)) *yp+(p.protected!=0 ? (1-p.protected)/p.protected*p.dispersal*(y-yp) : 0))
+	[dynamic_institution(inst,dx,x,p,t) for inst in p.institution]
 end
 
 function dudt_old(dx,x,p,t)
@@ -117,32 +119,12 @@ function dudt_old(dx,x,p,t)
 end
 
 function stage_limiter!(u, integrator, p, t)
-	U=zeros(Float64,p.N)
-	# if u is regulated then
-	#    calculate violation of u
-	#    How are initial Quota distributed?
-	#    depending on some parameter, e.g. status: w, incentive: w̃ or skill: q -> 0 or 1
-	#    depending on share of Quota
-	#    trading Quota
 
-	#    change parameters
 
-	#    change situation
-
-    # Apply some constraint or modification at each stage
-
-	#(:sol, :u, :du, :k, :t, :dt, :f, :p, :uprev, :uprev2, :duprev, :tprev, :alg, :dtcache, :dtchangeable, :dtpropose, :tdir, :eigen_est, :EEst, :qold, :q11, :erracc, :dtacc, :success_iter, :iter, :saveiter, :saveiter_dense, :cache, :callback_cache, :kshortsize, :force_stepfail, :last_stepfail, :just_hit_tstop, :do_error_check, :event_last_time, :vector_event_last_time, :last_event_error, :accept_step, :isout, :reeval_fsal, :u_modified, :reinitialize, :isdae, :opts, :stats, :initializealg, :differential_vars, :fsalfirst, :fsallast)
-
-	# 1: calculate Use rights
-	# U=Q/N; U=Q/y/N; U=fixed array; U=update array
-	# 2: calculate violation min(0.0,u_i-U_i)
-	#println(mod(t,365).<100 ? 0 : 1)
-	p.institution!="Open" ? p.institution.use_rights(U,u,t,p) : U.=p.ū
+	[limit_institution(inst,p,integrator) for inst in p.institution]
 	
-	u[1:p.N].=ifelse.(u[1:p.N].<0.0,0.0,ifelse.(u[1:p.N].>U,U,ifelse.(u[1:p.N].>p.ū,p.ū,u[1:p.N])))
-	#println([integrator.dt])
-	#println(extrema(u[1:p.N]))
-	# clamp!(u[1:p.N],0.0,p.ū)
+	u[1:p.N].=ifelse.(u[1:p.N].<0.0,0.0,ifelse.(u[1:p.N].>p.ū.*p.aū,p.ū.*p.aū,u[1:p.N]))
+
 
 end
 
@@ -183,16 +165,16 @@ Main function to run a simulation with parameters provided by a scenario.
 function sim!(p; tend=(0.0,2000.0), y0=1.0, dydt=1.0,u0=fill(0.0/p.N,p.N), p0=0.0,solution=false,terminate_steady_state=true)
 	t0=time()
     N=p.N
-
+	[static_institution(inst,p) for inst in p.institution]
     # sets up the problem,
     prob = ODEProblem(dudt,[u0;y0;y0;p0],tend,p)
 
-    # solves the ODE
+    # solves the ODESSPRK22
     #sol=solve(prob,adaptive=false, Euler(),saveat=0.1,callback=terminate_steady_state ? TerminateSteadyState(1e-6,1e-4) : nothing,dt=p.sim.dt)#  
 	sol=solve(prob,SSPRK43(;stage_limiter!),reltol=1e-10,callback=terminate_steady_state ? TerminateSteadyState(1e-6,1e-4) : nothing)
 	
 	poa=deepcopy(p)
-    poa.institution="OA"
+    poa.institution=[]
     DUDT=zeros(N+3)
     dudt(DUDT,sol.u[end],poa,0.0)
 	individual=zeros(N,length(sol.t))
