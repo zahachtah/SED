@@ -1,4 +1,4 @@
-
+#=
 open_access(inst,s)=return
 
 function test(inst,s) s.aū=fill(1.2,s.N) end
@@ -21,7 +21,7 @@ PA_inst=staticInstitution(0.0,1.0,(;a=1),PA)
 
 s=scenario(institution=[PA_inst])
 
-
+=#
 mutable struct dynamic_permit_allocation <: limitInstitution
     criteria::Symbol
     reverse::Bool
@@ -136,7 +136,7 @@ phaseplot(s, show_realized=true)
 	    @inbounds dx[N+2]= constrain(β*(demand -supply),ϕ,0.0,Inf64,dt) 
 	end
     =#
-    struct tradable_use_rights <: dynamicInstitution
+    mutable struct tradable_use_rights_m <: dynamicInstitution
         criteria::Symbol
         threshold::Float64
         reverse::Bool
@@ -146,7 +146,7 @@ phaseplot(s, show_realized=true)
         fun::Function
     end
 
-    function trade_use_rights(institution::tradable_use_rights,du,u,s,t)
+    function trade_use_rights(institution::tradable_use_rights_m,du,u,s,t)
         
         if institution.target==:yield
             supply=max(0.0,institution.value-sum(u)*s.y)
@@ -157,19 +157,19 @@ phaseplot(s, show_realized=true)
         end
         
      
-        id = findall((du[1:s.N] .> 0.0) .& ((u[1:s.N] + du[1:s.N]) .< s.ū))
+        id = findall((du[1:s.N] .> 0.0) .& ((u[1:s.N] ) .< s.ū)) #+ du[1:s.N]
         demand=sum(du[id]) 
        
         if demand > supply # if demand is greater than supply, buyers have to share supply proportionally to their individual demand or willingness to pay.
-            println(supply)
-            du[id].=supply.*du[id]./demand
+            
+            du[id].=supply.*min(du[id],s.ū[id].-u[id])./demand
            
         end  
         du[s.N+3]= institution.threshold*(demand -supply)
 
     end
 
-    s=scenario(q=SED(mean=1.0,sigma=0.2,random=false,normalize=true),institution=[tradable_use_rights(:w̃,0.05,false,:effort,0.1,:value,trade_use_rights)])
+    s=scenario(q=SED(mean=1.0,sigma=0.2,random=false,normalize=true),institution=[tradable_use_rights_m(:w̃,0.05,false,:effort,0.1,:value,trade_use_rights)])
 s.q.random=false
 dist!(s)
 
@@ -228,3 +228,19 @@ function figure_institutions(;s=scenario(q=SED(mean=1.5,sigma=0.0,random=false,n
     f
 
 end
+
+
+
+s=scenario(q=SED(mean=1.5,sigma=0.9,random=false,normalize=true),institution=[dynamic_permit_allocation(:q,true,:test,0.3,:value,dyn_permits2)], color=:orange)
+dist!(s);sim!(s);o=institutional_impact(s); display(plot_institutional_impact(o,weight=[0,1,-0.5,0,0],s=s))
+s=scenario(q=SED(mean=1.5,sigma=-0.9,random=false,normalize=true),institution=[dynamic_permit_allocation(:q,true,:test,0.3,:value,dyn_permits2)], color=:orange)
+dist!(s);sim!(s);o=institutional_impact(s); display(plot_institutional_impact(o,weight=[0,1,-0.5,0,0],s=s))
+s=scenario(q=SED(mean=1.5,sigma=0.9,random=false,normalize=true),institution=[dynamic_permit_allocation(:q,false,:test,0.3,:value,dyn_permits2)], color=:orange)
+dist!(s);sim!(s);o=institutional_impact(s); display(plot_institutional_impact(o,weight=[0,1,-0.5,0,0],s=s))
+s=scenario(q=SED(mean=1.5,sigma=-0.9,random=false,normalize=true),institution=[dynamic_permit_allocation(:q,false,:test,0.3,:value,dyn_permits2)], color=:orange)
+dist!(s);sim!(s);o=institutional_impact(s); display(plot_institutional_impact(o,weight=[0,1,-0.5,0,0],s=s))
+
+s=scenario(q=SED(mean=2.0,sigma=0.2,random=false,normalize=true),institution=[tradable_use_rights_m(:w̃,0.05,false,:effort,0.2,:value,trade_use_rights)])
+
+
+s=scenario(q=SED(mean=2.0,sigma=0.2,random=false,normalize=true),institution=[])

@@ -28,7 +28,8 @@ function phaseplot!(A,S; show_sustained=true,show_potential=true,same_potential_
 
 		radian_angle-pi/2,sqrt(sum(du[1:z.N])^2+du[z.N+1]^2)
 	end
-	
+	poly!(A, Rect(0, 0, 0.5,1), color=HSLA(10, 0.5, 0.5,0.1))
+	poly!(A, Rect(0.5, 0, 0.5,1), color=HSLA(180, 0.5, 0.5,0.1))
 	for is in S
 		p=is
 		c=p.color
