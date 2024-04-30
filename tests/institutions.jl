@@ -232,13 +232,13 @@ end
 
 
 s=scenario(q=SED(mean=1.5,sigma=0.9,random=false,normalize=true),institution=[dynamic_permit_allocation(:q,true,:test,0.3,:value,dyn_permits2)], color=:orange)
-dist!(s);sim!(s);o=institutional_impact(s); display(plot_institutional_impact(o,weight=[0,1,-0.5,0,0],s=s))
+dist!(s);sim!(s);o=institutional_impact(s); display(plot_institutional_impact(o,weight=[0,1,0,0,0],s=s))
 s=scenario(q=SED(mean=1.5,sigma=-0.9,random=false,normalize=true),institution=[dynamic_permit_allocation(:q,true,:test,0.3,:value,dyn_permits2)], color=:orange)
-dist!(s);sim!(s);o=institutional_impact(s); display(plot_institutional_impact(o,weight=[0,1,-0.5,0,0],s=s))
+dist!(s);sim!(s);o=institutional_impact(s); display(plot_institutional_impact(o,weight=[0,1,0,0,0],s=s))
 s=scenario(q=SED(mean=1.5,sigma=0.9,random=false,normalize=true),institution=[dynamic_permit_allocation(:q,false,:test,0.3,:value,dyn_permits2)], color=:orange)
-dist!(s);sim!(s);o=institutional_impact(s); display(plot_institutional_impact(o,weight=[0,1,-0.5,0,0],s=s))
+dist!(s);sim!(s);o=institutional_impact(s); display(plot_institutional_impact(o,weight=[0,1,0,0,0],s=s))
 s=scenario(q=SED(mean=1.5,sigma=-0.9,random=false,normalize=true),institution=[dynamic_permit_allocation(:q,false,:test,0.3,:value,dyn_permits2)], color=:orange)
-dist!(s);sim!(s);o=institutional_impact(s); display(plot_institutional_impact(o,weight=[0,1,-0.5,0,0],s=s))
+dist!(s);sim!(s);o=institutional_impact(s); display(plot_institutional_impact(o,weight=[0,1,0,0,0],s=s))
 
 s=scenario(q=SED(mean=2.0,sigma=0.2,random=false,normalize=true),institution=[tradable_use_rights_m(:w̃,0.05,false,:effort,0.2,:value,trade_use_rights)])
 
