@@ -22,7 +22,7 @@ PA_inst=staticInstitution(0.0,1.0,(;a=1),PA)
 s=scenario(institution=[PA_inst])
 
 
-struct dynamic_permit_allocation3 <: limitInstitution
+mutable struct dynamic_permit_allocation <: limitInstitution
     criteria::Symbol
     reverse::Bool
     target::Symbol
@@ -31,7 +31,7 @@ struct dynamic_permit_allocation3 <: limitInstitution
     fun::Function
 end
 
-function dyn_permits2(institution::dynamic_permit_allocation3,du,u,s,t)
+function dyn_permits2(institution::dynamic_permit_allocation,du,u,s,t)
   
     n=Int64(round(institution.value.*s.N)) # number of allowed permitholders (can we do this at scenario creation)
     id=findall(u.>0.0)      # get all who would like to use resource
