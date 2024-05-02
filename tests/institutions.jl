@@ -49,7 +49,7 @@ function dyn_permits2(institution::dynamic_permit_allocation,du,u,s,t)
     end
 end
 
-function dyn_permits3(institution::dynamic_permit_allocation3, du, u, s, t)
+function dyn_permits3(institution::dynamic_permit_allocation, du, u, s, t)
     # Calculate the number of allowed permit holders
     num_permits = Int64(round(institution.value * s.N))
 
@@ -72,7 +72,7 @@ function dyn_permits3(institution::dynamic_permit_allocation3, du, u, s, t)
 end
 
 
-function dyn_permits(institution::dynamic_permit_allocation3,du,u,s,t)
+function dyn_permits(institution::dynamic_permit_allocation,du,u,s,t)
     n=Int64(round(s.N*institution.value))
     id=findall(u[1:s.N].>0.0)
     l=length(id)-n
@@ -83,7 +83,7 @@ function dyn_permits(institution::dynamic_permit_allocation3,du,u,s,t)
     u[idq].=0.0
 end
 
-s=scenario(q=SED(mean=1.0,sigma=0.2,random=false,normalize=true),institution=[dynamic_permit_allocation3(:q,true,:test,0.2,:value,dyn_permits2)])
+s=scenario(q=SED(mean=1.0,sigma=0.2,random=false,normalize=true),institution=[dynamic_permit_allocation(:q,true,:test,0.2,:value,dyn_permits2)])
 s.q.random=true
 dist!(s)
 
@@ -162,7 +162,7 @@ phaseplot(s, show_realized=true)
        
         if demand > supply # if demand is greater than supply, buyers have to share supply proportionally to their individual demand or willingness to pay.
             
-            du[id].=supply.*min(du[id],s.ū[id].-u[id])./demand
+            #du[id].=supply.*min(du[id],s.ū[id].-u[id])./demand
            
         end  
         du[s.N+3]= institution.threshold*(demand -supply)
@@ -240,7 +240,8 @@ dist!(s);sim!(s);o=institutional_impact(s); display(plot_institutional_impact(o,
 s=scenario(q=SED(mean=1.5,sigma=-0.9,random=false,normalize=true),institution=[dynamic_permit_allocation(:q,false,:test,0.3,:value,dyn_permits2)], color=:orange)
 dist!(s);sim!(s);o=institutional_impact(s); display(plot_institutional_impact(o,weight=[0,1,0,0,0],s=s))
 
-s=scenario(q=SED(mean=2.0,sigma=0.2,random=false,normalize=true),institution=[tradable_use_rights_m(:w̃,0.05,false,:effort,0.2,:value,trade_use_rights)])
-
+s=scenario(q=SED(mean=2.0,sigma=0.2,random=false,normalize=true),institution=[tradable_use_rights_m(:w̃,0.05,false,:effort,1.0,:value,trade_use_rights)])
+dist!(s);sim!(s)#;o=institutional_impact(s); display(plot_institutional_impact(o,weight=[0,1,0,0,0],s=s))
+phaseplot(s)
 
 s=scenario(q=SED(mean=2.0,sigma=0.2,random=false,normalize=true),institution=[])
