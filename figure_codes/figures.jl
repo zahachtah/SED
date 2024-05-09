@@ -1,6 +1,6 @@
 function phaseplot(S;vector_field=false, show_realized=false, saveas="")
     f=Figure()
-    a=Axis(f[1,1])
+    a=CairoMakie.Axis(f[1,1])
     hidespines!(a)
     phaseplot!(a,S,show_trajectory=true;vector_field,show_realized)
     if saveas!=""

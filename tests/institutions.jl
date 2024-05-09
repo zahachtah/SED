@@ -1,95 +1,5 @@
-#=
-open_access(inst,s)=return
 
-function test(inst,s) s.aū=fill(1.2,s.N) end
-
-test_inst=staticInstitution(0.0,1.0,(;a=1),test)
-
-s=scenario(institution=[test_inst])
-
-function PA(inst,s)
-    s.dispersal=0.2
-    s.protected=0.2
-end
-
-function protected_area_function(inst,s)
-    s.dispersal=0.2
-    s.protected=0.2
-end
-
-PA_inst=staticInstitution(0.0,1.0,(;a=1),PA)
-
-s=scenario(institution=[PA_inst])
-
-=#
-mutable struct dynamic_permit_allocation <: limitInstitution
-    criteria::Symbol
-    reverse::Bool
-    target::Symbol
-    value::Float64
-    control::Symbol
-    fun::Function
-end
-
-function dyn_permits2(institution::dynamic_permit_allocation,du,u,s,t)
-  
-    n=Int64(round(institution.value.*s.N)) # number of allowed permitholders (can we do this at scenario creation)
-    id=findall(u.>0.0)      # get all who would like to use resource
-    l=length(id)                  # number of potential resource users 
-    if l>n  # if number of actors that want to use resource are more than number of permits 
-        #println(p.target)
-        if institution.reverse
-            r=l-n+1:l   # select the permit holders (given to high w)
-        else
-            r=1:n # select the permit holders (given to low w)
-        end
-        q=sortperm(getfield(s,institution.criteria))
-        idq=q[q .∉ Ref(id[r])] #checks if qdy is in id[r] and returns the indices of q that are not in id[r]
-        u[idq] .= 0.0
-    end
-end
-
-function dyn_permits3(institution::dynamic_permit_allocation, du, u, s, t)
-    # Calculate the number of allowed permit holders
-    num_permits = Int64(round(institution.value * s.N))
-
-    # Identify potential resource users
-    potential_users = findall(u .> 0.0)
-
-    # If there are more potential users than permits, we need to select permit holders
-    if length(potential_users) > num_permits
-        # Sort potential users based on the institution's criteria
-        sorted_indices = sortperm(getfield(s, institution.criteria), rev=institution.reverse)
-
-        # Find the indices of users who will be granted a permit
-        permitted_indices = institution.reverse ? sorted_indices[end-num_permits+1:end] : sorted_indices[1:num_permits]
-
-        # Update `u` to reflect that only permitted users can use the resource
-        # All others are set to 0.0, indicating no usage
-        u .= 0.0  # Assume no one is allowed to use the resource initially
-        u[permitted_indices] .= u[potential_users]  # Re-allow usage for permitted users
-    end
-end
-
-
-function dyn_permits(institution::dynamic_permit_allocation,du,u,s,t)
-    n=Int64(round(s.N*institution.value))
-    id=findall(u[1:s.N].>0.0)
-    l=length(id)-n
-    V=zeros(s.N)
-    vid=id[sortperm(getfield(s,institution.criteria)[id],rev=institution.reverse)[1:l]]
-    q=1:s.N
-    idq=q[q .∉ Ref(vid)] 
-    u[idq].=0.0
-end
-
-s=scenario(q=SED(mean=1.0,sigma=0.2,random=false,normalize=true),institution=[dynamic_permit_allocation(:q,true,:test,0.2,:value,dyn_permits2)])
-s.q.random=true
-dist!(s)
-
-sim!(s)
-
-struct equal_share_allocation <: limitInstitution
+mutable struct tradable_use_rights_m <: dynamicInstitution
     criteria::Symbol
     threshold::Float64
     reverse::Bool
@@ -99,82 +9,28 @@ struct equal_share_allocation <: limitInstitution
     fun::Function
 end
 
-function equal_share(institution::equal_share_allocation,du,u,s,t)
-    n=sum(u.>0.0)
+function trade_use_rights(institution::tradable_use_rights_m,du,u,s,t)
+    
     if institution.target==:yield
-        u[1:s.N].=ifelse.(u[1:s.N].>institution.value/u[s.N+1]/n, institution.value/u[s.N+1]/n , u[1:s.N] )
+        supply=max(0.0,institution.value-sum(u)*s.y)
+        
     elseif institution.target==:effort
-        u[1:s.N].=ifelse.(u[1:s.N].>institution.value/n, institution.value/n , u[1:s.N] )
+        
+        supply=max(0.0,institution.value-sum(u))
     end
+    
+    
+    id = findall((du[1:s.N] .> 0.0) .& ((u[1:s.N] ) .< s.ū)) #+ du[1:s.N]
+    demand=sum(du[id]) 
+    
+    if demand > supply # if demand is greater than supply, buyers have to share supply proportionally to their individual demand or willingness to pay.
+        
+        #du[id].=supply.*min(du[id],s.ū[id].-u[id])./demand
+        
+    end  
+    du[s.N+3]= institution.threshold*(demand -supply)
+
 end
-
-s=scenario(q=SED(mean=1.0,sigma=0.2,random=false,normalize=true),institution=[equal_share_allocation(:w̃,0.0,false,:effort,0.2,:value,equal_share)])
-s.q.random=true
-dist!(s)
-
-sim!(s)
-phaseplot(s, show_realized=true)
-#=
-	if p.institution=="Tradable"
-		if p.target=="yield"
-			supply=max(0.0,p.value-sum(u)*y)
-		else
-			supply=max(0.0,p.value-sum(u))
-		end
-	        id=findall(dx[1:N].>0.0) # who wants to increase u => id
-	
-	         # available quotas, but in units of u
-	        #demand=sum(max.(0.0,view(ū,id).-(view(u,id).+view(dx,id)))) # demand, as in intending to increase u
-	        demand=sum(view(dx,id)) 
-			if demand > supply # if demand is greater than supply, buyers have to share supply proportionally to their individual demand or willingness to pay.
-	            dx[id].=supply.*view(dx,id)./demand
-	        end  
-
-        # else they can just do as they please, i.e. dudt is not adjusted
-
-		# Dynamics of tradable quota price
-	    @inbounds dx[N+2]= constrain(β*(demand -supply),ϕ,0.0,Inf64,dt) 
-	end
-    =#
-    mutable struct tradable_use_rights_m <: dynamicInstitution
-        criteria::Symbol
-        threshold::Float64
-        reverse::Bool
-        target::Symbol
-        value::Float64
-        control::Symbol
-        fun::Function
-    end
-
-    function trade_use_rights(institution::tradable_use_rights_m,du,u,s,t)
-        
-        if institution.target==:yield
-            supply=max(0.0,institution.value-sum(u)*s.y)
-            
-        elseif institution.target==:effort
-            
-            supply=max(0.0,institution.value-sum(u))
-        end
-        
-     
-        id = findall((du[1:s.N] .> 0.0) .& ((u[1:s.N] ) .< s.ū)) #+ du[1:s.N]
-        demand=sum(du[id]) 
-       
-        if demand > supply # if demand is greater than supply, buyers have to share supply proportionally to their individual demand or willingness to pay.
-            
-            #du[id].=supply.*min(du[id],s.ū[id].-u[id])./demand
-           
-        end  
-        du[s.N+3]= institution.threshold*(demand -supply)
-
-    end
-
-    s=scenario(q=SED(mean=1.0,sigma=0.2,random=false,normalize=true),institution=[tradable_use_rights_m(:w̃,0.05,false,:effort,0.1,:value,trade_use_rights)])
-s.q.random=false
-dist!(s)
-
-sim!(s)
-phaseplot(s,show_realized=true)
 
 function figure_institutions(;s=scenario(q=SED(mean=1.5,sigma=0.0,random=false,normalize=true), color=:gray))
     # update!(s)
@@ -182,22 +38,22 @@ function figure_institutions(;s=scenario(q=SED(mean=1.5,sigma=0.0,random=false,n
     dist!(s)
     sim!(s)
     f=Figure(size=(1200,800))
-    permit_low_w=Axis(f[1,1])
-    permit_high_w=Axis(f[1,2])
-    equal_share_effort=Axis(f[2,1])
-    equal_share_yield=Axis(f[2,2])
-    tradable_effort=Axis(f[3,1])
-    tradable_yield=Axis(f[3,2])
-    protected_areas_1=Axis(f[1,3])
-    price_tax_sub_1=Axis(f[2,3])
-    effort_tax_sub_1=Axis(f[3,3])
-    protected_areas_2=Axis(f[1,4])
-    price_tax_sub_2=Axis(f[2,4])
-    effort_tax_sub_2=Axis(f[3,4])
+    permit_low_w=CairoMakie.Axis(f[1,1])
+    permit_high_w=CairoMakie.Axis(f[1,2])
+    equal_share_effort=CairoMakie.Axis(f[2,1])
+    equal_share_yield=CairoMakie.Axis(f[2,2])
+    tradable_effort=CairoMakie.Axis(f[3,1])
+    tradable_yield=CairoMakie.Axis(f[3,2])
+    protected_areas_1=CairoMakie.Axis(f[1,3])
+    price_tax_sub_1=CairoMakie.Axis(f[2,3])
+    effort_tax_sub_1=CairoMakie.Axis(f[3,3])
+    protected_areas_2=CairoMakie.Axis(f[1,4])
+    price_tax_sub_2=CairoMakie.Axis(f[2,4])
+    effort_tax_sub_2=CairoMakie.Axis(f[3,4])
     #s.q.mean=1.0
     #dist!(s);sim!(s)
     phaseplot!(permit_low_w,s,show_realized=true)
-    s1=scenario(q=SED(mean=1.5,sigma=0.0,random=false,normalize=true),institution=[dynamic_permit_allocation3(:q,true,:test,0.4,:value,dyn_permits2)], color=:orange)
+    s1=scenario(q=SED(mean=1.5,sigma=0.0,random=false,normalize=true),institution=[dynamic_permit_allocation(:q,true,:test,0.4,:value,dyn_permits)], color=:orange)
     dist!(s1);sim!(s1)
     phaseplot!(permit_low_w,s1,show_realized=true, show_potential=false)
     phaseplot!(permit_high_w,s,show_realized=true)
@@ -229,19 +85,155 @@ function figure_institutions(;s=scenario(q=SED(mean=1.5,sigma=0.0,random=false,n
 
 end
 
+function MS_scenarios()
+    N=100
+    random=false
+    wmin=0.05*10
+    wmax=0.10*10
+    qmin=0.03*20
+    qmax=0.2*20
+    distribution=Uniform
+    steps=2
+    S=[ scenario(w̃=SED(median=0.3,sigma=0.3; random, distribution),ū=SED(median=1.0,sigma=1.0, normalize=true; random)),
+        scenario(w̃=SED(median=0.3,sigma=-0.3; random, distribution),ū=SED(median=1.0,sigma=1.0, normalize=true; random)),
+        scenario(w̃=SED(median=0.7,sigma=0.3; random, distribution),ū=SED(median=1.0,sigma=1.0, normalize=true; random)),
+        scenario(w̃=SED(median=0.7,sigma=-0.3; random, distribution),ū=SED(median=1.0,sigma=1.0, normalize=true; random)),
+        scenario(w̃=SED(median=0.3,sigma=0.3; random, distribution),ū=SED(median=1.0,sigma=-1.0, normalize=true; random)),
+        scenario(w̃=SED(median=0.3,sigma=-0.3; random, distribution),ū=SED(median=1.0,sigma=-1.0, normalize=true; random)),
+        scenario(w̃=SED(median=0.7,sigma=0.3; random, distribution),ū=SED(median=1.0,sigma=-1.0, normalize=true; random)),
+        scenario(w̃=SED(median=0.7,sigma=-0.3; random, distribution),ū=SED(median=1.0,sigma=-1.0, normalize=true; random)),
+        scenario(w̃=SED(median=0.3,sigma=0.3; random, distribution),ū=SED(median=1.0,sigma=0.0, normalize=true; random)),
+        scenario(w̃=SED(median=0.3,sigma=-0.3; random, distribution),ū=SED(median=1.0,sigma=0.0, normalize=true; random)),
+        scenario(w̃=SED(median=0.7,sigma=0.3; random, distribution),ū=SED(median=1.0,sigma=0.0, normalize=true; random)),
+        scenario(w̃=SED(median=0.7,sigma=-0.3; random, distribution),ū=SED(median=1.0,sigma=0.0, normalize=true; random))]
+    #=
+    for (i, v) in enumerate(range(qmin, stop=qmax, length=steps))
+        push!(S,scenario(;N,w=SED(min=wmin,max=wmax, normalize=true, random=rn, distribution=distribution),q=SED(min=v,max=qmax-v,normalize=true, random=rn,),ē=1.0,r=1.0,K=1.0,p=5.0))
+    end
+    for (i, v) in enumerate(range(qmin, stop=qmax, length=steps))
+        push!(S,scenario(;N,w=SED(min=wmin*6,max=wmax*6, normalize=true, random=rn, distribution=distribution),q=SED(min=v*0.5,max=(qmax-v)*0.5,normalize=true, random=rn,),ē=1.0,r=1.0,K=1.0,p=5.0))
+    end
+    =#
+    return S
+end
+
+function tableData(;weight=[0,1,1,0,0],plotit=true)
+
+    df=DataFrame(Exploitation=String[], Shape=String[], Correlation=Float64[],Institution=String[],Revenue=Float64[],Total=Float64[],Gini=Float64[],I=Float64[],Y=Float64[], Restriction=Float64[])
+
+    institutions=Dict(
+        "permits for high incentives"=>[dynamic_permit_allocation(:w̃,true,:test,0.4,:value,dyn_permits)],
+        "permits for low incentives"=>[dynamic_permit_allocation(:w̃,false,:test,0.4,:value,dyn_permits)],
+        "equl yield"=>[equal_share_allocation(:w̃,false,:yield,0.2,:nope,equal_share)],
+        "equal_effort"=>[equal_share_allocation(:w̃,false,:effort,0.2,:nope,equal_share)]
+
+    )
+
+    Scenarios=MS_scenarios()
+
+    R=zeros(length(Scenarios),length(institutions))
+    T=zeros(length(Scenarios),length(institutions))
+    G=zeros(length(Scenarios),length(institutions))
+    I=zeros(length(Scenarios),length(institutions))
+    Y=zeros(length(Scenarios),length(institutions))
 
 
-s=scenario(q=SED(mean=1.5,sigma=0.9,random=false,normalize=true),institution=[dynamic_permit_allocation(:q,true,:test,0.3,:value,dyn_permits2)], color=:orange)
-dist!(s);sim!(s);o=institutional_impact(s); display(plot_institutional_impact(o,weight=[0,1,0,0,0],s=s))
-s=scenario(q=SED(mean=1.5,sigma=-0.9,random=false,normalize=true),institution=[dynamic_permit_allocation(:q,true,:test,0.3,:value,dyn_permits2)], color=:orange)
-dist!(s);sim!(s);o=institutional_impact(s); display(plot_institutional_impact(o,weight=[0,1,0,0,0],s=s))
-s=scenario(q=SED(mean=1.5,sigma=0.9,random=false,normalize=true),institution=[dynamic_permit_allocation(:q,false,:test,0.3,:value,dyn_permits2)], color=:orange)
-dist!(s);sim!(s);o=institutional_impact(s); display(plot_institutional_impact(o,weight=[0,1,0,0,0],s=s))
-s=scenario(q=SED(mean=1.5,sigma=-0.9,random=false,normalize=true),institution=[dynamic_permit_allocation(:q,false,:test,0.3,:value,dyn_permits2)], color=:orange)
-dist!(s);sim!(s);o=institutional_impact(s); display(plot_institutional_impact(o,weight=[0,1,0,0,0],s=s))
+    for (k,s) in enumerate(Scenarios)
+        dist!(s)
+        for (n,i) in enumerate(keys(institutions))
+            s.institution=institutions[i]
+           
+            sim!(s)
+            o=institutional_impact(s)
+            w=o.resource.^weight[1].*o.total.^weight[2].*o.gini.^weight[3].*o.I.^weight[4].*o.y.^weight[5]
+            opt=argmax(w)
+            
+            push!(df,(o.y[end]<0.5 ? "over" : "under",string(typeof(s.w̃.distribution))[1:end-9],mean(diff(s.w̃)),i,o.resource[opt]/o.resource[end]*100-100,o.total[opt]/o.total[end]*100-100,-(o.gini[opt]/o.gini[end]*100-100),o.I[opt]*100,0.5-o.y[opt]*100-100,o.target[opt]*100))
+            R[k,n]=o.resource[opt]/o.resource[end]*100-100
+            T[k,n]=o.total[opt]/o.total[end]*100-100
+            G[k,n]=o.gini[opt]/o.gini[end]*100-100
+            I[k,n]=o.I[opt]*100
+            Y[k,n]=0.5-o.y[opt]*100-100
+        end
+    end
+    if plotit
+        f=Figure()
+        xticks=(1:length(institutions),[string(i) for i in keys(institutions)])
+        resources=CairoMakie.Axis(f[1,1], title="Resource", xticks=xticks, xticklabelrotation=-pi/8)
+        total=CairoMakie.Axis(f[1,2],title="Total", xticks=xticks, xticklabelrotation=-pi/8)
+        gini=CairoMakie.Axis(f[1,3],title="Gini", xticks=xticks, xticklabelrotation=-pi/8)
+        In=CairoMakie.Axis(f[1,4],title="Regulation", xticks=xticks, xticklabelrotation=-pi/8)
+        Yn=CairoMakie.Axis(f[1,5],title="Stock", xticks=xticks, xticklabelrotation=-pi/8)
+        [hidespines!(a) for a in [resources,total,gini,In,Yn]]
+        [hideydecorations!(a) for a in [resources,total,gini,In,Yn]]
+        
 
-s=scenario(q=SED(mean=2.0,sigma=0.2,random=false,normalize=true),institution=[tradable_use_rights_m(:w̃,0.05,false,:effort,1.0,:value,trade_use_rights)])
-dist!(s);sim!(s)#;o=institutional_impact(s); display(plot_institutional_impact(o,weight=[0,1,0,0,0],s=s))
-phaseplot(s)
+        heatmap!(resources,R',colormap=:bam, colorrange=(-100,100))
+        heatmap!(total,T',colormap=:bam, colorrange=(-100,100))
+        heatmap!(gini,G',colormap=:bam, colorrange=(-100,100))
+        heatmap!(In,I',colormap=:bam)
+        heatmap!(Yn,Y',colormap=:bam)
+        
+        display(f)
+    end
+    df
+end
 
-s=scenario(q=SED(mean=2.0,sigma=0.2,random=false,normalize=true),institution=[])
+function lastFigure(df)
+    R=zeros(Int64(nrow(df)/length(institutions)),length(institutions))
+    T=zeros(Int64(nrow(df)/length(institutions)),length(institutions))
+    G=zeros(Int64(nrow(df)/length(institutions)),length(institutions))
+    I=zeros(Int64(nrow(df)/length(institutions)),length(institutions))
+    Y=zeros(Int64(nrow(df)/length(institutions)),length(institutions))
+
+    k=1
+    for E in unique(df[:,"Exploitation"])
+        for S in unique(df[:,"Shape"])
+            for C in unique(df[:,"Correlation"])
+                for (i,I) in enumerate(unique(df[:,"Institution"]))
+                    println(df[(df.Exploitation.==E) .& (df.Shape.==S) .& (df.Correlation.==C) .& (df.Institution.==I),:])
+                    R[k,i]=df[(df.Exploitation.==E) .& (df.Shape.==S) .& (df.Correlation.==C) .& (df.Institution.==I),:Revenue]  
+                    T[k,i]=df[(df.Exploitation.==E) .& (df.Shape.==S) .& (df.Correlation.==C) .& (df.Institution.==I),:Total]
+                    G[k,i]=df[(df.Exploitation.==E) .& (df.Shape.==S) .& (df.Correlation.==C) .& (df.Institution.==I),:Gini]
+                    I[k,i]=df[(df.Exploitation.==E) .& (df.Shape.==S) .& (df.Correlation.==C) .& (df.Institution.==I),:I]
+                    Y[k,i]=df[(df.Exploitation.==E) .& (df.Shape.==S) .& (df.Correlation.==C) .& (df.Institution.==I),:Restriction]
+                    
+                end
+                k+=1
+            end
+        end
+    end
+
+
+
+    f=Figure()
+    xticks=(1:length(institutions),[string(i) for i in keys(institutions)])
+    resources=CairoMakie.Axis(f[1,1], title="Resource", xticks=xticks, xticklabelrotation=-pi/8)
+    total=CairoMakie.Axis(f[1,2],title="Total", xticks=xticks, xticklabelrotation=-pi/8)
+    gini=CairoMakie.Axis(f[1,3],title="Gini", xticks=xticks, xticklabelrotation=-pi/8)
+    In=CairoMakie.Axis(f[1,4],title="Regulation", xticks=xticks, xticklabelrotation=-pi/8)
+    Yn=CairoMakie.Axis(f[1,5],title="Stock", xticks=xticks, xticklabelrotation=-pi/8)
+    [hidespines!(a) for a in [resources,total,gini,In,Yn]]
+    [hideydecorations!(a) for a in [resources,total,gini,In,Yn]]
+    
+
+    heatmap!(resources,R',colormap=:bam, colorrange=(-100,100))
+    heatmap!(total,T',colormap=:bam, colorrange=(-100,100))
+    heatmap!(gini,G',colormap=:bam, colorrange=(-100,100))
+    heatmap!(In,I',colormap=:bam)
+    heatmap!(Yn,Y',colormap=:bam)
+        
+        display(f)
+end
+
+function checkScenarios(S;base=300)
+    F=Figure(size=(2*base,length(S)*base))
+    for i in 1:length(S)
+        #a=CairoMakie.Axis(F[i,1])
+        dist!(S[i])
+        sim!(S[i])
+        phaseplot!(CairoMakie.Axis(F[i,1]),S[i])
+        incomes!(CairoMakie.Axis(F[i,2]),S[i], indexed=false)
+    end
+    F
+end

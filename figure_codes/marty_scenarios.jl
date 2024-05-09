@@ -4,31 +4,117 @@ qmax=1/N
 wmin=0.05
 wmax=0.20
 
-s=scenario(N=100;w=SED(min=wmin,max=wmax),q=SED(min=qmin,max=qmax),ē=1.0,r=1.0,K=1.0,p=5.0)
+#s=scenario(N=100;w=SED(min=wmin,max=wmax),q=SED(min=qmin,max=qmax),ē=1.0,r=1.0,K=1.0,p=5.0)
 
 qmin=0.01
-qmax=0.20
+qmax=0.2
 steps=40
 
 for v in range(qmin,qmax,steps)
-    f=martyPlot(scenario(;N,w=SED(min=wmin,max=wmax),q=SED(min=v,max=v),ē=1.0,r=1.0,K=1.0,p=5.0))
-    display(f)
+    s=scenario(;N,w=SED(min=wmin,max=wmax),q=SED(min=v,max=v),ē=1.0,r=1.0,K=1.0,p=5.0)
+    dist!(s)
+    sim!(s)
+    display(phaseplot(s))
 end
 
 for v in range(qmin,qmax,steps)
-    f=martyPlot(scenario(;N,w=SED(min=wmin,max=wmax),q=SED(min=qmin,max=v),ē=1.0,r=1.0,K=1.0,p=5.0))
-    display(f)
+    s=scenario(;N,w=SED(min=wmin,max=wmax),q=SED(min=qmin,max=v),ē=1.0,r=1.0,K=1.0,p=5.0)
+    dist!(s)
+    sim!(s)
+    display(phaseplot(s))
+end
+
+function plot_incentive_shift(;steps=100,N=100,rn=false, distribution=Uniform, plotit=false)
+wmin=0.05*10
+wmax=0.10*10
+qmin=0.01*20
+qmax=0.2*20
+U=zeros(N,steps)
+S=zeros(steps)
+T=zeros(steps)
+R=zeros(steps)
+G=zeros(steps)
+
+for (i, v) in enumerate(range(qmin, stop=qmax, length=steps))
+    sw=(wmax-wmin)/N
+    iw=wmin-sw
+    sq=((qmax-v)-v)/N
+    iq=v-sq
+
+    s=scenario(;N,w=SED(min=wmin,max=wmax, normalize=true, random=rn, distribution=distribution),q=SED(min=v,max=qmax-v,normalize=true, random=rn,),ē=1.0,r=1.0,K=1.0,p=5.0)
+    dist!(s)
+    sim!(s, tend=(0.0,20000))
+    id=sortperm(s.w̃)
+    U[:,i]=s.u#[id]
+    
+    T[i]=sum(s.total_revenue)
+    R[i]=sum(s.resource_revenue)
+    G[i]=s.gini
+    A=diff(s.w).*s.q[1:(end-1)].-diff(s.q).*s.w[1:(end-1)]
+    S[i]=median(A)
+    if plotit==true
+        f=Figure()
+        a1=CairoMakie.Axis(f[1,1],title="$(round(sq*iw-sw*iq,digits=5)) ")   #q=qmin=$(round(v,digits=3)), qmax=$(round((qmax-v),digits=3))")
+        a2=CairoMakie.Axis(f[1,2])
+        a3=CairoMakie.Axis(f[2,2])
+        a4=CairoMakie.Axis(f[3,1])
+        a5=CairoMakie.Axis(f[2,1], ylabel=L"$f^'_w f_q - f^'_q f_w$")
+        ylims!(a1,(0.0,qmax/N))
+        #ylims!(a4,(0.0,1.0))
+            
+            lines!(a5,[1,length(A)],[0,0],color=:gray)
+            
+        scatter!(a5,A, color=[a>=0.0 ? :green : :red for a in A], markersize=4)
+        
+        hideydecorations!(a5, label=false)
+        hidespines!(a5)
+        SEDplot!(a1,s,:id,:w)
+        SEDplot!(a1,s,:id,:q, color=:steelblue)
+        SEDplot!(a4,s,:id,:w̃)
+        SEDplot!(a4,s,:id,:ū, color=:steelblue)
+        phaseplot!(a2,s, show_exploitation=false)
+        incomes!(a3,s)
+        display(f)
+    end
+
+end
+ff=Figure()
+aa=CairoMakie.Axis(ff[1,1], ylabel="Actor id",title="Incentive shift of resource use, distribution: "*string(distribution))
+aa2=CairoMakie.Axis(ff[2,1], ylabel="Revenue & Gini", xlabel=L"average $f^'_w f_q - f^'_q f_w$")
+linkxaxes!(aa, aa2)
+hidexdecorations!(aa)
+heatmap!(aa,S,1:N,U',colormap=:BuGn)
+l1=lines!(aa2,S,T, label="Total Revenue", color=:blue)
+l2=lines!(aa2,S,R, label="Resource Revenue", color=:red)
+l3=lines!(aa2,S,G, label="Gini", color=:green)
+Legend(ff[3,1],[l1,l2,l3],["Total Revenue","Resource Revenue","Gini"],orientation=:horizontal)
+
+save("graphics/incentive_shift_"*string(distribution)*".png",ff)
+display(ff)
+end
+
+for v in range(qmin,qmax,steps)
+   println((min=v,max=qmax-v))
 end
 
 # This keeps mean and varies spread
 for v in range(-0.024,0.024,steps)
-    f=martyPlot(scenario(;N,w=SED(min=wmin,max=wmax),q=SED(mean=0.025,spread=-v),ē=1.0,r=1.0,K=1.0,p=2.5))
-    display(f)
+    s=scenario(;N,w=SED(min=wmin,max=wmax),q=SED(mean=0.025,sigma=-v),ē=1.0,r=1.0,K=1.0,p=5.0)
+    dist!(s)
+    sim!(s)
+    display(phaseplot(s))
+    #f=martyPlot(scenario(;N,w=SED(min=wmin,max=wmax),q=SED(mean=0.025,spread=-v),ē=1.0,r=1.0,K=1.0,p=2.5))
+    #display(f)
 end
 
 for v in range(wmin,wmax,steps)
-    f=martyPlot(scenario(;N,w=SED(min=v,max=v),q=SED(min=qmin,max=qmax),ē=1.0,r=1.0,K=1.0,p=5.0))
-    display(f)
+    s=scenario(;N,w=SED(min=v,max=v),q=SED(min=qmin,max=qmax),ē=1.0,r=1.0,K=1.0,p=5.0)
+    dist!(s)
+    sim!(s)
+    display(phaseplot(s))
+
+   # f=martyPlot(scenario(;N,w=SED(min=v,max=v),q=SED(min=qmin,max=qmax),ē=1.0,r=1.0,K=1.0,p=5.0))
+    #display(f)
 end
 
 
@@ -169,3 +255,16 @@ scatter!(a,Q,Float64.(R))
 scatter!(a,Q,(Float64.(T).-minimum(T))./maximum(Float64.(T).-minimum(T)))
 heatmap!(a,M)
 f
+
+
+
+wmin=0.05*10
+wmax=0.10*10
+qmin=0.01*20
+qmax=0.2*20
+steps=100
+
+
+for (i, v) in enumerate(range(qmin, stop=qmax, length=steps))
+ println((min=v,max=qmax-v))
+end

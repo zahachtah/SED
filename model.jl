@@ -27,6 +27,7 @@ function dudt(dx,x,p,t)
     @inline dx[1:N]=α.*(y*(1-p.protected).-w̃.-ϕ)
 	dx[N+1]=dydt*(((1 -y)-sum(u)/(1-p.protected)) *y+((1-p.protected)!=0 ? p.protected/(1-p.protected)*p.dispersal*(yp-y) : 0))	
 	dx[N+2]=dydt*(((1 -yp)) *yp+(p.protected!=0 ? (1-p.protected)/p.protected*p.dispersal*(y-yp) : 0))
+	dx[N+3]=0.0
 	[dynamic_institution(inst,dx,x,p,t) for inst in p.institution]
 end
 
@@ -172,7 +173,10 @@ function sim!(p; tend=(0.0,2000.0), y0=1.0, dydt=1.0,u0=fill(0.0/p.N,p.N), p0=0.
     # solves the ODESSPRK22
     #sol=solve(prob,adaptive=false, Euler(),saveat=0.1,callback=terminate_steady_state ? TerminateSteadyState(1e-6,1e-4) : nothing,dt=p.sim.dt)#  
 	sol=solve(prob,SSPRK43(;stage_limiter!),reltol=1e-10,callback=terminate_steady_state ? TerminateSteadyState(1e-6,1e-4) : nothing)
-	
+	if sol.retcode != :Success
+		println("Simulation failed with retcode: ", sol.retcode)
+		println(p.institution)
+	end
 	poa=deepcopy(p)
     poa.institution=[]
     DUDT=zeros(N+3)
@@ -221,7 +225,8 @@ function sim!(p; tend=(0.0,2000.0), y0=1.0, dydt=1.0,u0=fill(0.0/p.N,p.N), p0=0.
 	    p.t_y=[u[N+1] for u in sol.u]
 	    p.t_ϕ=[u[end] for u in sol.u]
 		p.t_U=[sum(u[findall(p.ū.>0.0)]./p.ū[findall(p.ū.>0.0)]./p.N) for u in sol.u]
-		c̃=0
+		c̃=0 
+		
 		revenues!(p)
 		#=
 		p.wage_revenue = (p.ū.*p.aū .- p.u) .* p.w̃.*p.aw̃.*p.r.*p.p.*p.K; 

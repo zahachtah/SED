@@ -5,7 +5,7 @@ potential_color=nothing
 potential_color==nothing ? potential_color=c : nothing #or ensure its a color?
 
 """
-function phaseplot!(A,S; show_sustained=true,show_potential=true,same_potential_color=true, show_realized=false,show_trajectory=false, regulated_dot_reduction=0.3, attractor_size=30, show_attractor=true,show_target=true, vector_field=false,vector_grid=20,show_vertical_potential=false, attractor_color=nothing, show_legend=nothing, attractor_to_legend=false)
+function phaseplot!(A,S; show_sustained=true,show_potential=true,same_potential_color=true, show_realized=false,show_trajectory=false, regulated_dot_reduction=0.3, attractor_size=30, show_attractor=true,show_target=true, vector_field=false,vector_grid=20,show_vertical_potential=false, attractor_color=nothing, show_legend=nothing, attractor_to_legend=false, show_exploitation=true)
 
 	if !isa(S,Array)
 		S=[S]
@@ -28,8 +28,10 @@ function phaseplot!(A,S; show_sustained=true,show_potential=true,same_potential_
 
 		radian_angle-pi/2,sqrt(sum(du[1:z.N])^2+du[z.N+1]^2)
 	end
-	poly!(A, Rect(0, 0, 0.5,1), color=HSLA(10, 0.5, 0.5,0.1))
-	poly!(A, Rect(0.5, 0, 0.5,1), color=HSLA(180, 0.5, 0.5,0.1))
+	if show_exploitation
+		poly!(A, Rect(0, 0, 0.5,1), color=HSLA(10, 0.5, 0.5,0.1))
+		poly!(A, Rect(0.5, 0, 0.5,1), color=HSLA(180, 0.5, 0.5,0.1))
+	end
 	for is in S
 		p=is
 		c=p.color
@@ -313,3 +315,137 @@ function dependencies(s)
     hidedecorations!(a)
     f
 end
+
+function institutional_impact(S::Scenario;M=100, inst=1)
+    s=deepcopy(S)
+    total::Array{Float64}=[]
+    resource::Array{Float64}=[]
+    gini::Array{Float64}=[]
+    I::Array{Float64}=[]
+    y::Array{Float64}=[]
+    t=range(0.0,stop=1.0,length=M)
+    U=zeros(s.N,M)
+    for i in 1:M
+        s.institution[inst].value=t[i]
+        sim!(s)
+        
+        push!(total,sum(s.total_revenue))
+        push!(resource,sum(s.resource_revenue))
+        push!(gini,s.gini)
+        push!(y,s.y)
+        U[:,i]=s.resource_revenue
+        s.institution[inst].value=0
+        du=zeros(s.N+3)
+        dudt(du,vcat(s.u,s.y,0.0,s.ϕ),s,0.0)
+        push!(I,sum(max.(0.0,du[1:s.N])))
+    end
+
+    #id_total=t[argmax(total)],id_resource=t[argmax(resource)],id_ginnig=t[argmin(gini)],
+    return (target=collect(t),id_total=t[argmax(total)],id_resource=t[argmax(resource)],id_gini=t[argmin(gini)],total=total,resource=resource,gini=gini,I=I,y=y,U=U)
+end
+
+function plot_institutional_impact(o;weight=[1,1,1,1,1],s=scenario())
+    weight=round.(weight, digits=4)
+    w=o.resource.^weight[1].*o.total.^weight[2].*o.gini.^weight[3].*o.I.^weight[4].*o.y.^weight[5]
+    opt=argmax(w)
+    f=Figure(size=(800,700))
+    t="hello"
+    a=CairoMakie.Axis(f[1,1:2], xticks=([],[]),yticks=([],[]),ylabel="normalized")
+    a2=CairoMakie.Axis(f[2,1:2], xticks=([],[]),yticks=([],[]),titlesize=20,ylabel="utility u(i)",title=L"$u_G(i)=R^{%$(weight[1])} T^{%$(weight[2])} G^{%$(weight[3])} I^{%$(weight[4])} Y^{%$(weight[5])}$")#L"Weighted goal function: $u(i)=R(i)^{%(string(wheight[1]))} $T"*string(wheight[2])*" G"*string(wheight[3])*" I"*string(wheight[4])*" Y"*string(wheight[5]))
+    a3=CairoMakie.Axis(f[3,1:2],xticks = ([10,90], ["Full Regulation", "Open Access"]),yticks = ([10,90], ["Low", "High"]),ylabel="alternative opportunities")
+    a4=CairoMakie.Axis(f[2,3])
+    l2=lines!(a,o.target,o.total./maximum(o.total),label="Total Revenue", linewidth=3)
+    l1=lines!(a,o.target,o.resource./maximum(o.resource),label="Resource Revenue", linewidth=3)
+    l3=lines!(a,o.target,o.gini./maximum(o.gini),label="Gini", linewidth=3)
+    l4=lines!(a,o.target,(o.I.-minimum(o.I))./maximum(o.I.-minimum(o.I)),label="Institutional Impact", linewidth=3)
+    l5=lines!(a,o.target,o.y/maximum(o.y),label="Stock", linewidth=3)
+    lines!(a,[o.target[opt],o.target[opt]],[0,1],color=:darkorange,linestyle=:dash)
+    Legend(f[1,3],[l1,l2,l3,l4,l5],["Resource Revenue","Total Revenue","Gini","Institutional Coercion","Stock"],"Governance aspects",tellwidth=false,orientation = :vertical, halign=:left)
+   
+    lines!(a2,o.target,w./maximum(w),color=:darkorange, linewidth=3)
+    lines!(a2,[o.target[opt],o.target[opt]],[0,1],color=:darkorange,linestyle=:dash)
+    heatmap!(a3,o.U', colormap=:BuGn)
+    Colorbar(f[3, 3], limits = (0, maximum(o.U)),label="Resource income", colormap = :BuGn,
+    flipaxis = true, tellwidth=false, halign=:left)
+    lines!(a3,[opt,opt],[0,100],color=:darkorange,linestyle=:dash)
+    S=deepcopy(s)
+    println(S)
+    S.institution[1].value=o.target[opt]
+    S.color=convert(HSL,colorant"darkorange")
+    sim!(S)
+    phaseplot!(a4,S,show_realized=true)
+    S.institution[1].value=1.0
+    S.color=convert(HSL,colorant"gray")
+    sim!(S)
+    phaseplot!(a4,S,show_realized=true)
+    return f
+end
+
+function plot_incentive_shift(;steps=100,N=100,rn=false, distribution=Uniform, plotit=false)
+	wmin=0.05*10
+	wmax=0.10*10
+	qmin=0.01*20
+	qmax=0.2*20
+	U=zeros(N,steps)
+	S=zeros(steps)
+	T=zeros(steps)
+	R=zeros(steps)
+	G=zeros(steps)
+	
+	for (i, v) in enumerate(range(qmin, stop=qmax, length=steps))
+		sw=(wmax-wmin)/N
+		iw=wmin-sw
+		sq=((qmax-v)-v)/N
+		iq=v-sq
+	
+		s=scenario(;N,w=SED(min=wmin,max=wmax, normalize=true, random=rn, distribution=distribution),q=SED(min=v,max=qmax-v,normalize=true, random=rn,),ē=1.0,r=1.0,K=1.0,p=5.0)
+		dist!(s)
+		sim!(s, tend=(0.0,20000))
+		id=sortperm(s.w̃)
+		U[:,i]=s.u#[id]
+		
+		T[i]=sum(s.total_revenue)
+		R[i]=sum(s.resource_revenue)
+		G[i]=s.gini
+		A=diff(s.w).*s.q[1:(end-1)].-diff(s.q).*s.w[1:(end-1)]
+		S[i]=median(A)
+		if plotit==true
+		f=Figure()
+		a1=CairoMakie.Axis(f[1,1],title="$(round(sq*iw-sw*iq,digits=5)) ")   #q=qmin=$(round(v,digits=3)), qmax=$(round((qmax-v),digits=3))")
+		a2=CairoMakie.Axis(f[1,2])
+		a3=CairoMakie.Axis(f[2,2])
+		a4=CairoMakie.Axis(f[3,1])
+		a5=CairoMakie.Axis(f[2,1], ylabel=L"$f^'_w f_q - f^'_q f_w$")
+		ylims!(a1,(0.0,qmax/N))
+		#ylims!(a4,(0.0,1.0))
+			
+			lines!(a5,[1,length(A)],[0,0],color=:gray)
+			
+		scatter!(a5,A, color=[a>=0.0 ? :green : :red for a in A], markersize=4)
+		
+		hideydecorations!(a5, label=false)
+		hidespines!(a5)
+		SEDplot!(a1,s,:id,:w)
+		SEDplot!(a1,s,:id,:q, color=:steelblue)
+		SEDplot!(a4,s,:id,:w̃)
+		SEDplot!(a4,s,:id,:ū, color=:steelblue)
+		phaseplot!(a2,s, show_exploitation=false)
+		incomes!(a3,s)
+		display(f)
+		end
+	
+	end
+	ff=Figure()
+	aa=CairoMakie.Axis(ff[1,1], ylabel="Actor id",title="Incentive shift of resource use, distribution: "*string(distribution))
+	aa2=CairoMakie.Axis(ff[2,1], ylabel="Revenue & Gini", xlabel=L"average $f^'_w f_q - f^'_q f_w$")
+	linkxaxes!(aa, aa2)
+	hidexdecorations!(aa)
+	heatmap!(aa,S,1:N,U',colormap=:BuGn)
+	l1=lines!(aa2,S,T, label="Total Revenue", color=:blue)
+	l2=lines!(aa2,S,R, label="Resource Revenue", color=:red)
+	l3=lines!(aa2,S,G, label="Gini", color=:green)
+	Legend(ff[3,1],[l1,l2,l3],["Total Revenue","Resource Revenue","Gini"],orientation=:horizontal)
+	
+	save("graphics/incentive_shift_"*string(distribution)*".png",ff)
+	display(ff)
+	end
