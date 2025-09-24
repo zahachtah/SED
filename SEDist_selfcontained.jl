@@ -323,12 +323,8 @@ begin
                 end
                 return sed
             elseif df isa AbstractString
-                # Evaluate a simple expression like "q .* w ./ K .+ sed"
+                # Evaluate an expression like "q .* w ./ K .+ sed"
                 ex = Meta.parse(df)
-                let sed = indep
-                    $(nothing)
-                end
-                # Build a `let` block injecting dependency vectors and `sed`
                 assigns = [:( $(k) = $(depvals[k]) ) for k in keys_list]
                 let_block = :(let sed = indep; $(Expr(:block, assigns...)); $ex; end)
                 sed.data = Core.eval(@__MODULE__, let_block)
@@ -629,7 +625,9 @@ begin
         kw = (; kwargs...)
         if haskey(kw, :dependency_fun) && !haskey(kw, :dependency_function)
             kw = change(kw; dependency_function = kw.dependency_fun)
-            kw = Base.structdiff(kw, (; dependency_fun = nothing,))
+            # do not carry dependency_fun forward
+            pairs = [(k => getproperty(kw, k)) for k in keys(kw) if k != :dependency_fun]
+            kw = (; pairs...)
         end
         if haskey(kw, :dependent)
             depval = kw.dependent
@@ -644,13 +642,18 @@ begin
             end
         end
 
+        # filter to allowed SED keywords
+        allowed = Set([:min,:max,:mean,:median,:sigma,:sum,:random,:normalize,:dependent,:distribution,:dependency_function])
+        filtered_pairs = [(k => getproperty(kw, k)) for k in keys(kw) if k in allowed]
+        filtered_kw = (; filtered_pairs...)
+
         T = Float64; ND = 1; A = Array{T, ND}
         if data !== nothing
             T = eltype(data); ND = ndims(data); A = typeof(data)
         else
             data = Array{T, ND}(undef, 0)
         end
-        return SED{T, ND, A}(; data, min, max, kw...)
+        return SED{T, ND, A}(; data, min, max, filtered_kw...)
     end
 
 end
