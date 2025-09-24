@@ -305,6 +305,33 @@ begin
         return [s for s in syms if haskey(context, s)]
     end
 
+    # Validate that all identifier-like symbols referenced in the expression are
+    # known (either in the context or the special `sed`). Returns a vector of
+    # unknown identifiers, if any.
+    function _unknown_idents(expr_str::AbstractString, context::NamedTuple)
+        ex = Meta.parse(expr_str)
+        syms = Set{Symbol}()
+        function walk(e)
+            if e isa Symbol
+                push!(syms, e)
+            elseif e isa Expr
+                for a in e.args
+                    walk(a)
+                end
+            end
+        end
+        walk(ex)
+        delete!(syms, :sed)
+        unknown = Symbol[]
+        for s in syms
+            # filter out operator-like symbols (not identifier names)
+            if Base.isidentifier(String(s)) && !haskey(context, s)
+                push!(unknown, s)
+            end
+        end
+        return unknown
+    end
+
     function apply_dependencies!(sed::SED, N::Int, context::NamedTuple)
         isempty(sed.dependent) && return sed
 
@@ -353,6 +380,13 @@ begin
                         v = context[k]
                         depvals[k] = hasproperty(v, :data) ? v.data : v
                     end
+                end
+                # Validate that the expression does not reference unknown identifiers
+                unknown = _unknown_idents(df, context)
+                if !isempty(unknown)
+                    available = join(Symbol.(keys(context)), ", ")
+                    missing = join(unknown, ", ")
+                    error("Unknown variable(s) in dependency_fun: $(missing). Available: $(available). The special name `sed` refers to the base vector.")
                 end
                 ex = Meta.parse(df)
                 assigns = [:( $(k) = $(depvals[k]) ) for k in keys_list]
