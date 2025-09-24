@@ -333,7 +333,10 @@ begin
     end
 
     function apply_dependencies!(sed::SED, N::Int, context::NamedTuple)
-        isempty(sed.dependent) && return sed
+        # If nothing to apply (no dependent keys and no dependency_function), skip
+        if isempty(sed.dependent) && (sed.dependency_function === nothing)
+            return sed
+        end
 
         # Collect dependency values for all referenced keys (excluding :fun)
         keys_list = [k for k in keys(sed.dependent) if k != :fun]
