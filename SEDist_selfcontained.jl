@@ -625,15 +625,24 @@ begin
     After generating the independent data, apply dependency calculations using the
     provided `context`.
     """
-    function dist!(sed::SED, N::Int; context=nothing)
-        # Generate the distribution
-        generate_distribution!(sed, N)
-
-        # Apply dependencies if context is provided
-        if context !== nothing
-            apply_dependencies!(sed, N, context)
+    function dist!(sed::SED, N::Int; context=nothing, random::Union{Nothing,Bool}=nothing)
+        # Optionally override randomness for this call
+        old_random = sed.random
+        if random !== nothing
+            sed.random = random
         end
+        try
+            # Generate the distribution
+            generate_distribution!(sed, N)
 
+            # Apply dependencies if context is provided
+            if context !== nothing
+                apply_dependencies!(sed, N, context)
+            end
+        finally
+            # Restore prior randomness flag
+            sed.random = old_random
+        end
         return sed
     end
 
@@ -643,13 +652,13 @@ begin
     Generate distributions for the SED parameter specified by name.
     Uses s.N as the length of the distribution.
     """
-    function dist!(s, param_name::Symbol)
+    function dist!(s, param_name::Symbol; random::Union{Nothing,Bool}=nothing)
         N = s.N
         sed = find_sed_by_name(s, param_name)
         if sed === nothing
             error("Could not find SED parameter named $(param_name) in the scenario")
         end
-        return dist!(sed, N; context=s)
+        return dist!(sed, N; context=s, random)
     end
 
     """
@@ -707,7 +716,7 @@ begin
         return (; nodes=sedkeys, edges=deps, order)
     end
 
-    function dist!(s)
+    function dist!(s; random::Union{Nothing,Bool}=nothing)
         N = s.N
         g = dependency_graph(s)
         for k in g.order
@@ -715,9 +724,9 @@ begin
             needs_deps = has_dependencies(v) || (v.dependency_function isa AbstractString) ||
                          ((v.dependency_function isa Function) && !isempty(v.dependent))
             if needs_deps
-                dist!(v, N; context=s)
+                dist!(v, N; context=s, random)
             else
-                dist!(v, N)
+                dist!(v, N; random)
             end
         end
         return s
@@ -729,8 +738,8 @@ begin
     Applies `dist!(sed, N, context)` to each SED in the provided context and returns
     a new NamedTuple with the updated SEDs.
     """
-    function dist!(context::NamedTuple, N::Int)
-        new_context = map(x -> (x isa SED ? dist!(x, N; context=context) : x), context)
+    function dist!(context::NamedTuple, N::Int; random::Union{Nothing,Bool}=nothing)
+        new_context = map(x -> (x isa SED ? dist!(x, N; context=context, random) : x), context)
         return new_context
     end
 
@@ -978,12 +987,9 @@ begin
             end
         end
 
-        # Draw nodes and labels
-        xs = Float32[p[1] for p in values(pos)]
-        ys = Float32[p[2] for p in values(pos)]
-        scatter!(ax, xs, ys; color=node_color, markersize)
+        # Draw only labels (no circles)
         for (k, p) in pos
-            text!(ax, p[1], p[2], text=String(k), align=(:center, :center), color=:white, fontsize)
+            text!(ax, p[1], p[2], text=String(k), align=(:center, :center), color=:black, fontsize)
         end
 
         fig
