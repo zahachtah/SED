@@ -366,6 +366,12 @@ begin
             df = sed.dependency_function
             indep = sed.data
             if df isa Function
+                # If there are no dependency values, skip applying a functional
+                # dependency_function. This avoids treating the default
+                # (indep, dep)-> indep .+ dep as meaningful when no deps exist.
+                if isempty(depvals)
+                    return sed
+                end
                 # Try (indep, deps_namedtuple) then (deps_namedtuple) for convenience
                 deps_nt = NamedTuple{Tuple(keys(depvals))}(values(depvals))
                 try
@@ -642,7 +648,9 @@ begin
         length(order) == length(sedkeys) || error("Cyclic SED dependencies detected among: $(setdiff(sedkeys, order))")
         for k in order
             v = getfield(s, k)
-            if has_dependencies(v) || (v.dependency_function !== nothing)
+            needs_deps = has_dependencies(v) || (v.dependency_function isa AbstractString) ||
+                         ((v.dependency_function isa Function) && !isempty(v.dependent))
+            if needs_deps
                 dist!(v, N; context=s)
             else
                 dist!(v, N)
