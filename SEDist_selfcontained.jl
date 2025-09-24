@@ -283,47 +283,68 @@ begin
 		using the provided `context`. The key `:fun` (if present) is reserved for a custom function
 		and is not used to scale dependency variables.
 		"""
-		function apply_dependencies!(sed::SED, N::Int, context::NamedTuple)
-		    isempty(sed.dependent) && return sed  # Nothing to do if no dependencies.
-		
-		    if haskey(sed.dependent, :fun)
-		        # Custom dependency mode.
-		        # Retrieve the custom function.
-		        fun = sed.dependent.fun
-		        # Build a NamedTuple of factors that excludes the :fun key.
-		        factors = (; (k => v for (k, v) in pairs(sed.dependent) if k != :fun)...)
-		        # Build a NamedTuple of dependency values from the context.
-		        depvals = (; (k => (haskey(context, k) ? 
-		                                (hasproperty(context[k], :data) ? context[k].data : context[k]) :
-		                                error("Context does not contain dependency variable $(k)"))
-		                         for k in keys(factors))...)
-		        # Scale each dependency value by its corresponding factor.
-		        scaled_dep = (; (k => factors[k] * depvals[k] for k in keys(depvals))...)
-		        # Compute the custom dependency contribution.
-		        dep_contrib = fun(scaled_dep)
-		        # Combine with the independent data.
-		        sed.data = sed.dependency_function(sed.data, dep_contrib)
-		    else
-		        # Default mode: sum the dependencies.
-		        dep_sum = zeros(eltype(sed.data), N)
-		        for (name, factor) in pairs(sed.dependent)
-		            # Skip the :fun key if it appears.
-		            if name == :fun
-		                continue
-		            end
-		            if haskey(context, name)
-		                var = context[name]
-		                dep_data = hasproperty(var, :data) ? var.data : var
-		                contribution = factor isa Function ? factor(dep_data) : factor .* dep_data
-		                dep_sum .+= contribution
-		            else
-		                error("Context does not contain dependency variable $(name)")
-		            end
-		        end
-		        sed.data = sed.dependency_function(sed.data, dep_sum)
-		    end
-		    return sed
-		end
+    function apply_dependencies!(sed::SED, N::Int, context::NamedTuple)
+        isempty(sed.dependent) && return sed
+
+        # Collect dependency values for all referenced keys (excluding :fun)
+        keys_list = [k for k in keys(sed.dependent) if k != :fun]
+        depvals = Dict{Symbol, Any}()
+        for k in keys_list
+            haskey(context, k) || error("Context does not contain dependency variable $(k)")
+            v = context[k]
+            depvals[k] = hasproperty(v, :data) ? v.data : v
+        end
+
+        # -- Case 1: legacy `:fun` inside `dependent`
+        if haskey(sed.dependent, :fun)
+            fun = sed.dependent.fun
+            scaled = Dict{Symbol, Any}()
+            for k in keys_list
+                factor = sed.dependent[k]
+                dv = depvals[k]
+                scaled[k] = factor isa Function ? factor(dv) : (factor isa Number ? factor .* dv : dv)
+            end
+            dep_contrib = fun(NamedTuple{Tuple(keys(scaled))}(values(scaled)))
+            sed.data = sed.dependency_function(sed.data, dep_contrib)
+            return sed
+        end
+
+        # -- Case 2: dependency_function provided (function or string expression)
+        if sed.dependency_function !== nothing
+            df = sed.dependency_function
+            indep = sed.data
+            if df isa Function
+                # Try (indep, deps_namedtuple) then (deps_namedtuple) for convenience
+                deps_nt = NamedTuple{Tuple(keys(depvals))}(values(depvals))
+                try
+                    sed.data = df(indep, deps_nt)
+                catch
+                    sed.data = df(deps_nt)
+                end
+                return sed
+            elseif df isa AbstractString
+                # Evaluate a simple expression like "q .* w ./ K .+ sed"
+                ex = Meta.parse(df)
+                let sed = indep
+                    $(nothing)
+                end
+                # Build a `let` block injecting dependency vectors and `sed`
+                assigns = [:( $(k) = $(depvals[k]) ) for k in keys_list]
+                let_block = :(let sed = indep; $(Expr(:block, assigns...)); $ex; end)
+                sed.data = Core.eval(@__MODULE__, let_block)
+                return sed
+            end
+        end
+
+        # -- Case 3: default to weighted sum (unit weights if none provided)
+        dep_sum = zeros(eltype(sed.data), N)
+        for k in keys_list
+            dv = depvals[k]
+            dep_sum .+= dv
+        end
+        sed.data = sed.dependency_function(sed.data, dep_sum)
+        return sed
+    end
 		
 		
 		"""
@@ -511,44 +532,43 @@ begin
 		First processes independent SEDs, then dependent ones.
 		Uses s.N as the length of the distributions.
 		"""
-		function dist!(s)
-		    N = s.N
-            if !haskey(s,:w̃) && haskey(s,:w) && haskey(s,:q) && haskey(s,:ē) && haskey(s,:p) && haskey(s,:r) && haskey(s,:K)
-                s=(s...,w̃=sed(dependent=(q=1.0, w=0.5, p=1,ē=1,r=1,K=1, fun=(dep -> dep.w ./( dep.q.*dep.p.*dep.K)))))
-            else
-                println("missing one of w,q,ē,p,K,r")
+    function dist!(s)
+        N = s.N
+        sedkeys = Symbol[]
+        for (k, v) in pairs(s)
+            v isa SED && push!(sedkeys, k)
+        end
+        deps = Dict{Symbol, Vector{Symbol}}(k => Symbol[] for k in sedkeys)
+        for k in sedkeys
+            v = getfield(s, k)
+            if has_dependencies(v)
+                for dk in keys(v.dependent)
+                    dk == :fun && continue
+                    dk in sedkeys && push!(deps[k], dk)
+                end
             end
-
-            if !haskey(s,:ū) && haskey(s,:w) && haskey(s,:q) && haskey(s,:ē) && haskey(s,:p) && haskey(s,:r) && haskey(s,:K)
-                s=(s...,ū=sed(dependent=(q=1.0, w=0.5, ē=1,  p=1,r=1,K=1, fun=(dep -> dep.ē .* dep.q ./ dep.r))))
-            else
-                println("missing one of w,q,ē,p,K,r")
+        end
+        indeg = Dict(k => 0 for k in sedkeys)
+        for k in sedkeys; for d in deps[k]; indeg[k] += 1; end; end
+        ready = [k for k in sedkeys if indeg[k] == 0]
+        order = Symbol[]
+        while !isempty(ready)
+            n = popfirst!(ready)
+            push!(order, n)
+            for m in sedkeys
+                if n in deps[m]
+                    indeg[m] -= 1
+                    indeg[m] == 0 && push!(ready, m)
+                end
             end
-		    
-		    # Identify all SED parameters
-		    sed_params = []
-		    for (k, v) in pairs(s)
-		        if v isa SED
-		            push!(sed_params, (k, v, has_dependencies(v)))
-		        end
-		    end
-		    
-		    # First process independent SEDs
-		    for (k, v, has_deps) in sed_params
-		        if !has_deps
-		            dist!(v, N)
-		        end
-		    end   
-		    
-		    # Then process dependent SEDs
-		    for (k, v, has_deps) in sed_params
-		        if has_deps
-		            dist!(v, N; context=s)
-		        end
-		    end
-		    
-		    return s
-		end
+        end
+        length(order) == length(sedkeys) || error("Cyclic SED dependencies detected among: $(setdiff(sedkeys, order))")
+        for k in order
+            v = getfield(s, k)
+            has_dependencies(v) ? dist!(v, N; context=s) : dist!(v, N)
+        end
+        return s
+    end
 		
 		"""
 		    dist!(context::NamedTuple, N::Int) -> NamedTuple
@@ -605,19 +625,33 @@ begin
 		are used; otherwise, an empty array of type `Float64` is created. Additional keyword arguments
 		are passed directly to the SED constructor.
 		"""
-		function sed(; data = nothing, min = nothing, max = nothing, kwargs...)
-		    T = Float64
-		    N = 1
-		    A = Array{T, N}
-		    if data !== nothing
-		        T = eltype(data)
-		        N = ndims(data)
-		        A = typeof(data)
-		    else
-		        data = Array{T, N}(undef, 0)
-		    end
-		    return SED{T, N, A}(; data, min, max, kwargs...)
-		end
+    function sed(; data = nothing, min = nothing, max = nothing, kwargs...)
+        kw = (; kwargs...)
+        if haskey(kw, :dependency_fun) && !haskey(kw, :dependency_function)
+            kw = change(kw; dependency_function = kw.dependency_fun)
+            kw = Base.structdiff(kw, (; dependency_fun = nothing,))
+        end
+        if haskey(kw, :dependent)
+            depval = kw.dependent
+            if depval isa Tuple
+                syms = Tuple(depval)
+                nt = NamedTuple{syms}(ntuple(_ -> 1.0, length(syms)))
+                kw = change(kw; dependent = nt)
+            elseif depval isa Vector{Symbol}
+                syms = Tuple(depval)
+                nt = NamedTuple{syms}(ntuple(_ -> 1.0, length(syms)))
+                kw = change(kw; dependent = nt)
+            end
+        end
+
+        T = Float64; ND = 1; A = Array{T, ND}
+        if data !== nothing
+            T = eltype(data); ND = ndims(data); A = typeof(data)
+        else
+            data = Array{T, ND}(undef, 0)
+        end
+        return SED{T, ND, A}(; data, min, max, kw...)
+    end
 
 end
 

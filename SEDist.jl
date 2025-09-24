@@ -1,7 +1,6 @@
 module SEDist
 
     include("SEDist_selfcontained.jl")
-    include("SEDContext.jl")
     using Reexport
     @reexport using CairoMakie, FileIO, ColorSchemes
 
@@ -18,5 +17,4 @@ module SEDist
     export Uniform, LogNormal, Normal, Exponential, Dirac
     export incomes, regulation_scan, gini
     export phase_plot!,incomes_plot!
-    export Context, @dep
 end
