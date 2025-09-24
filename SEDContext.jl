@@ -1,6 +1,6 @@
 module SEDContext
 import Base: getindex
-import ..SEDist: dist!
+import ..: dist!
 
 export @dep, Context
 
