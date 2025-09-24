@@ -428,7 +428,16 @@ begin
 		Generate the distribution data for the SED, without applying dependencies.
 		"""
 		function generate_distribution!(sed::SED, N::Int)
-		    rev = false  # Flag for reversed quantiles
+        rev = false  # Flag for reversed quantiles
+        # If no distribution parameters are provided but this SED will be
+        # computed from dependencies, initialize a zero vector and skip
+        # distribution-specific generation. The dependency pass will fill it.
+        if sed.min === nothing && sed.max === nothing && sed.mean === nothing &&
+           sed.median === nothing && sed.sigma === nothing && sed.sum === nothing &&
+           (sed.dependency_function !== nothing || !isempty(sed.dependent))
+            sed.data = zeros(eltype(sed.data), N)
+            return sed
+        end
 		    if is_distribution_type(sed, LogNormal)
 		        # LogNormal branch...
 		        if sed.min !== nothing && sed.max !== nothing
