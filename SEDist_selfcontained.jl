@@ -4,16 +4,16 @@ using DataFrames, GLM, StatsModels
 using DiffEqCallbacks: TerminateSteadyState
 import Base: show
 using Base: @kwdef
- 
-# ODE	setup	
-begin 
+
+# ODE	setup
+begin
 
     function dxdt(dx, x, p, t)
         # Extract parameters to make equations prettier
         N = p.N
         # Actor resource use change
         dx[1:N] = p.α * (x[N+1] .- p.γ(x, p, t))
-        
+
         # Resource level dynamics
         dx[N+1] = x[N+1] * ((1 - x[N+1]) - sum(x[1:N]))
 
@@ -24,9 +24,9 @@ begin
     # This ensures constrained values of variables, e.g. 0>uᵢ>ū
     function stage_limiter!(x, integrator, p, t)
         # Actor use limits
-        x[1:p.N] .= ifelse.(x[1:p.N] .< 0.0, 0.0, 
-                    ifelse.(x[1:p.N] .> (p.μ(x, p, t)), p.μ(x, p, t), x[1:p.N]))
-        
+        x[1:p.N] .= ifelse.(x[1:p.N] .< 0.0, 0.0,
+            ifelse.(x[1:p.N] .> (p.μ(x, p, t)), p.μ(x, p, t), x[1:p.N]))
+
         for j in p.N+1:length(x)
             x[j] = max(0.0, x[j])
         end
@@ -38,7 +38,7 @@ begin
         isempty(s.ū.data) ? dist!(s.ū, s.N) : nothing
         tspan = (0.0, t_end)
         p = s.regulate(s, regulation)
-    
+
         if s.policy == "Tradable Use Rights"
             initVals = [u0; y0; ϕ0]
         elseif s.policy == "Protected Area Two Pop"
@@ -62,9 +62,9 @@ begin
 end
 
 # Γ Φ incomes and gini definitions
-begin 
+begin
 
-    function Γ(y, p; x=zeros(p.N+1), t=0.0)
+    function Γ(y, p; x=zeros(p.N + 1), t=0.0)
         x[p.N+1] = y
         γ = p.γ(x, p, t)
         id = sortperm(γ) # if w_bar's are not in ascending order
@@ -73,7 +73,7 @@ begin
 
     # Impact function
     function Φ(y, p; t=0.0)
-        x = zeros(p.N+1)
+        x = zeros(p.N + 1)
         x[end] = y
         γ = p.γ(x, p, t)
 
@@ -84,7 +84,7 @@ begin
         if f == 0
             f = (1.0 - y) / μ[id[1]]
         elseif f < p.N
-            f = f + ((1 - y) - cu[f]) / μ[id[f + 1]]
+            f = f + ((1 - y) - cu[f]) / μ[id[f+1]]
         end
         return f / p.N
     end
@@ -102,21 +102,21 @@ begin
         μ = p.μ(x, p, 0.0)
         γ = occursin("Protected Area", p.policy) || occursin("Exclusive Use Rights", p.policy) || occursin("Tradable Use Rights", p.policy) ? p.w̃ : p.γ(x, p, 0.0) #we used the scaling in the gammafunciton for PA, which works for incentives but screws up incomes....
         wages_nd = (μ .- u) .* γ
-        wages_0_nd=μ .* γ
+        wages_0_nd = μ .* γ
         # wages_nd    = (p.ū .- u) .* p.w̃ #occursin("Protected Area", p.policy) ? (p.μ(x,p,1.0) .- u) .* p.γ(x,p,1.0) : (p.ū .- u) .* p.w̃
         #trade_nd    = p.policy == "Tradable Use Rights" ? (p.R .- u) .* x[p.N+2] : zeros(p.N)
 
         if p.policy == "Tradable Use Rights"
             if p.policy_target == :yield
-            trade_nd = (p.R .- (u .* y)) .* x[p.N+2]
+                trade_nd = (p.R .- (u .* y)) .* x[p.N+2]
             else   # effort-based
-            trade_nd = (p.R .- u)       .* x[p.N+2]
+                trade_nd = (p.R .- u) .* x[p.N+2]
             end
         else
             trade_nd = zeros(p.N)
         end
 
-        total_nd    = resource_nd .+ wages_nd .+ trade_nd
+        total_nd = resource_nd .+ wages_nd .+ trade_nd
 
         # gini and ecology always nondimensional
         g = gini(total_nd)
@@ -127,17 +127,17 @@ begin
             # you must have p.rpk = r * p * K stored in your scenario
             scale = p.rpk
             resource = resource_nd .* scale
-            wages    = wages_nd    .* scale
-            wages_0    = wages_o_nd    .* scale
-            trade    = trade_nd    .* scale
-            total    = total_nd    .* scale
+            wages = wages_nd .* scale
+            wages_0 = wages_o_nd .* scale
+            trade = trade_nd .* scale
+            total = total_nd .* scale
         else
             resource, wages, trade, total, wages_0 = resource_nd, wages_nd, trade_nd, total_nd, wages_0_nd
         end
 
         out = (; resource, wages, trade, total,
-                gini = g,
-                ecological, wages_0)
+            gini=g,
+            ecological, wages_0)
         return summarize ? merge(out, (; g=g, ecological=ecological)) : out
     end
 
@@ -151,141 +151,141 @@ begin
 end
 
 # SED the distributional feature
-begin 
-		#
-		# This module provides a type `SED` for generating socio‐economic distributions
-		# that can optionally depend on other variables. Dependencies are now resolved
-		# by passing in a context (a NamedTuple containing all SEDs), rather than by a
-		# global lookup. In addition, you can specify a custom dependency relationship.
-		#
-		# For example, you can write:
-		#
-		#     w̃ = sed(dependent=(ē = 1.0, q = 1.0, r = 1.0, fun = (dep -> (dep.ē * dep.q) / dep.r)), 
-		#              min = 0.1, max = 0.2, distribution = LogNormal)
-		#
-		# and later call `dist!(w̃, N, context)` where `context` is a NamedTuple containing
-		# w̃ and the SEDs named `ē`, `q`, and `r`.
-		#
-		# Written with clarity, type safety, and efficiency in mind.
-		# =============================================================================
-		
-		
-		# Explicitly import functions from Statistics to avoid ambiguity.
-		#import Statistics: mean, median, std, var
-		
-		# -----------------------------------------------------------------------------
-		# Basic Data Types
-		# -----------------------------------------------------------------------------
-		import Statistics: mean, median, std, var
-		"""
-		    Derived(data::Vector{Float64})
-		
-		A simple wrapper type representing a distribution derived from data.
-		"""
-		struct Derived <: ContinuousUnivariateDistribution
-		    data::Vector{Float64}
-		end
-		
-		"""
-		    Data(data::Vector{Float64})
-		
-		A simple wrapper type representing a distribution constructed directly from data.
-		"""
-		struct Data <: ContinuousUnivariateDistribution
-		    data::Vector{Float64}
-		end
-		
-		# Extend statistical functions to work on Derived and Data.
-		mean(d::Union{Derived, Data}) = Statistics.mean(d.data)
-		median(d::Union{Derived, Data}) = Statistics.median(d.data)
-		std(d::Union{Derived, Data}) = Statistics.std(d.data)
-		var(d::Union{Derived, Data}) = Statistics.var(d.data)
-		Constant=Dirac
-		
-		# -----------------------------------------------------------------------------
-		# SED Type Definition
-		# -----------------------------------------------------------------------------
-		
-		"""
-		    SED{T, N, A<:AbstractArray{T, N}} <: AbstractArray{T, N}
-		
-		A container for a (stochastic or deterministic) distribution with optional
-		dependencies on other variables.
-		
-		# Fields
-		- `data::A`: Array holding the generated values.
-		- `min, max, mean, median, sigma, sum`: Optional distribution parameters.
-		- `random::Bool`: If `true`, generate data randomly (using `rand`); otherwise by quantiles.
-		- `normalize::Bool`: If `true`, normalize the generated data.
-		- `dependent::NamedTuple`: Specifies dependencies. In the simplest case each key (other than `fun`)
-		   is taken as a coefficient for the corresponding variable. If a key `:fun` is present, its value
-		   (which must be a function) is used to compute the dependent contribution.
-		- `distribution`: The base distribution type (e.g. `Uniform`, `LogNormal`, etc.).
-        - `dependency_function::Union{Function,AbstractString,Nothing}`: A function or expression that
-           combines the independent data with the dependent contribution. (Default: elementwise
-           addition.) If a `String`, variables in `dependent` (or inferred from the string) and `sed`
-           (the independent vector) are in scope.
-		"""
-		@kwdef mutable struct SED{T, N, A<:AbstractArray{T, N}} <: AbstractArray{T, N}
-		    data::A = nothing
-		    min::Union{Nothing, Float64} = nothing
-		    max::Union{Nothing, Float64} = nothing
-		    mean::Union{Nothing, Float64} = nothing
-		    median::Union{Nothing, Float64} = nothing
-		    sigma::Union{Nothing, Float64} = nothing
-		    sum::Union{Nothing, Float64} = nothing
-		    random::Bool = false
-		    normalize::Bool = false
-		    dependent::NamedTuple = NamedTuple()   # e.g., (ē = 1.0, q = 1.0, r = 1.0, fun = (dep -> (dep.ē * dep.q) / dep.r))
-		    distribution::Any = Uniform              # e.g., Uniform, LogNormal, etc.
+begin
+    #
+    # This module provides a type `SED` for generating socio‐economic distributions
+    # that can optionally depend on other variables. Dependencies are now resolved
+    # by passing in a context (a NamedTuple containing all SEDs), rather than by a
+    # global lookup. In addition, you can specify a custom dependency relationship.
+    #
+    # For example, you can write:
+    #
+    #     w̃ = sed(dependent=(ē = 1.0, q = 1.0, r = 1.0, fun = (dep -> (dep.ē * dep.q) / dep.r)),
+    #              min = 0.1, max = 0.2, distribution = LogNormal)
+    #
+    # and later call `dist!(w̃, N, context)` where `context` is a NamedTuple containing
+    # w̃ and the SEDs named `ē`, `q`, and `r`.
+    #
+    # Written with clarity, type safety, and efficiency in mind.
+    # =============================================================================
+
+
+    # Explicitly import functions from Statistics to avoid ambiguity.
+    #import Statistics: mean, median, std, var
+
+    # -----------------------------------------------------------------------------
+    # Basic Data Types
+    # -----------------------------------------------------------------------------
+    import Statistics: mean, median, std, var
+    """
+        Derived(data::Vector{Float64})
+
+    A simple wrapper type representing a distribution derived from data.
+    """
+    struct Derived <: ContinuousUnivariateDistribution
+        data::Vector{Float64}
+    end
+
+    """
+        Data(data::Vector{Float64})
+
+    A simple wrapper type representing a distribution constructed directly from data.
+    """
+    struct Data <: ContinuousUnivariateDistribution
+        data::Vector{Float64}
+    end
+
+    # Extend statistical functions to work on Derived and Data.
+    mean(d::Union{Derived,Data}) = Statistics.mean(d.data)
+    median(d::Union{Derived,Data}) = Statistics.median(d.data)
+    std(d::Union{Derived,Data}) = Statistics.std(d.data)
+    var(d::Union{Derived,Data}) = Statistics.var(d.data)
+    Constant = Dirac
+
+    # -----------------------------------------------------------------------------
+    # SED Type Definition
+    # -----------------------------------------------------------------------------
+
+    """
+        SED{T, N, A<:AbstractArray{T, N}} <: AbstractArray{T, N}
+
+    A container for a (stochastic or deterministic) distribution with optional
+    dependencies on other variables.
+
+    # Fields
+    - `data::A`: Array holding the generated values.
+    - `min, max, mean, median, sigma, sum`: Optional distribution parameters.
+    - `random::Bool`: If `true`, generate data randomly (using `rand`); otherwise by quantiles.
+    - `normalize::Bool`: If `true`, normalize the generated data.
+    - `dependent::NamedTuple`: Specifies dependencies. In the simplest case each key (other than `fun`)
+       is taken as a coefficient for the corresponding variable. If a key `:fun` is present, its value
+       (which must be a function) is used to compute the dependent contribution.
+    - `distribution`: The base distribution type (e.g. `Uniform`, `LogNormal`, etc.).
+          - `dependency_function::Union{Function,AbstractString,Nothing}`: A function or expression that
+             combines the independent data with the dependent contribution. (Default: elementwise
+             addition.) If a `String`, variables in `dependent` (or inferred from the string) and `sed`
+             (the independent vector) are in scope.
+    """
+    @kwdef mutable struct SED{T,N,A<:AbstractArray{T,N}} <: AbstractArray{T,N}
+        data::A = nothing
+        min::Union{Nothing,Float64} = nothing
+        max::Union{Nothing,Float64} = nothing
+        mean::Union{Nothing,Float64} = nothing
+        median::Union{Nothing,Float64} = nothing
+        sigma::Union{Nothing,Float64} = nothing
+        sum::Union{Nothing,Float64} = nothing
+        random::Bool = false
+        normalize::Bool = false
+        dependent::NamedTuple = NamedTuple()   # e.g., (ē = 1.0, q = 1.0, r = 1.0, fun = (dep -> (dep.ē * dep.q) / dep.r))
+        distribution::Any = Uniform              # e.g., Uniform, LogNormal, etc.
         dependency_function::Union{Function,AbstractString,Nothing} = (indep, dep) -> indep .+ dep
-		end
-		
-		# -----------------------------------------------------------------------------
-		# Helper Functions
-		# -----------------------------------------------------------------------------
-		
-		"""
-		    change(params::NamedTuple; kwargs...) -> NamedTuple
-		
-		Return a new NamedTuple with keys and values from `params` updated by `kwargs`.
-		"""
-		change(params::NamedTuple; kwargs...) = (; params..., kwargs...)
-		
-		"""
-		    lognormal_range(min::Float64; stop::Float64 = 1.0, length::Int = 10) -> Vector{Float64}
-		
-		Generate `length` values logarithmically spaced between `min` and `stop`.
-		If `min` is zero, it is replaced with a small positive value.
-		"""
-		function lognormal_range(min::Float64; stop::Float64 = 1.0, length::Int = 10)
-		    min = (min == 0.0) ? 0.01 : min
-		    stop = (min > stop) ? min + 0.01 : stop
-		    if length == 1
-		        return [(min + stop) / 2]
-		    else
-		        qs = collect(range(1/length, stop = 1 - 1/length, length = length))
-		        lr = quantile.(Normal(0.0, 2.0), qs)
-		        lr .-= lr[1]
-		        lr ./= lr[end]
-		        lr .*= (log(stop) - log(min))
-		        lr .+= log(min)
-		        return exp.(lr)
-		    end
-		end
-		
-		# -----------------------------------------------------------------------------
-		# Dependency Resolution
-		# -----------------------------------------------------------------------------
-		
-		"""
-		    apply_dependencies!(sed::SED, N::Int, context::NamedTuple) -> sed
-		
-		Updates `sed.data` by combining its independent data with a dependent contribution.
-		The dependent contribution is computed from the dependency specification in `sed.dependent`
-		using the provided `context`. The key `:fun` (if present) is reserved for a custom function
-		and is not used to scale dependency variables.
-		"""
+    end
+
+    # -----------------------------------------------------------------------------
+    # Helper Functions
+    # -----------------------------------------------------------------------------
+
+    """
+        change(params::NamedTuple; kwargs...) -> NamedTuple
+
+    Return a new NamedTuple with keys and values from `params` updated by `kwargs`.
+    """
+    change(params::NamedTuple; kwargs...) = (; params..., kwargs...)
+
+    """
+        lognormal_range(min::Float64; stop::Float64 = 1.0, length::Int = 10) -> Vector{Float64}
+
+    Generate `length` values logarithmically spaced between `min` and `stop`.
+    If `min` is zero, it is replaced with a small positive value.
+    """
+    function lognormal_range(min::Float64; stop::Float64=1.0, length::Int=10)
+        min = (min == 0.0) ? 0.01 : min
+        stop = (min > stop) ? min + 0.01 : stop
+        if length == 1
+            return [(min + stop) / 2]
+        else
+            qs = collect(range(1 / length, stop=1 - 1 / length, length=length))
+            lr = quantile.(Normal(0.0, 2.0), qs)
+            lr .-= lr[1]
+            lr ./= lr[end]
+            lr .*= (log(stop) - log(min))
+            lr .+= log(min)
+            return exp.(lr)
+        end
+    end
+
+    # -----------------------------------------------------------------------------
+    # Dependency Resolution
+    # -----------------------------------------------------------------------------
+
+    """
+        apply_dependencies!(sed::SED, N::Int, context::NamedTuple) -> sed
+
+    Updates `sed.data` by combining its independent data with a dependent contribution.
+    The dependent contribution is computed from the dependency specification in `sed.dependent`
+    using the provided `context`. The key `:fun` (if present) is reserved for a custom function
+    and is not used to scale dependency variables.
+    """
     # Extract dependency symbols from a string expression by finding symbols
     # that also exist as keys in the provided context. Excludes the special
     # identifier `sed` which refers to the independent values.
@@ -341,7 +341,7 @@ begin
 
         # Collect dependency values for all referenced keys (excluding :fun)
         keys_list = [k for k in keys(sed.dependent) if k != :fun]
-        depvals = Dict{Symbol, Any}()
+        depvals = Dict{Symbol,Any}()
         for k in keys_list
             haskey(context, k) || error("Context does not contain dependency variable $(k)")
             v = context[k]
@@ -351,7 +351,7 @@ begin
         # -- Case 1: legacy `:fun` inside `dependent`
         if haskey(sed.dependent, :fun)
             fun = sed.dependent.fun
-            scaled = Dict{Symbol, Any}()
+            scaled = Dict{Symbol,Any}()
             for k in keys_list
                 factor = sed.dependent[k]
                 dv = depvals[k]
@@ -399,8 +399,13 @@ begin
                     error("Unknown variable(s) in dependency_fun: $(missing). Available: $(available). The special name `sed` refers to the base vector.")
                 end
                 ex = Meta.parse(df)
-                assigns = [:( $(k) = $(depvals[k]) ) for k in keys_list]
-                let_block = :(let sed = $(indep); $(Expr(:block, assigns...)); $ex; end)
+                assigns = [:($(k) = $(depvals[k])) for k in keys_list]
+                let_block = :(
+                    let sed = $(indep)
+                        $(Expr(:block, assigns...))
+                        $ex
+                    end
+                )
                 sed.data = Core.eval(@__MODULE__, let_block)
                 return sed
             end
@@ -415,63 +420,63 @@ begin
         sed.data = sed.dependency_function(sed.data, dep_sum)
         return sed
     end
-		
-		
-		"""
-		    is_distribution_type(sed::SED, T::DataType) -> Bool
-		
-		Returns true if `sed.distribution` is either exactly the bare type `T`
-		(or a subtype of `T` when stored as a bare type) or is an instance of `T`.
-		"""
-		function is_distribution_type(sed, dist)
-		    return sed.distribution == dist || sed.distribution isa dist
-		end
-		
-		"""
-		    has_dependencies(sed::SED) -> Bool
-		
-		Returns true if the SED has dependencies.
-		"""
-		function has_dependencies(sed::SED)
-		    return !isempty(sed.dependent)
-		end
-		
-		"""
-		    is_property_name(s::Symbol, property_name::Symbol) -> Bool
-		
-		Check if a symbol matches a parameter name, handling special cases
-		like w̃ and ū.
-		"""
-		function is_property_name(s::Symbol, property_name::Symbol)
-		    return s == property_name || 
-		           (s == :w && property_name == :w̃) ||
-		           (s == :u && property_name == :ū)
-		end
-		
-		"""
-		    find_sed_by_name(context::NamedTuple, name::Symbol) -> Union{SED, Nothing}
-		
-		Find an SED by name in the context, handling special cases for w̃ and ū.
-		"""
-		function find_sed_by_name(context::NamedTuple, name::Symbol)
-		    for (k, v) in pairs(context)
-		        if v isa SED && is_property_name(name, k)
-		            return v
-		        end
-		    end
-		    return nothing
-		end
-		
-		# -----------------------------------------------------------------------------
-		# Distribution Generation
-		# -----------------------------------------------------------------------------
-		
-		"""
-		    generate_distribution!(sed::SED, N::Int) -> sed
-		
-		Generate the distribution data for the SED, without applying dependencies.
-		"""
-		function generate_distribution!(sed::SED, N::Int)
+
+
+    """
+        is_distribution_type(sed::SED, T::DataType) -> Bool
+
+    Returns true if `sed.distribution` is either exactly the bare type `T`
+    (or a subtype of `T` when stored as a bare type) or is an instance of `T`.
+    """
+    function is_distribution_type(sed, dist)
+        return sed.distribution == dist || sed.distribution isa dist
+    end
+
+    """
+        has_dependencies(sed::SED) -> Bool
+
+    Returns true if the SED has dependencies.
+    """
+    function has_dependencies(sed::SED)
+        return !isempty(sed.dependent)
+    end
+
+    """
+        is_property_name(s::Symbol, property_name::Symbol) -> Bool
+
+    Check if a symbol matches a parameter name, handling special cases
+    like w̃ and ū.
+    """
+    function is_property_name(s::Symbol, property_name::Symbol)
+        return s == property_name ||
+               (s == :w && property_name == :w̃) ||
+               (s == :u && property_name == :ū)
+    end
+
+    """
+        find_sed_by_name(context::NamedTuple, name::Symbol) -> Union{SED, Nothing}
+
+    Find an SED by name in the context, handling special cases for w̃ and ū.
+    """
+    function find_sed_by_name(context::NamedTuple, name::Symbol)
+        for (k, v) in pairs(context)
+            if v isa SED && is_property_name(name, k)
+                return v
+            end
+        end
+        return nothing
+    end
+
+    # -----------------------------------------------------------------------------
+    # Distribution Generation
+    # -----------------------------------------------------------------------------
+
+    """
+        generate_distribution!(sed::SED, N::Int) -> sed
+
+    Generate the distribution data for the SED, without applying dependencies.
+    """
+    function generate_distribution!(sed::SED, N::Int)
         rev = false  # Flag for reversed quantiles
         # If no distribution parameters are provided but this SED will be
         # computed from dependencies, initialize a zero vector and skip
@@ -482,135 +487,135 @@ begin
             sed.data = zeros(eltype(sed.data), N)
             return sed
         end
-		    if is_distribution_type(sed, LogNormal)
-		        # LogNormal branch...
-		        if sed.min !== nothing && sed.max !== nothing
-		            rev = sed.min > sed.max
-		            if sed.max != sed.min && N > 1
-		                tmp = lognormal_range(minimum((sed.min, sed.max)),
-		                                      stop = maximum((sed.min, sed.max)),
-		                                      length = N)
-		                medianLN = median(tmp)
-		                spreadLN = std(log.(tmp))
-		                sed.distribution = LogNormal(log(medianLN), spreadLN)
-		            else
-		                sed.distribution = Constant(N == 1 ? (sed.min + sed.max) / 2 : sed.min)
-		            end
-		        elseif sed.mean !== nothing && sed.sigma !== nothing
-		            rev = sed.sigma < 0
-		            sed.distribution = (sed.sigma != 0.0) ?
-		                LogNormal(log(sed.mean) - abs(sed.sigma)^2/2, abs(sed.sigma)) :
-		                Constant(sed.mean)
-		        elseif sed.median !== nothing && sed.sigma !== nothing
-		            rev = sed.sigma < 0
-		            sed.distribution = (sed.sigma != 0.0) ?
-		                LogNormal(log(sed.median), abs(sed.sigma)) :
-		                Constant(sed.median)
-		        end
-		        if sed.random
-		            sed.data = rand(sed.distribution, N)
-		        else
-		            qs = quantile.(Ref(sed.distribution), range(1 / N, stop = 1 - 1 / N, length = N))
-		            sed.data = (N > 1) ? (rev ? reverse(qs) : qs) : [quantile(sed.distribution, 0.5)]
-		        end
-		
-		    elseif is_distribution_type(sed, Uniform)
-		        # Uniform branch...
-		        if sed.min !== nothing && sed.max !== nothing
-		            rev = sed.min > sed.max
-		            if sed.max != sed.min
-		                sed.distribution = Uniform(minimum((sed.min, sed.max)),
-		                                           maximum((sed.min, sed.max)))
-		            else
-		                sed.distribution = Constant(sed.min)
-		            end
-		        elseif sed.mean !== nothing && sed.sigma !== nothing
-		            rev = sed.sigma < 0
-		            sed.distribution = (sed.sigma != 0.0) ?
-		                Uniform(sed.mean - abs(sed.sigma)/2, sed.mean + abs(sed.sigma)/2) :
-		                Constant(sed.mean)
-		        elseif sed.median !== nothing && sed.sigma !== nothing
-		            rev = sed.sigma < 0
-		            sed.distribution = (sed.sigma != 0.0) ?
-		                Uniform(sed.median - abs(sed.sigma)/2, sed.median + abs(sed.sigma)/2) :
-		                Constant(sed.median)
-		        end
-		        if sed.random
-		            sed.data = rand(sed.distribution, N)
-		        else
-		            qs = quantile.(Ref(sed.distribution), range(1 / N, stop = 1 - 1 / N, length = N))
-		            sed.data = (N == 1) ? [quantile(sed.distribution, 0.5)] : (rev ? reverse(qs) : qs)
-		        end
-		    elseif is_distribution_type(sed, Dirac)
-		        p = sed.mean !== nothing ? sed.mean :
-		        sed.distribution = Dirac(p)
-		        sed.data = rand(sed.distribution, N)
-		    elseif is_distribution_type(sed, Bernoulli)
-		        # Bernoulli branch: use sed.mean as the probability parameter.
-		        p = sed.mean !== nothing ? sed.mean :
-		            error("For Bernoulli, please specify the probability in sed.mean")
-		        sed.distribution = Bernoulli(p)
-		        if sed.random
-		            sed.data = rand(sed.distribution, N)
-		        else
-		            # For a discrete distribution like Bernoulli, quantiles are defined (0 or 1)
-		            qs = quantile.(Ref(sed.distribution), range(1 / N, stop = 1 - 1 / N, length = N))
-		            sed.data = qs
-		        end
-		    # ... other branches for ConstantDistribution, Exponential, Beta, etc.
-		
-		    else
-		        error("Unsupported distribution type: $(sed.distribution)")
-		    end
-		
-		    if sed.normalize
-		        sed.data .= sed.data ./ N
-		    end
-		
-		    return sed
-		end
-		
-		"""
-		    dist!(sed::SED, N::Int; context=nothing) -> sed
-		
-		Generate (or update) `sed.data` with `N` points using the specified distribution.
-		After generating the independent data, apply dependency calculations using the
-		provided `context`.
-		"""
-		function dist!(sed::SED, N::Int; context=nothing)
-		    # Generate the distribution
-		    generate_distribution!(sed, N)
-		    
-		    # Apply dependencies if context is provided
-		    if context !== nothing
-		        apply_dependencies!(sed, N, context)
-		    end
-		    
-		    return sed
-		end
-		
-		"""
-		    dist!(s, param_name::Symbol) -> SED
-		
-		Generate distributions for the SED parameter specified by name.
-		Uses s.N as the length of the distribution.
-		"""
-		function dist!(s, param_name::Symbol)
-		    N = s.N
-		    sed = find_sed_by_name(s, param_name)
-		    if sed === nothing
-		        error("Could not find SED parameter named $(param_name) in the scenario")
-		    end
-		    return dist!(sed, N; context=s)
-		end
-		
-		"""
-		    dist!(s) -> NamedTuple
-		
-		Generate distributions for all SED parameters in the scenario.
-		First processes independent SEDs, then dependent ones.
-		Uses s.N as the length of the distributions.
-		"""
+        if is_distribution_type(sed, LogNormal)
+            # LogNormal branch...
+            if sed.min !== nothing && sed.max !== nothing
+                rev = sed.min > sed.max
+                if sed.max != sed.min && N > 1
+                    tmp = lognormal_range(minimum((sed.min, sed.max)),
+                        stop=maximum((sed.min, sed.max)),
+                        length=N)
+                    medianLN = median(tmp)
+                    spreadLN = std(log.(tmp))
+                    sed.distribution = LogNormal(log(medianLN), spreadLN)
+                else
+                    sed.distribution = Constant(N == 1 ? (sed.min + sed.max) / 2 : sed.min)
+                end
+            elseif sed.mean !== nothing && sed.sigma !== nothing
+                rev = sed.sigma < 0
+                sed.distribution = (sed.sigma != 0.0) ?
+                                   LogNormal(log(sed.mean) - abs(sed.sigma)^2 / 2, abs(sed.sigma)) :
+                                   Constant(sed.mean)
+            elseif sed.median !== nothing && sed.sigma !== nothing
+                rev = sed.sigma < 0
+                sed.distribution = (sed.sigma != 0.0) ?
+                                   LogNormal(log(sed.median), abs(sed.sigma)) :
+                                   Constant(sed.median)
+            end
+            if sed.random
+                sed.data = rand(sed.distribution, N)
+            else
+                qs = quantile.(Ref(sed.distribution), range(1 / N, stop=1 - 1 / N, length=N))
+                sed.data = (N > 1) ? (rev ? reverse(qs) : qs) : [quantile(sed.distribution, 0.5)]
+            end
+
+        elseif is_distribution_type(sed, Uniform)
+            # Uniform branch...
+            if sed.min !== nothing && sed.max !== nothing
+                rev = sed.min > sed.max
+                if sed.max != sed.min
+                    sed.distribution = Uniform(minimum((sed.min, sed.max)),
+                        maximum((sed.min, sed.max)))
+                else
+                    sed.distribution = Constant(sed.min)
+                end
+            elseif sed.mean !== nothing && sed.sigma !== nothing
+                rev = sed.sigma < 0
+                sed.distribution = (sed.sigma != 0.0) ?
+                                   Uniform(sed.mean - abs(sed.sigma) / 2, sed.mean + abs(sed.sigma) / 2) :
+                                   Constant(sed.mean)
+            elseif sed.median !== nothing && sed.sigma !== nothing
+                rev = sed.sigma < 0
+                sed.distribution = (sed.sigma != 0.0) ?
+                                   Uniform(sed.median - abs(sed.sigma) / 2, sed.median + abs(sed.sigma) / 2) :
+                                   Constant(sed.median)
+            end
+            if sed.random
+                sed.data = rand(sed.distribution, N)
+            else
+                qs = quantile.(Ref(sed.distribution), range(1 / N, stop=1 - 1 / N, length=N))
+                sed.data = (N == 1) ? [quantile(sed.distribution, 0.5)] : (rev ? reverse(qs) : qs)
+            end
+        elseif is_distribution_type(sed, Dirac)
+            p = sed.mean !== nothing ? sed.mean :
+                sed.distribution = Dirac(p)
+            sed.data = rand(sed.distribution, N)
+        elseif is_distribution_type(sed, Bernoulli)
+            # Bernoulli branch: use sed.mean as the probability parameter.
+            p = sed.mean !== nothing ? sed.mean :
+                error("For Bernoulli, please specify the probability in sed.mean")
+            sed.distribution = Bernoulli(p)
+            if sed.random
+                sed.data = rand(sed.distribution, N)
+            else
+                # For a discrete distribution like Bernoulli, quantiles are defined (0 or 1)
+                qs = quantile.(Ref(sed.distribution), range(1 / N, stop=1 - 1 / N, length=N))
+                sed.data = qs
+            end
+            # ... other branches for ConstantDistribution, Exponential, Beta, etc.
+
+        else
+            error("Unsupported distribution type: $(sed.distribution)")
+        end
+
+        if sed.normalize
+            sed.data .= sed.data ./ N
+        end
+
+        return sed
+    end
+
+    """
+        dist!(sed::SED, N::Int; context=nothing) -> sed
+
+    Generate (or update) `sed.data` with `N` points using the specified distribution.
+    After generating the independent data, apply dependency calculations using the
+    provided `context`.
+    """
+    function dist!(sed::SED, N::Int; context=nothing)
+        # Generate the distribution
+        generate_distribution!(sed, N)
+
+        # Apply dependencies if context is provided
+        if context !== nothing
+            apply_dependencies!(sed, N, context)
+        end
+
+        return sed
+    end
+
+    """
+        dist!(s, param_name::Symbol) -> SED
+
+    Generate distributions for the SED parameter specified by name.
+    Uses s.N as the length of the distribution.
+    """
+    function dist!(s, param_name::Symbol)
+        N = s.N
+        sed = find_sed_by_name(s, param_name)
+        if sed === nothing
+            error("Could not find SED parameter named $(param_name) in the scenario")
+        end
+        return dist!(sed, N; context=s)
+    end
+
+    """
+        dist!(s) -> NamedTuple
+
+    Generate distributions for all SED parameters in the scenario.
+    First processes independent SEDs, then dependent ones.
+    Uses s.N as the length of the distributions.
+    """
     # Build dependency graph for SED fields in a NamedTuple context.
     # Returns (nodes, edges, order), where edges[k] is a Vector of symbols that k depends on,
     # and order is a valid topological ordering of nodes.
@@ -622,7 +627,7 @@ begin
         for (k, v) in pairs(s)
             is_sed_val(v) && push!(sedkeys, k)
         end
-        deps = Dict{Symbol, Vector{Symbol}}(k => Symbol[] for k in sedkeys)
+        deps = Dict{Symbol,Vector{Symbol}}(k => Symbol[] for k in sedkeys)
         for k in sedkeys
             v = getfield(s, k)
             if is_sed_val(v) && has_dependencies(v)
@@ -638,7 +643,11 @@ begin
             end
         end
         indeg = Dict(k => 0 for k in sedkeys)
-        for k in sedkeys; for d in deps[k]; indeg[k] += 1; end; end
+        for k in sedkeys
+            for d in deps[k]
+                indeg[k] += 1
+            end
+        end
         ready = [k for k in sedkeys if indeg[k] == 0]
         order = Symbol[]
         while !isempty(ready)
@@ -670,66 +679,66 @@ begin
         end
         return s
     end
-		
-		"""
-		    dist!(context::NamedTuple, N::Int) -> NamedTuple
-		
-		Applies `dist!(sed, N, context)` to each SED in the provided context and returns
-		a new NamedTuple with the updated SEDs.
-		"""
-		function dist!(context::NamedTuple, N::Int)
-		    new_context = map(x -> (x isa SED ? dist!(x, N; context=context) : x), context)
-		    return new_context
-		end
-		
-		# -----------------------------------------------------------------------------
-		# Making SED Behave Like an Array
-		# -----------------------------------------------------------------------------
-		
-		Base.size(sed::SED) = size(sed.data)
-		Base.getindex(sed::SED, idx...) = getindex(sed.data, idx...)
-		Base.setindex!(sed::SED, value, idx...) = setindex!(sed.data, value, idx...)
-		
-		"""
-		    similar(sed::SED, ::Type{T}, dims::Dims) -> SED
-		
-		Creates a new SED instance with an uninitialized data array of type `T` and dimensions
-		`dims`, copying all other parameters from the original.
-		"""
-		function Base.similar(sed::SED{T, N, A}, ::Type{T}, dims::Dims) where {T, N, A<:AbstractArray{T, N}}
-		    return SED(
-		        data = similar(sed.data, T, dims),
-		        min = sed.min,
-		        max = sed.max,
-		        mean = sed.mean,
-		        median = sed.median,
-		        sigma = sed.sigma,
-		        sum = sed.sum,
-		        random = sed.random,
-		        normalize = sed.normalize,
-		        dependent = sed.dependent,
-		        distribution = sed.distribution,
-		        dependency_function = sed.dependency_function
-		    )
-		end
-		
-		Base.iterate(sed::SED, state...) = iterate(sed.data, state...)
-		
-		# -----------------------------------------------------------------------------
-		# Constructor Function
-		# -----------------------------------------------------------------------------
-		
-		"""
-		    sed(; data=nothing, min=nothing, max=nothing, kwargs...) -> SED
-		
-		Construct a new SED instance. If `data` is provided, its element type and dimensionality
-		are used; otherwise, an empty array of type `Float64` is created. Additional keyword arguments
-		are passed directly to the SED constructor.
-		"""
-    function sed(; data = nothing, min = nothing, max = nothing, kwargs...)
+
+    """
+        dist!(context::NamedTuple, N::Int) -> NamedTuple
+
+    Applies `dist!(sed, N, context)` to each SED in the provided context and returns
+    a new NamedTuple with the updated SEDs.
+    """
+    function dist!(context::NamedTuple, N::Int)
+        new_context = map(x -> (x isa SED ? dist!(x, N; context=context) : x), context)
+        return new_context
+    end
+
+    # -----------------------------------------------------------------------------
+    # Making SED Behave Like an Array
+    # -----------------------------------------------------------------------------
+
+    Base.size(sed::SED) = size(sed.data)
+    Base.getindex(sed::SED, idx...) = getindex(sed.data, idx...)
+    Base.setindex!(sed::SED, value, idx...) = setindex!(sed.data, value, idx...)
+
+    """
+        similar(sed::SED, ::Type{T}, dims::Dims) -> SED
+
+    Creates a new SED instance with an uninitialized data array of type `T` and dimensions
+    `dims`, copying all other parameters from the original.
+    """
+    function Base.similar(sed::SED{T,N,A}, ::Type{T}, dims::Dims) where {T,N,A<:AbstractArray{T,N}}
+        return SED(
+            data=similar(sed.data, T, dims),
+            min=sed.min,
+            max=sed.max,
+            mean=sed.mean,
+            median=sed.median,
+            sigma=sed.sigma,
+            sum=sed.sum,
+            random=sed.random,
+            normalize=sed.normalize,
+            dependent=sed.dependent,
+            distribution=sed.distribution,
+            dependency_function=sed.dependency_function
+        )
+    end
+
+    Base.iterate(sed::SED, state...) = iterate(sed.data, state...)
+
+    # -----------------------------------------------------------------------------
+    # Constructor Function
+    # -----------------------------------------------------------------------------
+
+    """
+        sed(; data=nothing, min=nothing, max=nothing, kwargs...) -> SED
+
+    Construct a new SED instance. If `data` is provided, its element type and dimensionality
+    are used; otherwise, an empty array of type `Float64` is created. Additional keyword arguments
+    are passed directly to the SED constructor.
+    """
+    function sed(; data=nothing, min=nothing, max=nothing, kwargs...)
         kw = (; kwargs...)
         if haskey(kw, :dependency_fun) && !haskey(kw, :dependency_function)
-            kw = change(kw; dependency_function = kw.dependency_fun)
+            kw = change(kw; dependency_function=kw.dependency_fun)
             # do not carry dependency_fun forward
             pairs = [(k => getproperty(kw, k)) for k in keys(kw) if k != :dependency_fun]
             kw = (; pairs...)
@@ -739,32 +748,36 @@ begin
             if depval isa Tuple
                 syms = Tuple(depval)
                 nt = NamedTuple{syms}(ntuple(_ -> 1.0, length(syms)))
-                kw = change(kw; dependent = nt)
+                kw = change(kw; dependent=nt)
             elseif depval isa Vector{Symbol}
                 syms = Tuple(depval)
                 nt = NamedTuple{syms}(ntuple(_ -> 1.0, length(syms)))
-                kw = change(kw; dependent = nt)
+                kw = change(kw; dependent=nt)
             end
         end
 
         # filter to allowed SED keywords
-        allowed = Set([:min,:max,:mean,:median,:sigma,:sum,:random,:normalize,:dependent,:distribution,:dependency_function])
+        allowed = Set([:min, :max, :mean, :median, :sigma, :sum, :random, :normalize, :dependent, :distribution, :dependency_function])
         filtered_pairs = [(k => getproperty(kw, k)) for k in keys(kw) if k in allowed]
         filtered_kw = (; filtered_pairs...)
 
-        T = Float64; ND = 1; A = Array{T, ND}
+        T = Float64
+        ND = 1
+        A = Array{T,ND}
         if data !== nothing
-            T = eltype(data); ND = ndims(data); A = typeof(data)
+            T = eltype(data)
+            ND = ndims(data)
+            A = typeof(data)
         else
-            data = Array{T, ND}(undef, 0)
+            data = Array{T,ND}(undef, 0)
         end
-        return SED{T, ND, A}(; data, min, max, filtered_kw...)
+        return SED{T,ND,A}(; data, min, max, filtered_kw...)
     end
 
 end
 
 # Visualisation functions
-begin 
+begin
 
     """
     Module containing visualization functions for SocialEconomicDiversity.
@@ -801,7 +814,7 @@ begin
     """
     function attractor_plot!(axis, sol; color=:darkorange, markersize=15, marker=:circle)
         N = sol.prob.p.N
-        scatter!(axis, [sol[N+1,end-2]], [sum(sol[1:N,end-2]./sol.prob.p.μ(sol.u[end-2],sol.prob.p,sol.t[end-2])./N)]; color, markersize, marker)
+        scatter!(axis, [sol[N+1, end-2]], [sum(sol[1:N, end-2] ./ sol.prob.p.μ(sol.u[end-2], sol.prob.p, sol.t[end-2]) ./ N)]; color, markersize, marker)
     end
 
     """
@@ -811,9 +824,9 @@ begin
     """
     function trajecory_plot!(axis, sol; color=:darkorange, startcolor=:lightgray, linewidth=2)
         scenario = sol.prob.p
-        lines!(axis, 
-            [u[scenario.N+1] for u in sol.u[1:end-2]], 
-            [sum(u[1:scenario.N]./scenario.μ(u,scenario,sol.t[i]))/scenario.N for (i,u) in enumerate(sol.u[1:end-2])]; 
+        lines!(axis,
+            [u[scenario.N+1] for u in sol.u[1:end-2]],
+            [sum(u[1:scenario.N] ./ scenario.μ(u, scenario, sol.t[i])) / scenario.N for (i, u) in enumerate(sol.u[1:end-2])];
             color, linestyle=:dot, colormap=cgrad([startcolor, color], [0.0, 0.5, 1.0]), linewidth)
     end
 
@@ -838,8 +851,8 @@ begin
         scenario = sol.prob.p
         y = range(0.0, stop=1.0, length=100)
         if haskey(scenario, :policy_target)
-            Y = scenario.policy_target==:effort ? ones(length(y)) : y
-            lines!(axis, y, Φ.(1 .-(1-scenario.regulation)./Y, Ref(scenario)); color, linewidth, linestyle)
+            Y = scenario.policy_target == :effort ? ones(length(y)) : y
+            lines!(axis, y, Φ.(1 .- (1 - scenario.regulation) ./ Y, Ref(scenario)); color, linewidth, linestyle)
         end
     end
 
@@ -852,11 +865,11 @@ begin
 
     Returns a Makie Figure.
     """
-    function dependency_graph_plot(s; node_color=:steelblue, edge_color=:gray, markersize=14, fontsize=12, figsize=(700, 450))
+    function dependency_graph_plot(s; node_color=:steelblue, edge_color=:gray, markersize=28, fontsize=12, figsize=(700, 450))
         g = dependency_graph(s)
 
         # Build reverse adjacency: dep -> [dependents]
-        children = Dict{Symbol, Vector{Symbol}}(k => Symbol[] for k in g.nodes)
+        children = Dict{Symbol,Vector{Symbol}}(k => Symbol[] for k in g.nodes)
         for (k, deps) in g.edges
             for d in deps
                 push!(children[d], k)
@@ -864,7 +877,7 @@ begin
         end
 
         # Compute levels: level[k] = max(level[dep] + 1)
-        level = Dict{Symbol, Int}()
+        level = Dict{Symbol,Int}()
         for k in g.order
             deps = get(g.edges, k, Symbol[])
             if isempty(deps)
@@ -875,7 +888,7 @@ begin
         end
 
         # Group nodes by level
-        levels = Dict{Int, Vector{Symbol}}()
+        levels = Dict{Int,Vector{Symbol}}()
         for k in g.nodes
             l = level[k]
             if !haskey(levels, l)
@@ -885,7 +898,7 @@ begin
         end
 
         # Assign positions: x spaced within level, y by level
-        pos = Dict{Symbol, Point2f}()
+        pos = Dict{Symbol,Point2f}()
         max_level = maximum(values(level))
         for (l, ks) in levels
             n = length(ks)
@@ -897,14 +910,18 @@ begin
         end
 
         fig = Figure(size=figsize)
-        ax = Axis(fig[1, 1]; xticksvisible=false, yticksvisible=false, xgridvisible=false, ygridvisible=false)
-        limits!(ax, 0, 1, 0, 1)
+        ax = Axis(fig[1, 1])
+        hidespines!(ax)
+        hidexdecorations!(ax)
+        hideydecorations!(ax)
+
 
         # Draw edges with arrows from dep -> k
-        r = 0.03
+        r = 0.035
         for (k, deps) in g.edges
             for d in deps
-                p1 = pos[d]; p2 = pos[k]
+                p1 = pos[d]
+                p2 = pos[k]
                 v = p2 - p1
                 nv = norm(v)
                 if nv == 0
@@ -914,7 +931,7 @@ begin
                 start = p1 + u * r
                 stop = p2 - u * r
                 dxdy = stop - start
-                arrows!(ax, [start[1]], [start[2]], [dxdy[1]], [dxdy[2]]; color=edge_color, linewidth=2)
+                arrows2d!(ax, [start], [dxdy]; color=edge_color, shaftwidth=2)
             end
         end
 
@@ -923,24 +940,24 @@ begin
         ys = Float32[p[2] for p in values(pos)]
         scatter!(ax, xs, ys; color=node_color, markersize)
         for (k, p) in pos
-            text!(ax, p[1], p[2] + 0.035, text=String(k), align=(:center, :bottom), space=:relative, color=:black, fontsize)
+            text!(ax, p[1], p[2], text=String(k), align=(:center, :center), color=:white, fontsize)
         end
 
         fig
     end
 
     """
-        phase_plot!(axis, sol; show_trajectory=false, show_target=false, open_access_color=:lightgray, 
-                    incentive_line_color=:darkorange, impact_line_color=:darkorange, t=0.0, 
+        phase_plot!(axis, sol; show_trajectory=false, show_target=false, open_access_color=:lightgray,
+                    incentive_line_color=:darkorange, impact_line_color=:darkorange, t=0.0,
                     show_exploitation=true, show_oa=true)
 
     Create a phase plot with incentive and impact distributions, attractors, and trajectories.
     """
-    function phase_plot!(axis, sol; show_trajectory=false, show_target=false, open_access_color=:lightgray, 
-            incentive_line_color=:darkorange, impact_line_color=:darkorange, t=0.0, 
-            show_exploitation=true, show_oa=true, trajectory_color=:gray)
+    function phase_plot!(axis, sol; show_trajectory=false, show_target=false, open_access_color=:lightgray,
+        incentive_line_color=:darkorange, impact_line_color=:darkorange, t=0.0,
+        show_exploitation=true, show_oa=true, trajectory_color=:gray)
         if show_exploitation
-        poly!(axis, Rect(0, 0, 0.5, 1), color=HSLA(10, 0.0, 0.5, 0.1))
+            poly!(axis, Rect(0, 0, 0.5, 1), color=HSLA(10, 0.0, 0.5, 0.1))
         end
 
         scenario = sol.prob.p
@@ -951,15 +968,15 @@ begin
         γ_array = scenario.γ(sol.u[end], scenario, sol.t[end])
 
         if show_oa
-        oa = change(scenario, policy="Open Access", γ=γ, μ=μ, regulate=regulate, ϕ=ϕ)
-        oasol = sim(oa)
+            oa = change(scenario, policy="Open Access", γ=γ, μ=μ, regulate=regulate, ϕ=ϕ)
+            oasol = sim(oa)
         end
 
         if show_target
-        if haskey(scenario, :policy_target)
-        Y = scenario.policy_target==:effort ? ones(length(y)) : y
-        lines!(axis, y, Φ.(1 .-(1-scenario.regulation)./Y, Ref(scenario)), color=:darkorange, linestyle=:dot)
-        end
+            if haskey(scenario, :policy_target)
+                Y = scenario.policy_target == :effort ? ones(length(y)) : y
+                lines!(axis, y, Φ.(1 .- (1 - scenario.regulation) ./ Y, Ref(scenario)), color=:darkorange, linestyle=:dot)
+            end
         end
 
         # Cumulative incentive distributions
@@ -971,53 +988,53 @@ begin
         lines!(axis, y, Φ.(y, Ref(scenario); t), color=impact_line_color, linewidth=1)
 
         if show_trajectory
-        # Show trajectory
-        lines!(axis, 
-        [u[scenario.N+1] for u in sol.u[1:end-2]], 
-        [sum(u[1:scenario.N]./scenario.μ(u, scenario, sol.t[i]))/scenario.N for (i,u) in enumerate(sol.u[1:end-2])], 
-        color=scenario.policy=="Development" ? sol.t[1:end-2] : trajectory_color, 
-        linestyle=:dot, 
-        colormap=cgrad([:lightgray, :darkorange], [0.0, 0.5, 1.0]))
+            # Show trajectory
+            lines!(axis,
+                [u[scenario.N+1] for u in sol.u[1:end-2]],
+                [sum(u[1:scenario.N] ./ scenario.μ(u, scenario, sol.t[i])) / scenario.N for (i, u) in enumerate(sol.u[1:end-2])],
+                color=scenario.policy == "Development" ? sol.t[1:end-2] : trajectory_color,
+                linestyle=:dot,
+                colormap=cgrad([:lightgray, :darkorange], [0.0, 0.5, 1.0]))
         end
 
         # Show the attractor
-        scatter!(axis, [sol[N+1,end-2]], [sum(sol[1:N,end-2]./scenario.μ(sol.u[end-2], scenario, sol.t[end-2])./N)], color=:black, markersize=10)
+        scatter!(axis, [sol[N+1, end-2]], [sum(sol[1:N, end-2] ./ scenario.μ(sol.u[end-2], scenario, sol.t[end-2]) ./ N)], color=:black, markersize=10)
 
-        show_oa ? scatter!(axis, [oasol[N+1,end-2]], [sum(oasol[1:N,end-2]./oa.μ(oasol.u[end-2], oa, oasol.t[end-2])./N)], color=:black, markersize=15, marker='o') : nothing
+        show_oa ? scatter!(axis, [oasol[N+1, end-2]], [sum(oasol[1:N, end-2] ./ oa.μ(oasol.u[end-2], oa, oasol.t[end-2]) ./ N)], color=:black, markersize=15, marker='o') : nothing
 
-        if scenario.policy=="Development"
-        scatter!(axis, [sol[N+1,1]], [sum(sol[1:N,1]./scenario.μ(sol.u[end-1], scenario, sol.t[1])./N)], color=:white, markersize=15)
+        if scenario.policy == "Development"
+            scatter!(axis, [sol[N+1, 1]], [sum(sol[1:N, 1] ./ scenario.μ(sol.u[end-1], scenario, sol.t[1]) ./ N)], color=:white, markersize=15)
         end
 
         # Show the market price of use rights
-        scenario.policy=="Tradable Use Rights" ? text!(axis,0.95*sol.u[end][end-1],0.95*Γ.(sol.u[end][end-1], Ref(scenario), x=sol.u[end-1]), text="ϕ: "*string(round(sol[end,end], digits=2)), align=(:right,:top), space=:relative) : nothing
+        scenario.policy == "Tradable Use Rights" ? text!(axis, 0.95 * sol.u[end][end-1], 0.95 * Γ.(sol.u[end][end-1], Ref(scenario), x=sol.u[end-1]), text="ϕ: " * string(round(sol[end, end], digits=2)), align=(:right, :top), space=:relative) : nothing
         #scenario.policy=="Tradable Use Rights" ? arrows!(axis,sol.u[end][end-1]-sol.u[end][end] , Γ(sol.u[end][end-1], scenario, x=sol.u[end-1]) , 0.0, sol.u[end-1]) : nothing
     end
 
     function phase_plot(sol)
-        f=Figure()
-        a=Axis(f[1,1])
-        phase_plot!(a,sol)
+        f = Figure()
+        a = Axis(f[1, 1])
+        phase_plot!(a, sol)
         f
     end
 
     function plot(sol)
-        f=Figure()
-        a=Axis(f[1,1])
-        b=Axis(f[1,2])
-        phase_plot!(a,sol)
-        incomes_plot!(b,sol)
+        f = Figure()
+        a = Axis(f[1, 1])
+        b = Axis(f[1, 2])
+        phase_plot!(a, sol)
+        incomes_plot!(b, sol)
         f
     end
 
     """
-        arrow_arc!(ax, origin, radius, start_angle, stop_angle; linewidth=1, color=:black, 
+        arrow_arc!(ax, origin, radius, start_angle, stop_angle; linewidth=1, color=:black,
                 flip_arrow=false, linestyle=:dot)
 
     Draw an arc with arrows at the endpoints.
     """
-    function arrow_arc!(ax, origin, radius, start_angle, stop_angle; linewidth=1, color=:black, 
-                        flip_arrow=false, linestyle=:dot)
+    function arrow_arc!(ax, origin, radius, start_angle, stop_angle; linewidth=1, color=:black,
+        flip_arrow=false, linestyle=:dot)
         # Draw the arc
         arc!(ax, origin, radius, start_angle, stop_angle, linewidth=linewidth, color=color; linestyle)
 
@@ -1025,25 +1042,25 @@ begin
         point_on_circle(θ) = origin .+ radius * Point2f(cos(θ), sin(θ))
 
         # Calculate the direction of the arrow at the start and end of the arc
-        start_dir = Point2f(cos(start_angle + π/2 + (flip_arrow ? pi/2 : 0)), sin(start_angle + π/2 + (flip_arrow ? pi/2 : 0)))
-        end_dir = Point2f(cos(stop_angle - π/2 + (flip_arrow ? pi : 0)), sin(stop_angle - π/2 + (flip_arrow ? pi : 0)))
+        start_dir = Point2f(cos(start_angle + π / 2 + (flip_arrow ? pi / 2 : 0)), sin(start_angle + π / 2 + (flip_arrow ? pi / 2 : 0)))
+        end_dir = Point2f(cos(stop_angle - π / 2 + (flip_arrow ? pi : 0)), sin(stop_angle - π / 2 + (flip_arrow ? pi : 0)))
         dx = 0.001
-        
+
         # Add arrow at the start and end of the arc
-        arrows!(ax, [point_on_circle(start_angle)[1]], [point_on_circle(start_angle)[2]], 
-                [start_dir[1]]*dx, [start_dir[2]]*dx, color=color, linewidth=linewidth)
-        arrows!(ax, [point_on_circle(stop_angle)[1]], [point_on_circle(stop_angle)[2]], 
-                [end_dir[1]]*dx, [end_dir[2]]*dx, color=color, linewidth=linewidth)
+        arrows!(ax, [point_on_circle(start_angle)[1]], [point_on_circle(start_angle)[2]],
+            [start_dir[1]] * dx, [start_dir[2]] * dx, color=color, linewidth=linewidth)
+        arrows!(ax, [point_on_circle(stop_angle)[1]], [point_on_circle(stop_angle)[2]],
+            [end_dir[1]] * dx, [end_dir[2]] * dx, color=color, linewidth=linewidth)
     end
 
     """
-        arrow_arc_deg!(ax, origin, radius, start_angle_deg, stop_angle_deg; linewidth=1, color=:black, 
+        arrow_arc_deg!(ax, origin, radius, start_angle_deg, stop_angle_deg; linewidth=1, color=:black,
                     flip_arrow=false, linestyle=:dot, startarrow=false)
 
     Draw an arc with arrows at the endpoints, using degrees instead of radians.
     """
-    function arrow_arc_deg!(ax, origin, radius, start_angle_deg, stop_angle_deg; 
-                        linewidth=1, color=:black, flip_arrow=false, linestyle=:dot, startarrow=false, space=:relative)
+    function arrow_arc_deg!(ax, origin, radius, start_angle_deg, stop_angle_deg;
+        linewidth=1, color=:black, flip_arrow=false, linestyle=:dot, startarrow=false, space=:relative)
         # Helper to convert from degrees to radians
         deg2rad(θ_deg) = θ_deg * π / 180
 
@@ -1054,10 +1071,10 @@ begin
         #
         # This ensures that θ_deg = 0 => π/2 in radians => up.
         rad_start = deg2rad(90 - start_angle_deg)
-        rad_stop  = deg2rad(90 - stop_angle_deg)
+        rad_stop = deg2rad(90 - stop_angle_deg)
 
         # 1) Draw the arc in the new angles:
-        arc!(ax, origin, radius, rad_start, rad_stop, linewidth=linewidth, color=color; linestyle=linestyle,space)
+        arc!(ax, origin, radius, rad_start, rad_stop, linewidth=linewidth, color=color; linestyle=linestyle, space)
 
         # 2) Function to calculate a point on the circle at a given *degree* measure:
         point_on_circle_deg(θ_deg) = origin .+ radius * Point2f(
@@ -1067,12 +1084,12 @@ begin
 
         # 3) Arrow directions at start and end.
         start_dir = Point2f(
-            cos(rad_start + π/2 + (flip_arrow ? π/2 : 0)),
-            sin(rad_start + π/2 + (flip_arrow ? π/2 : 0))
+            cos(rad_start + π / 2 + (flip_arrow ? π / 2 : 0)),
+            sin(rad_start + π / 2 + (flip_arrow ? π / 2 : 0))
         )
         end_dir = Point2f(
-            cos(rad_stop - π/2 + (flip_arrow ? π : 0)),
-            sin(rad_stop - π/2 + (flip_arrow ? π : 0))
+            cos(rad_stop - π / 2 + (flip_arrow ? π : 0)),
+            sin(rad_stop - π / 2 + (flip_arrow ? π : 0))
         )
 
         # A small offset so the arrows do not vanish
@@ -1105,9 +1122,9 @@ begin
         inc = incomes(sol)
 
         # unpack for readability
-        res   = inc.resource
-        wage  = inc.wages
-        trd   = inc.trade
+        res = inc.resource
+        wage = inc.wages
+        trd = inc.trade
         total = inc.total
 
         # ordering
@@ -1117,23 +1134,23 @@ begin
         barplot!(ax, (res[idx] .+ wage[idx]), color=color, alpha=1.0, offset=trd[idx])
         # top bars: trade revenues
         barplot!(ax, trd[idx], color=color)
-        barplot!(ax, trd[idx], color=HSLA(0,0,0,0.2))
+        barplot!(ax, trd[idx], color=HSLA(0, 0, 0, 0.2))
         # dotted line: max nondimensional effort*price curve
 
-    dim=dimensional ? p.rpk : 1.0
-    μ = p.μ(sol.u[end], p, 0.0)
-    γ =  occursin("Protected Area", p.policy) || occursin("Exclusive Use Rights", p.policy) ? p.w̃ : p.γ(sol.u[end], p, 0.0)
-    line_data = μ .* γ .* dim
-    line_data = inc.wages_0.*dim
+        dim = dimensional ? p.rpk : 1.0
+        μ = p.μ(sol.u[end], p, 0.0)
+        γ = occursin("Protected Area", p.policy) || occursin("Exclusive Use Rights", p.policy) ? p.w̃ : p.γ(sol.u[end], p, 0.0)
+        line_data = μ .* γ .* dim
+        line_data = inc.wages_0 .* dim
         lines!(ax, line_data, linewidth=1, color=:white, linestyle=:solid)
-        
+
 
         if resource_incomes
-            id=findall(res[idx].>0.0)
+            id = findall(res[idx] .> 0.0)
             #=y=vcat(trd[id[1]],res[id].+trd[id],trd[reverse(id)])
             x=vcat(id[1],id,reverse(id))
             lines!(ax,x,y, color=:black)=#
-            scatter!(ax,id,total[idx[id]], color=:black, markersize=3)
+            scatter!(ax, id, total[idx[id]], color=:black, markersize=3)
             #scatter!(ax,id,trd[id], color=:black, markersize=4)
 
         end
@@ -1142,105 +1159,105 @@ begin
     end
 
 
-    function plot_policies(w,q; order=false, goal=:oRR, direct=false)
-        w̃= direct ? w : sed(data=w./q)
-        ū= direct ? q : sed(data=q)
+    function plot_policies(w, q; order=false, goal=:oRR, direct=false)
+        w̃ = direct ? w : sed(data=w ./ q)
+        ū = direct ? q : sed(data=q)
         # base() provides a default setup
         # scenario(s,args) takes a scenario s, and adds or changes any params, arg.
-        TUR=scenario(base();w̃,ū, policy="Tradable Use Rights", policy_target=:effort, market_rate=0.05, title="effort")
-        TUR_regscan=regulation_scan(TUR)
-        sTUR=sim(TUR,regulation=TUR_regscan.r[TUR_regscan[goal]])
+        TUR = scenario(base(); w̃, ū, policy="Tradable Use Rights", policy_target=:effort, market_rate=0.05, title="effort")
+        TUR_regscan = regulation_scan(TUR)
+        sTUR = sim(TUR, regulation=TUR_regscan.r[TUR_regscan[goal]])
         # Tradable quotas needs a market_rate parameter
 
-        TURy=scenario(base();w̃,ū, policy="Tradable Use Rights", policy_target=:yield, market_rate=0.05, title="yield")
-        TURy_regscan=regulation_scan(TURy)
-        sTURy=sim(TURy,regulation=TURy_regscan.r[TURy_regscan[goal]])
+        TURy = scenario(base(); w̃, ū, policy="Tradable Use Rights", policy_target=:yield, market_rate=0.05, title="yield")
+        TURy_regscan = regulation_scan(TURy)
+        sTURy = sim(TURy, regulation=TURy_regscan.r[TURy_regscan[goal]])
 
-        EURf=scenario(base();w̃,ū, policy="Exclusive Use Rights", reverse=false, title="low w̃ excluded")
-        EURf_regscan=regulation_scan(EURf)
-        sEURf=sim(EURf,regulation=EURf_regscan.r[EURf_regscan[goal]])
+        EURf = scenario(base(); w̃, ū, policy="Exclusive Use Rights", reverse=false, title="low w̃ excluded")
+        EURf_regscan = regulation_scan(EURf)
+        sEURf = sim(EURf, regulation=EURf_regscan.r[EURf_regscan[goal]])
         # Exclusive use rigths: exclusions of low w̃  set reverse=false (one could exclude by other criteria also e.g. ū ...)
 
-        EUR=scenario(base();w̃,ū, policy="Exclusive Use Rights", reverse=true, title="high w̃ excluded")
-        EUR_regscan=regulation_scan(EUR)
-        sEUR=sim(EUR,regulation=EUR_regscan.r[EUR_regscan[goal]])
+        EUR = scenario(base(); w̃, ū, policy="Exclusive Use Rights", reverse=true, title="high w̃ excluded")
+        EUR_regscan = regulation_scan(EUR)
+        sEUR = sim(EUR, regulation=EUR_regscan.r[EUR_regscan[goal]])
 
-        PA=scenario(base();w̃,ū, policy="Protected Area", m=0.3, title="")
-        PA_regscan=regulation_scan(PA)
-        
-        sPA=sim(PA,regulation=PA_regscan.r[PA_regscan[goal]])
-        f=Figure(size=(800,800))
-        OA=scenario(base();w̃,ū,title="")
-        sols=vcat(sim(OA),sEUR,sTUR,sPA,sEURf,sTURy)
+        PA = scenario(base(); w̃, ū, policy="Protected Area", m=0.3, title="")
+        PA_regscan = regulation_scan(PA)
+
+        sPA = sim(PA, regulation=PA_regscan.r[PA_regscan[goal]])
+        f = Figure(size=(800, 800))
+        OA = scenario(base(); w̃, ū, title="")
+        sols = vcat(sim(OA), sEUR, sTUR, sPA, sEURf, sTURy)
         function incometext(sol)
-            income=incomes(sol)
-            "R:"*string(round(sum(income.resource),digits=2))*"  T:"*string(round(sum(income.total),digits=2))*"  G:"*string(round(income.gini,digits=2))*" @"*string(round(haskey(sol.prob.p,:regulation) ? sol.prob.p.regulation : 0.0,digits=2))
+            income = incomes(sol)
+            "R:" * string(round(sum(income.resource), digits=2)) * "  T:" * string(round(sum(income.total), digits=2)) * "  G:" * string(round(income.gini, digits=2)) * " @" * string(round(haskey(sol.prob.p, :regulation) ? sol.prob.p.regulation : 0.0, digits=2))
         end
-    B=[]
+        B = []
         for i in 1:length(sols)
-        
-            j=  i>3 ?   2 : 0
-            k= i> 3 ? 3 : 0
-            
-            a=Axis(f[1+i-k,1+j], title=sols[i].prob.p.policy*"\n"*sols[i].prob.p.title)
-            b=Axis(f[1+i-k,2+j])
-            push!(B,b)
+
+            j = i > 3 ? 2 : 0
+            k = i > 3 ? 3 : 0
+
+            a = Axis(f[1+i-k, 1+j], title=sols[i].prob.p.policy * "\n" * sols[i].prob.p.title)
+            b = Axis(f[1+i-k, 2+j])
+            push!(B, b)
             hidespines!(a)
             hidespines!(b)
             hidedecorations!(a)
             hidedecorations!(b)
-            phase_plot!(a,sols[i])
-            if sols[i].prob.p.policy=="Exclusive Use Rights"
-                id=findall(sols[i].prob.p.R.==1.0)
-                y=range(0.0,stop=1.0,length=sols[i].prob.p.N)
-                z=Γ.(sols[i].prob.p.w̃[id], Ref(sols[i].prob.p))
-            
-                lines!(a,sols[i].prob.p.w̃[id],max.(0.005,z), color=:red, linewidth=2, label=sols[i].prob.p.title)
+            phase_plot!(a, sols[i])
+            if sols[i].prob.p.policy == "Exclusive Use Rights"
+                id = findall(sols[i].prob.p.R .== 1.0)
+                y = range(0.0, stop=1.0, length=sols[i].prob.p.N)
+                z = Γ.(sols[i].prob.p.w̃[id], Ref(sols[i].prob.p))
+
+                lines!(a, sols[i].prob.p.w̃[id], max.(0.005, z), color=:red, linewidth=2, label=sols[i].prob.p.title)
                 #axislegend(a)
-            elseif sols[i].prob.p.policy=="Tradable Use Rights"
+            elseif sols[i].prob.p.policy == "Tradable Use Rights"
 
             end
-            incomes_plot!(b,sols[i]; order)
-            text!(b,0.0,0.9,text=incometext(sols[i]), space=:relative, fontsize=12)
+            incomes_plot!(b, sols[i]; order)
+            text!(b, 0.0, 0.9, text=incometext(sols[i]), space=:relative, fontsize=12)
         end
-        C=Axis(f[1,1])
-        scatter!(C,w, label="w")
-        scatter!(C,q, label="q")
+        C = Axis(f[1, 1])
+        scatter!(C, w, label="w")
+        scatter!(C, q, label="q")
         axislegend(C, framevisible=false)
-        D=Axis(f[1,2], xlabel="w̃", ylabel="ū ")
-        scatter!(D,OA.w̃,OA.ū)
-        E=Axis(f[1,3])
-        incomes_plot!(E,sim(OA))
-        F=Axis(f[1,4])
-        incomes_plot!(F,sim(OA), order=true)
-        [hidespines!(a) for a in [C,D,E,F]]
+        D = Axis(f[1, 2], xlabel="w̃", ylabel="ū ")
+        scatter!(D, OA.w̃, OA.ū)
+        E = Axis(f[1, 3])
+        incomes_plot!(E, sim(OA))
+        F = Axis(f[1, 4])
+        incomes_plot!(F, sim(OA), order=true)
+        [hidespines!(a) for a in [C, D, E, F]]
         linkaxes!(B...)
         f
     end
 
 
-    function regscan(; u=false,inc=false,s=high_impact())
-        
-        policies=[
-        scenario(s,policy="Exclusive Use Rights", reverse=true)
-        scenario(s,policy="Exclusive Use Rights", reverse=false)
-        scenario(s,policy="Tradable Use Rights", policy_target=:effort, market_rate=0.05)
-        scenario(s,policy="Tradable Use Rights", policy_target=:yield, market_rate=0.05)
-        scenario(s,policy="Protected Area", m=0.3)
-        scenario(s,policy="Protected Area", m=0.5)
-        #scenario(s,policy="Economic Incentives", policy_target=:γ, policy_method=:taxation)
+    function regscan(; u=false, inc=false, s=high_impact())
+
+        policies = [
+            scenario(s, policy="Exclusive Use Rights", reverse=true)
+            scenario(s, policy="Exclusive Use Rights", reverse=false)
+            scenario(s, policy="Tradable Use Rights", policy_target=:effort, market_rate=0.05)
+            scenario(s, policy="Tradable Use Rights", policy_target=:yield, market_rate=0.05)
+            scenario(s, policy="Protected Area", m=0.3)
+            scenario(s, policy="Protected Area", m=0.5)
+            #scenario(s,policy="Economic Incentives", policy_target=:γ, policy_method=:taxation)
         ]
-        Labels=Dict(
-            :RR=>"Resource\nRevenues\nR",
-            :ToR=>"Total\nRevenues\nT",
-            :GI=>"Gini\nG ",
-            :EH=>"Ecological\nStatus\nE",
-            :RI=>"Impact\non\nbehaviour\nsum(|u^UO_i-u_i|)",
-            :Gov=>"Combined\nGovernance\ngoal\nR^0.5*T^1*G^-0.2*E^0",
-            :WR=>"Alternative\nincomes",
-            :IN=>"Income\ndistribution\n@optimal Gov"
+        Labels = Dict(
+            :RR => "Resource\nRevenues\nR",
+            :ToR => "Total\nRevenues\nT",
+            :GI => "Gini\nG ",
+            :EH => "Ecological\nStatus\nE",
+            :RI => "Impact\non\nbehaviour\nsum(|u^UO_i-u_i|)",
+            :Gov => "Combined\nGovernance\ngoal\nR^0.5*T^1*G^-0.2*E^0",
+            :WR => "Alternative\nincomes",
+            :IN => "Income\ndistribution\n@optimal Gov"
         )
-        policylabels=[
+        policylabels = [
             "Use Rights\nHIGH w̃\nexcluded",
             "Use Rights\nLOW w̃\nexcluded",
             "Tradable \nUse Rights\nEFFORT",
@@ -1249,7 +1266,7 @@ begin
             "Protected Area\n\nmobility=0.5",
             "Economic incentive\n\nRoyalties"
         ]
-        policyxlabels=[
+        policyxlabels = [
             "fraction excluded",
             "fraction excluded",
             "1 - effort quota",
@@ -1258,105 +1275,109 @@ begin
             "fraction protected",
             "econ policy"
         ]
-        RS=[regulation_scan(scenario,kR=0.5, kT=1.0,kG=-0.2,kE=0.0) for scenario in policies]
-        f=Figure(size=(1000,1000))
-    
-        outcomes=[:RR,:ToR,:GI,:EH,:RI,:Gov]
+        RS = [regulation_scan(scenario, kR=0.5, kT=1.0, kG=-0.2, kE=0.0) for scenario in policies]
+        f = Figure(size=(1000, 1000))
+
+        outcomes = [:RR, :ToR, :GI, :EH, :RI, :Gov]
         #Label(f[0,1:length(RS)], text="Policy outcomes", fontsize=25, font=:bold)
-        A=Dict()
-        B=Dict()
-        C=Dict()
-        LL=0 
-        IAx=[]
-        for (i,rs) in enumerate(RS)
-            for (jj,o) in enumerate(outcomes)
-                j=jj+1
-                if i==1
-                    Label(f[j,0], text=Labels[o], tellheight=false)
+        A = Dict()
+        B = Dict()
+        C = Dict()
+        LL = 0
+        IAx = []
+        for (i, rs) in enumerate(RS)
+            for (jj, o) in enumerate(outcomes)
+                j = jj + 1
+                if i == 1
+                    Label(f[j, 0], text=Labels[o], tellheight=false)
                 end
-                
-                osym=Symbol("o"*string(o))
-                xv= round(rs.r[rs[osym]], digits=2)
-                xtv=[0,xv,1]
-                xts=["0",string(xv),"1"]
-                yv= round(rs[o][rs[osym]], digits=2)
-                ytv=[0,yv,1]
-                yts=["",string(yv),""]
-                if xtv[1]==xtv[2]
-                    xtv=xtv[2:3]; xts=xts[2:3]
-                elseif xtv[2]==xtv[3]
-                    xtv=xtv[1:2]; xts=xts[1:2]
-                end
-                if ytv[1]==ytv[2]
-                    ytv=ytv[2:3]; yts=yts[2:3]
-                elseif ytv[2]==ytv[3]
-                    ytv=ytv[1:2]; yts=yts[1:2]
-                end
-                xtv=[xv]
-                xts=[string(xv)]
-                ytv=[yv]
-                yts=[string(yv)]
 
-                A[i,j]=Axis(f[j,i], 
-                xticks =(xtv,xts),
-                xticklabelsize=12,
-                xticklabelcolor=ColorSchemes.tab20[i],
-                yticks =(ytv,yts),
-                yticklabelsize=12,
-                yticklabelrotation=pi/2,
-                yticklabelcolor=ColorSchemes.tab20[i],
-                xgridcolor=ColorSchemes.tab20[i],
-                ygridcolor=ColorSchemes.tab20[i],
-                backgroundcolor="#f1f1f1",
-                yaxisposition=:right,
-                xaxisposition=:top)
-                hidespines!(A[i,j])
+                osym = Symbol("o" * string(o))
+                xv = round(rs.r[rs[osym]], digits=2)
+                xtv = [0, xv, 1]
+                xts = ["0", string(xv), "1"]
+                yv = round(rs[o][rs[osym]], digits=2)
+                ytv = [0, yv, 1]
+                yts = ["", string(yv), ""]
+                if xtv[1] == xtv[2]
+                    xtv = xtv[2:3]
+                    xts = xts[2:3]
+                elseif xtv[2] == xtv[3]
+                    xtv = xtv[1:2]
+                    xts = xts[1:2]
+                end
+                if ytv[1] == ytv[2]
+                    ytv = ytv[2:3]
+                    yts = yts[2:3]
+                elseif ytv[2] == ytv[3]
+                    ytv = ytv[1:2]
+                    yts = yts[1:2]
+                end
+                xtv = [xv]
+                xts = [string(xv)]
+                ytv = [yv]
+                yts = [string(yv)]
 
-                if i==1 || jj==length(outcomes)
-                    B[i,j]=Axis(f[j,i],
-                    xlabel=policyxlabels[i],
-                    yaxisposition=:left,
-                    xaxisposition=:bottom,
-                    backgroundcolor="#f1f1f1",
-                    yticklabelsize=12,
+                A[i, j] = Axis(f[j, i],
+                    xticks=(xtv, xts),
                     xticklabelsize=12,
-                    xgridvisible=false,
-                    ygridvisible=false,
-                    xticklabelsvisible= jj==length(outcomes),
-                    xlabelvisible= jj==length(outcomes),
-                    yticklabelsvisible= i==1)
-                    lines!(B[i,j],rs.r,rs[o], color=:transparent, linewidth=0)
-                    hidespines!(B[i,j])
-                    if o==:RR 
-                        B[i,j].yticks=[0.0,0.1,0.2,0.25]
+                    xticklabelcolor=ColorSchemes.tab20[i],
+                    yticks=(ytv, yts),
+                    yticklabelsize=12,
+                    yticklabelrotation=pi / 2,
+                    yticklabelcolor=ColorSchemes.tab20[i],
+                    xgridcolor=ColorSchemes.tab20[i],
+                    ygridcolor=ColorSchemes.tab20[i],
+                    backgroundcolor="#f1f1f1",
+                    yaxisposition=:right,
+                    xaxisposition=:top)
+                hidespines!(A[i, j])
+
+                if i == 1 || jj == length(outcomes)
+                    B[i, j] = Axis(f[j, i],
+                        xlabel=policyxlabels[i],
+                        yaxisposition=:left,
+                        xaxisposition=:bottom,
+                        backgroundcolor="#f1f1f1",
+                        yticklabelsize=12,
+                        xticklabelsize=12,
+                        xgridvisible=false,
+                        ygridvisible=false,
+                        xticklabelsvisible=jj == length(outcomes),
+                        xlabelvisible=jj == length(outcomes),
+                        yticklabelsvisible=i == 1)
+                    lines!(B[i, j], rs.r, rs[o], color=:transparent, linewidth=0)
+                    hidespines!(B[i, j])
+                    if o == :RR
+                        B[i, j].yticks = [0.0, 0.1, 0.2, 0.25]
                     end
                     #jj==length(outcomes) ? hidexdecorations!(B[i,j], ticklabels=false) : hidexdecorations!(B[i,j])
                     #jj==length(outcomes)  ?   hideydecorations!(B[i,j],ticklabels=false ) : nothing
                 end
 
-                
+
                 #j==length(outcomes) ? hidexdecorations!(A[i,j], label=false, ticklabels=false, grid=true) : hidexdecorations!(A[i,j])
                 #i==1 ? hideydecorations!(A[i,j], label=false, ticklabels=true, grid=false) : hideydecorations!(A[i,j], grid=false)
                 #hidespines!(A[i,j])
-                lines!(A[i,j],rs.r,rs[o], color=ColorSchemes.tab20[i], linewidth=3)
-                
-                
+                lines!(A[i, j], rs.r, rs[o], color=ColorSchemes.tab20[i], linewidth=3)
+
+
                 #vlines!(A[i,j], rs.r[rs[osym]],color=:black, linestyle=:dot)
-                
+
                 #text!(A[i,j],0.05,0.95,text=string(round(rs[o][rs[osym]], digits=2)), space=:relative, fontsize=12, color=:black, align=(:left,:top))
-                
+
                 #text!(A[i,j],rs.r[rs[osym]]-0.05,0.05,text=string(round(rs.r[rs[osym]], digits=2)), space=:relative, fontsize=12, color=:black, align=(:right,:bottom))
 
             end
             #length(outcomes)
             if u
-                A[i,LL+1]=Axis(f[LL+1,i],  ylabel=i==1 ? "Actors w̃\nlow → high" : "") 
-                heatmap!(A[i,LL+1],rs.sols, colormap=cgrad(["#f1f1f1",ColorSchemes.tab20[i]]))
-                hidexdecorations!( A[i,LL+1])
-                hidespines!( A[i,LL+1])
-                i==1 ? hideydecorations!(A[i,LL+1], label=false, ticklabels=true, minorgrid=false) : hideydecorations!(A[i,LL+1], minorgrid=false, ticklabels=true)
+                A[i, LL+1] = Axis(f[LL+1, i], ylabel=i == 1 ? "Actors w̃\nlow → high" : "")
+                heatmap!(A[i, LL+1], rs.sols, colormap=cgrad(["#f1f1f1", ColorSchemes.tab20[i]]))
+                hidexdecorations!(A[i, LL+1])
+                hidespines!(A[i, LL+1])
+                i == 1 ? hideydecorations!(A[i, LL+1], label=false, ticklabels=true, minorgrid=false) : hideydecorations!(A[i, LL+1], minorgrid=false, ticklabels=true)
                 #hidespines!( A[i,LL+1])
-                Label(f[1,0], text="Participation in\nresource use " , tellheight=false)
+                Label(f[1, 0], text="Participation in\nresource use ", tellheight=false)
 
                 #=[i,LL+2]=Axis(f[LL+2,i],  ylabel=i==1 ? "Actors w̃\nlow → high" : "")
                 heatmap!(A[i,LL+2],log10.(rs.incdist), colormap=cgrad(["#f1f1f1",ColorSchemes.tab20[i]]))
@@ -1365,35 +1386,35 @@ begin
                 #hidespines!( A[i,LL+2])
                 Label(f[2,0], text="Incomes\n of actors" , tellheight=false)=#
             end
-            
+
             if inc
-                A[i,length(outcomes)+LL+2]=Axis(f[length(outcomes)+LL+2,i]) 
-                push!(IAx,A[i,length(outcomes)+LL+2])
-                incomes_plot!(A[i,length(outcomes)+LL+2],sim(policies[i], regulation=RS[i].r[RS[i].oToR]))
-                hidedecorations!(A[i,length(outcomes)+LL+2])
-                hidespines!(A[i,length(outcomes)+LL+2])
+                A[i, length(outcomes)+LL+2] = Axis(f[length(outcomes)+LL+2, i])
+                push!(IAx, A[i, length(outcomes)+LL+2])
+                incomes_plot!(A[i, length(outcomes)+LL+2], sim(policies[i], regulation=RS[i].r[RS[i].oToR]))
+                hidedecorations!(A[i, length(outcomes)+LL+2])
+                hidespines!(A[i, length(outcomes)+LL+2])
             end
-            
+
             policylabels[i]
-            Label(f[0,i], text=policylabels[i],color=ColorSchemes.tab20[i], tellwidth=false)
+            Label(f[0, i], text=policylabels[i], color=ColorSchemes.tab20[i], tellwidth=false)
         end
-       inc ?  Label(f[length(outcomes)+LL+2,0], text="Income\ndistribution\n@optimal Gov" , tellheight=false) : nothing
+        inc ? Label(f[length(outcomes)+LL+2, 0], text="Income\ndistribution\n@optimal Gov", tellheight=false) : nothing
         linkyaxes!(IAx...)
         #Label(f[length(outcomes)+LL+2,1:length(RS)], text="Regulation level", tellwidth=false, fontsize=25, font=:bold)
-        sa=Axis(f[0,0], aspect=1)
+        sa = Axis(f[0, 0], aspect=1)
         hidedecorations!(sa)
         hidespines!(sa)
-        phase_plot!(sa,sim(s), incentive_line_color=:gray, impact_line_color=:gray)
+        phase_plot!(sa, sim(s), incentive_line_color=:gray, impact_line_color=:gray)
         #Label(f[0,0], text="Outcomes", tellwidth=false, fontsize=25, font=:bold)
 
-            [linkyaxes!([A[i,j+LL+1] for i in 1:length(RS)]...,B[1,j+1]) for j in 1:length(outcomes)]
+        [linkyaxes!([A[i, j+LL+1] for i in 1:length(RS)]..., B[1, j+1]) for j in 1:length(outcomes)]
 
         f
     end
 end
 
 # policy instruments definitions
-begin 
+begin
     """
     Policy instrument implementations for the SocialEconomicDiversity module.
 
@@ -1466,7 +1487,7 @@ begin
         n = Int64(round((f) * scenario.N)) # Integer fraction f of number of users
         if n != 0
             if haskey(scenario, :reverse)
-                scenario.reverse ? R[max(1, end-n):end] .= 1.0 : R[1:n] .= 1.0
+                scenario.reverse ? R[max(1, end - n):end] .= 1.0 : R[1:n] .= 1.0
             end
         end
         return change(scenario, R=R, regulation=f) # return use rights
@@ -1477,55 +1498,59 @@ begin
     """
         regulate_tradable_use_rights(s, f)
 
-    Regulation function for Tradable Use Rights. 
+    Regulation function for Tradable Use Rights.
     Allocates tradable use rights to users.
     """
     function regulate_tradable_use_rights_new(s, f)
-        R=fill(f==0 ? 1.0 : (1-Float64(f))/s.N, s.N)
-    
-            u0 = zeros(s.N); y0 = 1.0; ϕ0 = 0.0
-            oaprob = ODEProblem(dxdt, [u0; y0; ϕ0], (0, 1000), s)
-            oasol = solve(oaprob, SSPRK432(; stage_limiter!), callback=TerminateSteadyState(1e-6, 1e-4))
-            hur = haskey(s, :historical_use_rights) ? oasol[1:s.N, end-1] .> 0.0 : 1:s.N
-            if s.policy_target == :yield
-                # historical effort levels at steady state
-                hist_u = oasol[1:s.N, end-1]
-                hist_y = oasol[s.N+1, end-1]
-                hist_yield = hist_u .* hist_y
-            
-                # now allocate the *yield* quotas so they sum to (1 - f) * total_yield
-                total_hist_yield = sum(hist_yield)
-                R = hist_yield .* (1 - f) ./ total_hist_yield
-            
-            else
-                # your existing effort‐share logic
-                R = hur .* (1 - f) ./ sum(hur)
-            end
+        R = fill(f == 0 ? 1.0 : (1 - Float64(f)) / s.N, s.N)
+
+        u0 = zeros(s.N)
+        y0 = 1.0
+        ϕ0 = 0.0
+        oaprob = ODEProblem(dxdt, [u0; y0; ϕ0], (0, 1000), s)
+        oasol = solve(oaprob, SSPRK432(; stage_limiter!), callback=TerminateSteadyState(1e-6, 1e-4))
+        hur = haskey(s, :historical_use_rights) ? oasol[1:s.N, end-1] .> 0.0 : 1:s.N
+        if s.policy_target == :yield
+            # historical effort levels at steady state
+            hist_u = oasol[1:s.N, end-1]
+            hist_y = oasol[s.N+1, end-1]
+            hist_yield = hist_u .* hist_y
+
+            # now allocate the *yield* quotas so they sum to (1 - f) * total_yield
+            total_hist_yield = sum(hist_yield)
+            R = hist_yield .* (1 - f) ./ total_hist_yield
+
+        else
+            # your existing effort‐share logic
+            R = hur .* (1 - f) ./ sum(hur)
+        end
 
         #R = haskey(s, :historical_use_rights) ? hur .* (1-Float64(f)) ./ sum(hur) : fill(f==0 ? 1.0 : (1-Float64(f))/s.N, s.N)
 
         q = change(s, R=R, regulation=f)
-        
+
         return q
     end
 
     function regulate_tradable_use_rights(s, f)
         if haskey(s, :historical_use_rights)
-            u0 = zeros(s.N); y0 = 1.0; ϕ0 = 0.0
+            u0 = zeros(s.N)
+            y0 = 1.0
+            ϕ0 = 0.0
             oaprob = ODEProblem(dxdt, [u0; y0; ϕ0], (0, 1000), s)
             oasol = solve(oaprob, SSPRK432(; stage_limiter!), callback=TerminateSteadyState(1e-6, 1e-4))
             hur = oasol[1:s.N, end-1] .> 0.0 #oasol[1:N,end-1].>0.0
         end
-        R = haskey(s, :historical_use_rights) ? hur .* (1-Float64(f)) ./ sum(hur) : fill(f==0 ? 1.0 : (1-Float64(f))/s.N, s.N)
+        R = haskey(s, :historical_use_rights) ? hur .* (1 - Float64(f)) ./ sum(hur) : fill(f == 0 ? 1.0 : (1 - Float64(f)) / s.N, s.N)
         q = change(s, R=R, regulation=f)
-        
+
         return q
     end
 
     """
         γ_tradable_use_rights(x, p, t)
 
-    Incentive function for Tradable Use Rights. 
+    Incentive function for Tradable Use Rights.
     Adds market price to the incentive.
     """
     function γ_tradable_use_rights(x, p, t)
@@ -1535,16 +1560,16 @@ begin
     """
         ϕ_tradable_use_rights(dx, x, p, t)
 
-    Additional dynamics for Tradable Use Rights. 
+    Additional dynamics for Tradable Use Rights.
     Implements the market dynamics for trading use rights.
     """
     function ϕ_tradable_use_rights_new(dx, x, p, t)
         # we calculate the sum of all unused Use Rights and assume they are for sale
         # if the market is for quota (yield) then effort is yield/resource_density
         if p.policy_target == :yield
-            supply = sum( clamp.( p.R .- (x[1:p.N] .* x[p.N+1]), 0.0, Inf ) )
+            supply = sum(clamp.(p.R .- (x[1:p.N] .* x[p.N+1]), 0.0, Inf))
         elseif p.policy_target == :effort
-            supply = sum(clamp.( p.R .- x[1:p.N],0.0,Inf ))
+            supply = sum(clamp.(p.R .- x[1:p.N], 0.0, Inf))
         else
             println("please supply policy_target (:yield or :effort")
         end
@@ -1552,12 +1577,12 @@ begin
         # To calculate demand we need to find all who want to increase their effort
         id = findall((dx[1:p.N] .> 0.0))
 
-        # Calculate individual demand for increased usage, but assure they do not demand more than their physical limit, ū	    
+        # Calculate individual demand for increased usage, but assure they do not demand more than their physical limit, ū
         if p.policy_target == :yield
             max_extra_yield = (p.ū[id] .- x[id]) .* x[p.N+1]
 
             # desire to increase yield = Δu * y
-            desired_extra_yield = dx[id] .* x[p.N+1]      
+            desired_extra_yield = dx[id] .* x[p.N+1]
 
             ind_demand = min.(max_extra_yield, desired_extra_yield)
         else
@@ -1578,7 +1603,7 @@ begin
         # we calculate the sum of all unused Use Rights and assume they are for sale
         # if the market is for quota (yield) then effort is yield/resource_density
         if p.policy_target == :yield
-            supply = clamp(sum(p.R .- x[1:p.N] * x[p.N+1]),0.0,Inf) 
+            supply = clamp(sum(p.R .- x[1:p.N] * x[p.N+1]), 0.0, Inf)
         elseif p.policy_target == :effort
             supply = max.(0.0, sum(p.R .- x[1:p.N]))
         else
@@ -1588,9 +1613,9 @@ begin
         # To calculate demand we need to find all who want to increase their effort
         id = findall((dx[1:p.N] .> 0.0))
 
-        # Calculate individual demand for increased usage, but assure they do not demand more than their physical limit, ū	    
+        # Calculate individual demand for increased usage, but assure they do not demand more than their physical limit, ū
         if p.policy_target == :yield
-            ind_demand = min.((p.ū[id] - x[id])*x[p.N+1], dx[id]*x[p.N+1])
+            ind_demand = min.((p.ū[id] - x[id]) * x[p.N+1], dx[id] * x[p.N+1])
         else
             ind_demand = min.(p.ū[id] - x[id], dx[id])
         end
@@ -1615,7 +1640,7 @@ begin
     """
     function ϕ_protected_area_two_pop(dx, x, p, t)
         mx = x[p.N+2] - x[p.N+1]
-        dx[p.N+2] = (1.0 - x[p.N+2])*dx[p.N+2] - (1.0 - p.regulation) / p.regulation * p.m * mx
+        dx[p.N+2] = (1.0 - x[p.N+2]) * dx[p.N+2] - (1.0 - p.regulation) / p.regulation * p.m * mx
         dx[p.N+1] += p.regulation / (1.0 - p.regulation) * p.m * mx
     end
 
@@ -1637,8 +1662,8 @@ begin
         y_u = x[p.N+1]    # unprotected density
         y_p = x[p.N+2]    # protected   density
         # per‑capita spillover rate into the unprotected area:
-        r_s_local = ((1.0-p.regulation)/p.regulation)*p.m*(y_p - y_u) / y_u
-        return p.ū .* (1 .+ r_s_local).^(-1) # still need to adust μ because of spillover effect!
+        r_s_local = ((1.0 - p.regulation) / p.regulation) * p.m * (y_p - y_u) / y_u
+        return p.ū .* (1 .+ r_s_local) .^ (-1) # still need to adust μ because of spillover effect!
     end
 
     # ===== Protected Area =====
@@ -1659,7 +1684,7 @@ begin
     Scales incentives by the regulated area.
     """
     function γ_protected_area(x, p, t)
-        return p.w̃ .* (1 - p.regulation).^-1
+        return p.w̃ .* (1 - p.regulation) .^ -1
     end
 
     """
@@ -1677,15 +1702,15 @@ begin
         k = (1.0 - f_p) / f_p * m
         # Compute the discriminant of the quadratic equation
         discriminant = max(0.0, (r_p - k)^2 + 4.0 * r_p * k * y / K_p)
-        
+
         # Ensure the discriminant is non-negative for real solutions
         if discriminant < 0
             error("No real solution exists: discriminant is negative.")
-        end 
-        
+        end
+
         # Calculate the steady-state fish density in the protected area
         y_p = ((r_p - k) + sqrt(discriminant)) * K_p / (2.0 * r_p)
-        
+
         return y_p
     end
 
@@ -1728,7 +1753,7 @@ begin
     function μ_economic_incentive(x, p, t)
         if :μ in vcat(p.policy_target)
             return p.ū .* (1 - p.regulation * (p.policy_method == :taxation ? -1.0 : 1.0))
-        else 
+        else
             return p.ū
         end
     end
@@ -1791,7 +1816,7 @@ begin
     Returns a NamedTuple with the appropriate policy functions.
     """
     function scenario(p; kwargs...)
-        temp = (; p..., policy="Open Access",γ=γ,ϕ=ϕ,μ=μ,regulate=regulate, kwargs...)
+        temp = (; p..., policy="Open Access", γ=γ, ϕ=ϕ, μ=μ, regulate=regulate, kwargs...)
         if temp.policy == "Open Access"
             return (; temp...)
         elseif temp.policy == "Exclusive Use Rights"
@@ -1804,13 +1829,13 @@ begin
             return (; temp..., γ=γ_protected_area, μ=μ_protected_area, regulate=regulate_protected_area)
         elseif temp.policy == "Protected Area Two Pop"
             #check if temp has mobility_rate
-            return (; temp..., γ=γ_protected_area, μ=μ_protected_area_two_pop, 
-                    regulate=regulate_protected_area, ϕ=ϕ_protected_area_two_pop)
+            return (; temp..., γ=γ_protected_area, μ=μ_protected_area_two_pop,
+                regulate=regulate_protected_area, ϕ=ϕ_protected_area_two_pop)
         elseif temp.policy == "Economic Incentives"
             return (; temp..., μ=μ_economic_incentive, regulate=regulate_economic_incentive, γ=γ_economic_incentive)
         elseif temp.policy == "Development"
-            return (; temp..., γ=γ_development, μ=μ_development, regulate=regulate_development, 
-                    μ_value=0.5, γ_value=0.5)
+            return (; temp..., γ=γ_development, μ=μ_development, regulate=regulate_development,
+                μ_value=0.5, γ_value=0.5)
         end
     end
 
@@ -1820,10 +1845,10 @@ begin
     Create a base scenario with Open Access policy.
     """
     function base(; N=100, sigma=0.0, random=false)
-        (; N, α=0.1, 
-        w̃=sed(min=0.1, max=1.0, distribution=LogNormal, random=random), 
-        ū=sed(mean=1.0, sigma=sigma, normalize=true, random=random), 
-        R=ones(N), γ, ϕ, μ, regulate, policy="Open Access")
+        (; N, α=0.1,
+            w̃=sed(min=0.1, max=1.0, distribution=LogNormal, random=random),
+            ū=sed(mean=1.0, sigma=sigma, normalize=true, random=random),
+            R=ones(N), γ, ϕ, μ, regulate, policy="Open Access")
     end
 
     """
@@ -1832,10 +1857,10 @@ begin
     Create a scenario with high impact (ū has mean=2.0).
     """
     function high_impact(; N=100, sigma=0.0)
-        (; N, α=0.1, 
-        w̃=sed(min=0.01, max=1.0, distribution=LogNormal), 
-        ū=sed(mean=2.0, sigma=sigma, normalize=true), 
-        R=ones(N), γ, ϕ, μ, regulate, policy="Open Access")
+        (; N, α=0.1,
+            w̃=sed(min=0.01, max=1.0, distribution=LogNormal),
+            ū=sed(mean=2.0, sigma=sigma, normalize=true),
+            R=ones(N), γ, ϕ, μ, regulate, policy="Open Access")
     end
 
     """
@@ -1844,10 +1869,10 @@ begin
     Create a scenario with low impact (ū has mean=0.5).
     """
     function low_impact(; N=100, sigma=0.0)
-        (; N, α=0.1, 
-        w̃=sed(min=0.01, max=0.6, distribution=LogNormal), 
-        ū=sed(mean=0.5, sigma=sigma, normalize=true), 
-        R=ones(N), γ, ϕ, μ, regulate, policy="Open Access")
+        (; N, α=0.1,
+            w̃=sed(min=0.01, max=0.6, distribution=LogNormal),
+            ū=sed(mean=0.5, sigma=sigma, normalize=true),
+            R=ones(N), γ, ϕ, μ, regulate, policy="Open Access")
     end
 
     """
@@ -1856,15 +1881,15 @@ begin
     Create a scenario with high incentives (w̃ has min=0.3, max=0.7).
     """
     function high_incentives(; N=100, sigma=0.0)
-        (; N, α=0.1, 
-        w̃=sed(min=0.3, max=0.7, distribution=LogNormal), 
-        ū=sed(mean=1.0, sigma=sigma, normalize=true), 
-        R=ones(N), γ, ϕ, μ, regulate, policy="Open Access")
+        (; N, α=0.1,
+            w̃=sed(min=0.3, max=0.7, distribution=LogNormal),
+            ū=sed(mean=1.0, sigma=sigma, normalize=true),
+            R=ones(N), γ, ϕ, μ, regulate, policy="Open Access")
     end
 
 
     function regulation_scan(p; m=100, kR=0.5, kT=1.0, kG=-0.2, kE=0.0, kI=0.0)
-        r = range(0.0, stop=1.0-1.0/m, length=m)
+        r = range(0.0, stop=1.0 - 1.0 / m, length=m)
         RR = zeros(m)
         WR = zeros(m)
         TR = zeros(m)
@@ -1874,7 +1899,7 @@ begin
         RI = zeros(m)
         Gov = zeros(m)
         oau = zeros(p.N)
-        x0 = zeros(p.N+2)
+        x0 = zeros(p.N + 2)
         x0[p.N+1] = 1.0
         sols = zeros(m, p.N)
         incdist = zeros(m, p.N)
@@ -1884,7 +1909,7 @@ begin
             if j == 1
                 oau = sol[1:p.N, end-1]
             end
-            
+
             inc = incomes(sol.u[end-1], sol.prob.p)
             RR[j] = sum(inc.resource)
             WR[j] = sum(inc.wages)
@@ -1894,11 +1919,11 @@ begin
             EH[j] = inc.ecological
             regimpact = abs.(oau .- sol[1:p.N, end-1])
             RI[j] = sum(regimpact)
-            Gov[j] = sum(inc.resource.^kR.+ inc.total.^kT.+ inc.gini.^kG.+inc.ecological.^kE.+ regimpact.^kI)
-            sols[j, :] = sol.u[end-1][1:p.N]./p.ū
+            Gov[j] = sum(inc.resource .^ kR .+ inc.total .^ kT .+ inc.gini .^ kG .+ inc.ecological .^ kE .+ regimpact .^ kI)
+            sols[j, :] = sol.u[end-1][1:p.N] ./ p.ū
             incdist[j, :] = inc.total
         end
-        
+
         oRR = argmax(RR)
         oWR = argmax(WR)
         oTR = argmax(TR)
@@ -1908,39 +1933,39 @@ begin
         oRI = argmax(EH)
         oGov = argmax(Gov)
 
-        return (; RR, WR, TR, ToR, GI, EH, RI, Gov=Gov./100.0, r, oRR, oWR, oTR, oToR, oGI, oEH, oRI,oGov, sols, incdist)
+        return (; RR, WR, TR, ToR, GI, EH, RI, Gov=Gov ./ 100.0, r, oRR, oWR, oTR, oToR, oGI, oEH, oRI, oGov, sols, incdist)
     end
 
 end
 
-function monte_carlo_scan2(; M=1,N=100, k=[0.2, 1.0, -0.2, 0.0], optvar=false, mode=:mixed)
+function monte_carlo_scan2(; M=1, N=100, k=[0.2, 1.0, -0.2, 0.0], optvar=false, mode=:mixed)
     RE = []
-    O  = []
+    O = []
 
-    j=1
-    x=1
-    Pars=MCdist(M*2,N=N;mode)
+    j = 1
+    x = 1
+    Pars = MCdist(M * 2, N=N; mode)
 
 
-    while j<=M && j<size(Pars,1)
+    while j <= M && j < size(Pars, 1)
         #mod(j,100)==0 ? print(string(j) * ", ") : nothing
 
-        println((x,j))
-        q=sed(min=Pars[x,1]-Pars[x,2],max=Pars[x,1]+Pars[x,2],normalize=true)
-        dist!(q,N)
-        w=sed(median=Pars[x,3], sigma=Pars[x,4], distribution=LogNormal)
-        dist!(w,N)
-        x+=1
-        if x>size(Pars,1)
-            Pars=MCdist(M*2,N=N;mode)
-            x=1
+        println((x, j))
+        q = sed(min=Pars[x, 1] - Pars[x, 2], max=Pars[x, 1] + Pars[x, 2], normalize=true)
+        dist!(q, N)
+        w = sed(median=Pars[x, 3], sigma=Pars[x, 4], distribution=LogNormal)
+        dist!(w, N)
+        x += 1
+        if x > size(Pars, 1)
+            Pars = MCdist(M * 2, N=N; mode)
+            x = 1
         end
         #–– build & simulate baseline
         s = scenario(
             base(),
-            w̃ = sed(data=w./q),
-            ū = sed(data=q),
-            wonky=Pars[j,5]
+            w̃=sed(data=w ./ q),
+            ū=sed(data=q),
+            wonky=Pars[j, 5]
         )
         sol = sim(s)
 
@@ -1948,69 +1973,69 @@ function monte_carlo_scan2(; M=1,N=100, k=[0.2, 1.0, -0.2, 0.0], optvar=false, m
         if sol.u[end][end] < 0.5
             #–– enumerate all policy variants
             policies = [
-                scenario(s, name="EURneed",policy="Exclusive Use Rights", reverse=true),
-                scenario(s, name="EURgreed",policy="Exclusive Use Rights", reverse=false),
-                scenario(s, name="TUReffort",policy="Tradable Use Rights", policy_target=:effort, market_rate=0.05),
-                scenario(s, name="TURyield",policy="Tradable Use Rights", policy_target=:yield,  market_rate=0.05),
-                scenario(s, name="PA03",policy="Protected Area",      m=0.3),
-                scenario(s, name="PA05",policy="Protected Area",      m=0.5),
+                scenario(s, name="EURneed", policy="Exclusive Use Rights", reverse=true),
+                scenario(s, name="EURgreed", policy="Exclusive Use Rights", reverse=false),
+                scenario(s, name="TUReffort", policy="Tradable Use Rights", policy_target=:effort, market_rate=0.05),
+                scenario(s, name="TURyield", policy="Tradable Use Rights", policy_target=:yield, market_rate=0.05),
+                scenario(s, name="PA03", policy="Protected Area", m=0.3),
+                scenario(s, name="PA05", policy="Protected Area", m=0.5),
                 #scenario(s, name="EPmu",policy="Economic Incentives", policy_target=:μ, policy_method=:taxation),
                 #scenario(s, name="EPga",policy="Economic Incentives", policy_target=:γ, policy_method=:taxation),
             ]
 
             n = length(policies)
-            maxG       = zeros(n)
-            maxRR      = zeros(n)
-            maxToR     = zeros(n)
-            maxGI      = zeros(n)
+            maxG = zeros(n)
+            maxRR = zeros(n)
+            maxToR = zeros(n)
+            maxGI = zeros(n)
             regulation = Vector{Float64}(undef, n)
-            y0         = zeros(n)
-            y          = zeros(n)
-            part0      = zeros(n)
-            part       = zeros(n)
-            opt        = Vector{Tuple}(undef, n)
+            y0 = zeros(n)
+            y = zeros(n)
+            part0 = zeros(n)
+            part = zeros(n)
+            opt = Vector{Tuple}(undef, n)
 
             #–– scan each policy
             for i in 1:n
                 p = policies[i]
                 R = regulation_scan(p)
-                G = R.RR.^k[1] .* R.ToR.^k[2] .* R.GI.^k[3] .* R.EH.^k[4]
+                G = R.RR .^ k[1] .* R.ToR .^ k[2] .* R.GI .^ k[3] .* R.EH .^ k[4]
 
-                maxG[i]       = maximum(G)
-                maxRR[i]      = maximum(R.RR)
-                maxToR[i]     = maximum(R.ToR)
-                maxGI[i]      = 1-minimum(R.GI)
+                maxG[i] = maximum(G)
+                maxRR[i] = maximum(R.RR)
+                maxToR[i] = maximum(R.ToR)
+                maxGI[i] = 1 - minimum(R.GI)
                 regulation[i] = R.r[argmax(G)]
-                y0[i]         = R.EH[1]
-                y[i]          = R.EH[argmax(G)]
-                part0[i]      = sum(R.sols[1, :]) / p.N
-                part[i]       = sum(R.sols[argmax(G), :]) / p.N
-                opt[i]        = (R.oRR, R.oWR, R.oTR, R.oToR, R.oGI, R.oEH, R.oRI, R.oGov)
+                y0[i] = R.EH[1]
+                y[i] = R.EH[argmax(G)]
+                part0[i] = sum(R.sols[1, :]) / p.N
+                part[i] = sum(R.sols[argmax(G), :]) / p.N
+                opt[i] = (R.oRR, R.oWR, R.oTR, R.oToR, R.oGI, R.oEH, R.oRI, R.oGov)
             end
 
             #–– normalize so best = 1.0 for each metric
-            rel_G    = maxG    ./ maximum(maxG)
-            rel_RR   = maxRR   ./ maximum(maxRR)
-            rel_ToR  = maxToR  ./ maximum(maxToR)
+            rel_G = maxG ./ maximum(maxG)
+            rel_RR = maxRR ./ maximum(maxRR)
+            rel_ToR = maxToR ./ maximum(maxToR)
             #gi_min = minimum(maxGI)
             #gi_max = maximum(maxGI)
             #rel_GI = (gi_max .- maxGI) ./ (gi_max - gi_min)
-            rel_GI = maxGI  ./ maximum(maxGI)
+            rel_GI = maxGI ./ maximum(maxGI)
 
             #–– push one entry per policy, preserving your original tuple shape
             for i in 1:n
                 push!(O, (
                     policies[i]...,
-                    regulation       = regulation[i],
-                    y0               = y0[i],
-                    y                = y[i],
-                    part0            = part0[i],
-                    part             = part[i],
-                    opt              = opt[i],
-                    relative_score   = rel_G[i],
-                    relative_RR      = rel_RR[i],
-                    relative_ToR     = rel_ToR[i],
-                    relative_GI      = rel_GI[i],
+                    regulation=regulation[i],
+                    y0=y0[i],
+                    y=y[i],
+                    part0=part0[i],
+                    part=part[i],
+                    opt=opt[i],
+                    relative_score=rel_G[i],
+                    relative_RR=rel_RR[i],
+                    relative_ToR=rel_ToR[i],
+                    relative_GI=rel_GI[i],
                 ))
             end
 
@@ -2023,165 +2048,165 @@ function monte_carlo_scan2(; M=1,N=100, k=[0.2, 1.0, -0.2, 0.0], optvar=false, m
 end
 
 
-function MCdist(M;mode=:mixed, N=100, factor=1, distribution=LogNormal, random=false)
-    R=zeros(M,5)
-    k=0
-    while k<M
-        qmean=rand()*2 .+0.1
-        qvar=(1-2*rand())*qmean
-        q=sed(min=qmean-qvar,max=qmean+qvar,normalize=true; random)
-        dist!(q,N)
-        wmean=rand()*0.01
-        wvar=rand()*factor
-        w=sed(mean=wmean, sigma=wvar; distribution,random)
-        dist!(w,N)
-        ubar=q
-        wtilde=w./q
-        wonky=length(unique(sign.(diff(wtilde))))>1 ? true : false
-        
-        Y=range(0.0,stop=1.0,length=100)
-        wc=[length(findall(wtilde.<y)) for y in Y]
-        
-        if mode==:mixed
-            k+=1
-            R[k,:].=[qmean,qvar,wmean,wvar,wonky]
-            
-        elseif mode==:wonky && wonky
-            if distribution==Uniform
+function MCdist(M; mode=:mixed, N=100, factor=1, distribution=LogNormal, random=false)
+    R = zeros(M, 5)
+    k = 0
+    while k < M
+        qmean = rand() * 2 .+ 0.1
+        qvar = (1 - 2 * rand()) * qmean
+        q = sed(min=qmean - qvar, max=qmean + qvar, normalize=true; random)
+        dist!(q, N)
+        wmean = rand() * 0.01
+        wvar = rand() * factor
+        w = sed(mean=wmean, sigma=wvar; distribution, random)
+        dist!(w, N)
+        ubar = q
+        wtilde = w ./ q
+        wonky = length(unique(sign.(diff(wtilde)))) > 1 ? true : false
+
+        Y = range(0.0, stop=1.0, length=100)
+        wc = [length(findall(wtilde .< y)) for y in Y]
+
+        if mode == :mixed
+            k += 1
+            R[k, :] .= [qmean, qvar, wmean, wvar, wonky]
+
+        elseif mode == :wonky && wonky
+            if distribution == Uniform
                 println("Uniform distribution in w does not generate wonky w̃")
-                k=2*M
+                k = 2 * M
             end
-            k+=1
-            R[k,:].=[qmean,qvar,wmean,wvar,wonky]
-            
-        elseif mode==:nonwonky && !wonky
-            k+=1
-            R[k,:].=[qmean,qvar,wmean,wvar,wonky]
-            
+            k += 1
+            R[k, :] .= [qmean, qvar, wmean, wvar, wonky]
+
+        elseif mode == :nonwonky && !wonky
+            k += 1
+            R[k, :] .= [qmean, qvar, wmean, wvar, wonky]
+
         end
     end
     return R
 end
 
-function show_scenario(r;N=100, random=false,distribution=LogNormal,normalize=true)
-    q=sed(min=r[1]-r[2],max=r[1]+r[2];normalize,random)
-    w=sed(mean=r[3], sigma=r[4];random,distribution)
-    dist!(w,N)
-    dist!(q,N)
-    
+function show_scenario(r; N=100, random=false, distribution=LogNormal, normalize=true)
+    q = sed(min=r[1] - r[2], max=r[1] + r[2]; normalize, random)
+    w = sed(mean=r[3], sigma=r[4]; random, distribution)
+    dist!(w, N)
+    dist!(q, N)
+
     s = scenario(
         base(),
-        w̃ = sed(data=w./q),
-        ū = sed(data=q),
+        w̃=sed(data=w ./ q),
+        ū=sed(data=q),
         wonky=r[5]
     )
-    s.wonky==1 ? print("is wonky! ") : nothing
-    println(cov(s.w̃,s.ū))
+    s.wonky == 1 ? print("is wonky! ") : nothing
+    println(cov(s.w̃, s.ū))
     sol = sim(s)
-    f=Figure()
-    a=Axis(f[1,1])
-    lines!(a,w)
-    lines!(a,q)
-    b=Axis(f[1,2])
-    lines!(b,s.w̃)
-    text!(b,0.5,0.8,text=string(round(exp(r[3])*r[4]*sqrt(2*pi)/N,digits=4))*"  "*string(round(r[2]*2/100,digits=4)), align=(:center,:bottom), space=:relative)
-    c=Axis(f[2,1])
-    phase_plot!(c,sol)
-    d=Axis(f[2,2])
-    incomes_plot!(d,sol, order=random)
+    f = Figure()
+    a = Axis(f[1, 1])
+    lines!(a, w)
+    lines!(a, q)
+    b = Axis(f[1, 2])
+    lines!(b, s.w̃)
+    text!(b, 0.5, 0.8, text=string(round(exp(r[3]) * r[4] * sqrt(2 * pi) / N, digits=4)) * "  " * string(round(r[2] * 2 / 100, digits=4)), align=(:center, :bottom), space=:relative)
+    c = Axis(f[2, 1])
+    phase_plot!(c, sol)
+    d = Axis(f[2, 2])
+    incomes_plot!(d, sol, order=random)
     f
 end
 
-function score(a,A,id,goal, p=0.99)
-    S=zeros(6)
-    Su=zeros(6)
-    c=zeros(6)
-    medians = [median([isnan(s[goal]) ? 0.0 : s[goal] for s in A[id1] if s.name .== p ]) for p in policies]
-    for i in 1:Int64(round(length(id)/6))-1
-        s=[A[id[(i-1)*6+j]][goal] for j in 1:6 ]
-        S.+=s.>p
-        Su.+=s.>p .&& sum(s.>p)==1
-        
+function score(a, A, id, goal, p=0.99)
+    S = zeros(6)
+    Su = zeros(6)
+    c = zeros(6)
+    medians = [median([isnan(s[goal]) ? 0.0 : s[goal] for s in A[id1] if s.name .== p]) for p in policies]
+    for i in 1:Int64(round(length(id) / 6))-1
+        s = [A[id[(i-1)*6+j]][goal] for j in 1:6]
+        S .+= s .> p
+        Su .+= s .> p .&& sum(s .> p) == 1
+
     end
-    IDN=zeros(6)
+    IDN = zeros(6)
     for j in 1:6
-        sco=[a[goal] for  a in A[id[j:6:length(id)]]]
-        idnan=findall(isnan.(sco).==0)
-        IDN[j]=length(idnan)
+        sco = [a[goal] for a in A[id[j:6:length(id)]]]
+        idnan = findall(isnan.(sco) .== 0)
+        IDN[j] = length(idnan)
         #println(idnan)
-        covs=[cov(1:a.N,a.w̃) for  a in A[id[j:6:length(id)]]]
+        covs = [cov(1:a.N, a.w̃) for a in A[id[j:6:length(id)]]]
         #covs=[var(a.w̃) for  a in A[id[j:6:length(id)]]]
         #covs=[a.wonky for  a in A[id[j:6:length(id)]]]
-        c[j]=cor(sco[idnan],covs[idnan]) 
+        c[j] = cor(sco[idnan], covs[idnan])
     end
     #println((([[cov(1:a.N,a.w̃) for  a in A[id[j:6:length(id)]]] for j in 1:6])))#[j:6:length(id) for j in 1:6])
-    [text!(a,0.41,i,text=rich( abs(c[i])>2/IDN[i] ? rich(string(Int64(round(c[i].*100,digits=0))), color=c[i]>0 ? :forestgreen : :steelblue) : " ","  ",string(Int64(Su[i]))," ",rich(string(Int64(S[i])), color=:darkorange), color=:white, fontsize=10), align=(:left,:center)) for i in 1:6]
+    [text!(a, 0.41, i, text=rich(abs(c[i]) > 2 / IDN[i] ? rich(string(Int64(round(c[i] .* 100, digits=0))), color=c[i] > 0 ? :forestgreen : :steelblue) : " ", "  ", string(Int64(Su[i])), " ", rich(string(Int64(S[i])), color=:darkorange), color=:white, fontsize=10), align=(:left, :center)) for i in 1:6]
 end
 
-function score(a,A,id,goal, p=0.99)
-    S=zeros(6)
-    Su=zeros(6)
-    c=zeros(6)
-    prob=zeros(Bool,6)
-    policies=unique([s.name for s in A])
-    medians = [median([isnan(s[goal]) ? 0.0 : s[goal] for s in A[id] if s.name .== p ]) for p in policies]
-    for i in 1:Int64(round(length(id)/6))-1
-        s=[A[id[(i-1)*6+j]][goal] for j in 1:6 ]
-        S.+=s.>p
-        Su.+=s.>p .&& sum(s.>p)==1
-        
+function score(a, A, id, goal, p=0.99)
+    S = zeros(6)
+    Su = zeros(6)
+    c = zeros(6)
+    prob = zeros(Bool, 6)
+    policies = unique([s.name for s in A])
+    medians = [median([isnan(s[goal]) ? 0.0 : s[goal] for s in A[id] if s.name .== p]) for p in policies]
+    for i in 1:Int64(round(length(id) / 6))-1
+        s = [A[id[(i-1)*6+j]][goal] for j in 1:6]
+        S .+= s .> p
+        Su .+= s .> p .&& sum(s .> p) == 1
+
     end
-    IDN=zeros(6)
+    IDN = zeros(6)
     for j in 1:6
-        sco=[a[goal] for  a in A[id[j:6:length(id)]]]
-        idnan=findall(isnan.(sco).==0)
-        IDN[j]=length(idnan)
+        sco = [a[goal] for a in A[id[j:6:length(id)]]]
+        idnan = findall(isnan.(sco) .== 0)
+        IDN[j] = length(idnan)
         #println(idnan)
-        covs=[cov(1:a.N,a.w̃) for  a in A[id[j:6:length(id)]]]
+        covs = [cov(1:a.N, a.w̃) for a in A[id[j:6:length(id)]]]
         #covs=[var(a.w̃) for  a in A[id[j:6:length(id)]]]
         #covs=[a.wonky for  a in A[id[j:6:length(id)]]]
-        data = DataFrame(y = sco[idnan], x = covs[idnan]);
-        ols_lin = lm(@formula(y ~ x), data);
-        ct=coeftable(ols_lin)
-        
-        c[j]=ct.cols[1][2]
-        prob[j]=ct.cols[4][2]<0.05 ? true : false
+        data = DataFrame(y=sco[idnan], x=covs[idnan])
+        ols_lin = lm(@formula(y ~ x), data)
+        ct = coeftable(ols_lin)
+
+        c[j] = ct.cols[1][2]
+        prob[j] = ct.cols[4][2] < 0.05 ? true : false
     end
     for i in 1:6
-    no_best=string(Int64(round(S[i]/length(id)*6*100)))
-    no_unique_best=string(Int64(round(Su[i]/length(id)*6*100)))
-    median_score=string(Int64(round(medians[i]*100)))
-    sws=Int64(round(c[i].*100,digits=0))
-    swtext=sws>=0 ? "+"*string(sws) : "-"*string(abs(sws))
-    score_w̃_slope=abs(c[i])>2/IDN[i] ? string(sws) : ""
-    #text!(a,0.05,i,text=median_score, align=(:left,:center), color=ColorSchemes.tab20[i])
-    #text!(a,1.04,i,text=swtext, align=(:left,:center), color=ColorSchemes.tab20[i])
-    #arrows!(a,[1.04],[i],[0.1],[sws/30])
+        no_best = string(Int64(round(S[i] / length(id) * 6 * 100)))
+        no_unique_best = string(Int64(round(Su[i] / length(id) * 6 * 100)))
+        median_score = string(Int64(round(medians[i] * 100)))
+        sws = Int64(round(c[i] .* 100, digits=0))
+        swtext = sws >= 0 ? "+" * string(sws) : "-" * string(abs(sws))
+        score_w̃_slope = abs(c[i]) > 2 / IDN[i] ? string(sws) : ""
+        #text!(a,0.05,i,text=median_score, align=(:left,:center), color=ColorSchemes.tab20[i])
+        #text!(a,1.04,i,text=swtext, align=(:left,:center), color=ColorSchemes.tab20[i])
+        #arrows!(a,[1.04],[i],[0.1],[sws/30])
 
-    #use 100 for cov 50 for var
-    prob[i] ? scatter!(a,[1.15],[i],  marker='➜', rotation=c[i]*100, markersize=20, color=ColorSchemes.tab20[i]) : nothing
-    
-    text!(a,-0.19,i,text=no_best, align=(:right,:center), color=ColorSchemes.tab20[i])
-    text!(a,-0.15,i,text="("*no_unique_best*")", align=(:left,:center), color=ColorSchemes.tab20[i])
-    #println((([[cov(1:a.N,a.w̃) for  a in A[id[j:6:length(id)]]] for j in 1:6])))#[j:6:length(id) for j in 1:6])
-    #[text!(a,0.41,i,text=rich( abs(c[i])>2/IDN[i] ? rich(string(Int64(round(c[i].*100,digits=0))), color=c[i]>0 ? :forestgreen : :steelblue) : " ","  ",string(Int64(Su[i]))," ",rich(string(Int64(S[i])), color=:darkorange), color=:white, fontsize=10), align=(:left,:center)) for i in 1:6]
+        #use 100 for cov 50 for var
+        prob[i] ? scatter!(a, [1.15], [i], marker='➜', rotation=c[i] * 100, markersize=20, color=ColorSchemes.tab20[i]) : nothing
+
+        text!(a, -0.19, i, text=no_best, align=(:right, :center), color=ColorSchemes.tab20[i])
+        text!(a, -0.15, i, text="(" * no_unique_best * ")", align=(:left, :center), color=ColorSchemes.tab20[i])
+        #println((([[cov(1:a.N,a.w̃) for  a in A[id[j:6:length(id)]]] for j in 1:6])))#[j:6:length(id) for j in 1:6])
+        #[text!(a,0.41,i,text=rich( abs(c[i])>2/IDN[i] ? rich(string(Int64(round(c[i].*100,digits=0))), color=c[i]>0 ? :forestgreen : :steelblue) : " ","  ",string(Int64(Su[i]))," ",rich(string(Int64(S[i])), color=:darkorange), color=:white, fontsize=10), align=(:left,:center)) for i in 1:6]
     end
 end
 
-function plotMedians(A,a1,id1, policies,goal)
-    medians = [median([isnan(s[goal]) ? 0.0 : s[goal] for s in A[id1] if s.name .== p ]) for p in policies]
+function plotMedians(A, a1, id1, policies, goal)
+    medians = [median([isnan(s[goal]) ? 0.0 : s[goal] for s in A[id1] if s.name .== p]) for p in policies]
     #println([median([isnan(s[goal]) ? 0.0 : s[goal] for s in A[id1] if s.name .== p ]) for p in policies])
-# 2) x‐positions are just 1:length(policies)
-xs = 1:length(policies)
+    # 2) x‐positions are just 1:length(policies)
+    xs = 1:length(policies)
 
-# 3) overplot as big black diamonds
-scatter!(a1,
-medians,xs;
-markersize = 8,
-color      = :white,
-strokewidth= 0,
-strokecolor=:white,
-)
+    # 3) overplot as big black diamonds
+    scatter!(a1,
+        medians, xs;
+        markersize=8,
+        color=:white,
+        strokewidth=0,
+        strokecolor=:white,
+    )
 end
 
 
@@ -2192,346 +2217,346 @@ function analyzePolicies(A; goal=:relative_score)
     #
 
 
-    bgc=:black
-    alpha=0.5
-    markersize=2
-    mw=1.0
-    C=clamp.([cov(s.w̃,s.ū).*100 for s in A],-1,1)
-    xmin=-0.4
-    xmax=1.3
-    wm=median([median(s.w̃) for s in A ])
-    um=median([median(s.ū) for s in A ])
-    wmstd=median([std(s.w̃) for s in A ])
-    umvtd=median([std(s.ū) for s in A ])
-    wm=wmstd
-    fun=std
-    policies=unique([s.name for s in A])
-    f=Figure(size=(1000,900), title=string(goal), rowgap=1, colgap=1)
+    bgc = :black
+    alpha = 0.5
+    markersize = 2
+    mw = 1.0
+    C = clamp.([cov(s.w̃, s.ū) .* 100 for s in A], -1, 1)
+    xmin = -0.4
+    xmax = 1.3
+    wm = median([median(s.w̃) for s in A])
+    um = median([median(s.ū) for s in A])
+    wmstd = median([std(s.w̃) for s in A])
+    umvtd = median([std(s.ū) for s in A])
+    wm = wmstd
+    fun = std
+    policies = unique([s.name for s in A])
+    f = Figure(size=(1000, 900), title=string(goal), rowgap=1, colgap=1)
 
     #scatterpoints(s)=-clamp.(cov(1:s.N,s.ū).*1 ,-1,1) #0.01
-    scatterpoints(s)=-clamp.(cov(1:s.N,s.w̃).*0.01 ,-1,1) #0.01
+    scatterpoints(s) = -clamp.(cov(1:s.N, s.w̃) .* 0.01, -1, 1) #0.01
     #scatterpoints(s)=-clamp.(cov(s.ū,s.w̃).*0.01 ,-1,1)
 
-    goal=:relative_RR
-    xreversed=false
-    a1=Axis(f[2,1], yreversed=true,ylabel="moderately\noverfished", backgroundcolor=bgc, yticks=(1:length(policies),policies),  yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false;xreversed)
+    goal = :relative_RR
+    xreversed = false
+    a1 = Axis(f[2, 1], yreversed=true, ylabel="moderately\noverfished", backgroundcolor=bgc, yticks=(1:length(policies), policies), yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false; xreversed)
     hidexdecorations!(a1, grid=false)
-    a2=Axis(f[3,1],yreversed=true, ylabel="highly\noverfished",backgroundcolor=bgc, yticks=(1:length(policies),policies),  yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false;xreversed)
-    a3=Axis(f[2,2],yreversed=true, backgroundcolor=bgc, ygridvisible=false;xreversed)
+    a2 = Axis(f[3, 1], yreversed=true, ylabel="highly\noverfished", backgroundcolor=bgc, yticks=(1:length(policies), policies), yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false; xreversed)
+    a3 = Axis(f[2, 2], yreversed=true, backgroundcolor=bgc, ygridvisible=false; xreversed)
     hidexdecorations!(a3, grid=false)
     hideydecorations!(a3)
-    a4=Axis(f[3,2],yreversed=true,  backgroundcolor=bgc, ygridvisible=false;xreversed)
+    a4 = Axis(f[3, 2], yreversed=true, backgroundcolor=bgc, ygridvisible=false; xreversed)
     hideydecorations!(a4)
-    Label(f[1,1],text="Low w̃", tellwidth=false)
-    Label(f[1,2],text="High w̃", tellwidth=false)
-    Label(f[0,1:2],text="Resource Revenue (R)",fontsize=30, tellwidth=false)
-    [hidespines!(x) for x in [a1,a2,a3,a4]]
+    Label(f[1, 1], text="Low w̃", tellwidth=false)
+    Label(f[1, 2], text="High w̃", tellwidth=false)
+    Label(f[0, 1:2], text="Resource Revenue (R)", fontsize=30, tellwidth=false)
+    [hidespines!(x) for x in [a1, a2, a3, a4]]
 
-    id1=findall([fun(s.w̃) for s in A].<wm .&& [s.y0 for s in A].>0.25)
-    scatter!(a1,[s[goal] for s in A[id1]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id1]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id1]]]; markersize,alpha)
-    plotMedians(A,a1,id1, policies,goal)
-    score(a1,A,id1,goal)
-    id2=findall([fun(s.w̃) for s in A].<wm .&& [s.y0 for s in A].<0.25) 
-    scatter!(a2,[s[goal] for s in A[id2]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id2]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id2]]]; markersize,alpha)
-    plotMedians(A,a2,id2, policies,goal)
-    score(a2,A,id2,goal)
+    id1 = findall([fun(s.w̃) for s in A] .< wm .&& [s.y0 for s in A] .> 0.25)
+    scatter!(a1, [s[goal] for s in A[id1]], [findall(s.name .== policies)[1] .+ scatterpoints(s) for s in A[id1]], color=ColorSchemes.tab20[[findall(s.name .== policies)[1] for s in A[id1]]]; markersize, alpha)
+    plotMedians(A, a1, id1, policies, goal)
+    score(a1, A, id1, goal)
+    id2 = findall([fun(s.w̃) for s in A] .< wm .&& [s.y0 for s in A] .< 0.25)
+    scatter!(a2, [s[goal] for s in A[id2]], [findall(s.name .== policies)[1] .+ scatterpoints(s) for s in A[id2]], color=ColorSchemes.tab20[[findall(s.name .== policies)[1] for s in A[id2]]]; markersize, alpha)
+    plotMedians(A, a2, id2, policies, goal)
+    score(a2, A, id2, goal)
 
-    id3=findall([fun(s.w̃) for s in A].>wm .&& [s.y0 for s in A].>0.25)
-    scatter!(a3,[s[goal] for s in A[id3]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id3]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id3]]]; markersize,alpha)
-    plotMedians(A,a3,id3, policies,goal)
-    score(a3,A,id3,goal)
-    id4=findall([fun(s.w̃) for s in A].>wm .&& [s.y0 for s in A].<0.25)
-    scatter!(a4,[s[goal] for s in A[id4]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id4]],[s[goal] for s in A[id4]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id4]]]; markersize,alpha)
-    plotMedians(A,a4,id4, policies,goal)
-    score(a4,A,id4,goal)
-    [xlims!(a,xmin,xmax) for a in [a1,a2,a3,a4]]
-    linkaxes!([a1,a2,a3,a4])
+    id3 = findall([fun(s.w̃) for s in A] .> wm .&& [s.y0 for s in A] .> 0.25)
+    scatter!(a3, [s[goal] for s in A[id3]], [findall(s.name .== policies)[1] .+ scatterpoints(s) for s in A[id3]], color=ColorSchemes.tab20[[findall(s.name .== policies)[1] for s in A[id3]]]; markersize, alpha)
+    plotMedians(A, a3, id3, policies, goal)
+    score(a3, A, id3, goal)
+    id4 = findall([fun(s.w̃) for s in A] .> wm .&& [s.y0 for s in A] .< 0.25)
+    scatter!(a4, [s[goal] for s in A[id4]], [findall(s.name .== policies)[1] .+ scatterpoints(s) for s in A[id4]], [s[goal] for s in A[id4]], color=ColorSchemes.tab20[[findall(s.name .== policies)[1] for s in A[id4]]]; markersize, alpha)
+    plotMedians(A, a4, id4, policies, goal)
+    score(a4, A, id4, goal)
+    [xlims!(a, xmin, xmax) for a in [a1, a2, a3, a4]]
+    linkaxes!([a1, a2, a3, a4])
 
-    goal=:relative_ToR
-    a1=Axis(f[2,3], yreversed=true,ylabel="moderately\noverfished", backgroundcolor=bgc, yticks=(1:length(policies),policies),  yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false;xreversed)
-    hidexdecorations!(a1, grid=false)
-    hideydecorations!(a1)
-    a2=Axis(f[3,3],yreversed=true, ylabel="highly\noverfished",backgroundcolor=bgc, yticks=(1:length(policies),policies),  yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false;xreversed)
-    hideydecorations!(a2)
-    a3=Axis(f[2,4], yreversed=true, backgroundcolor=bgc, ygridvisible=false;xreversed)
-    hidexdecorations!(a3, grid=false)
-    hideydecorations!(a3)
-    a4=Axis(f[3,4],yreversed=true,  backgroundcolor=bgc, ygridvisible=false;xreversed)
-    hideydecorations!(a4)
-    Label(f[1,3],text="Low w̃", tellwidth=false)
-    Label(f[1,4],text="High w̃", tellwidth=false)
-    Label(f[0,3:4],text="Total Revenue (T)",fontsize=30, tellwidth=false)
-    [hidespines!(x) for x in [a1,a2,a3,a4]]
-
-    id1=findall([fun(s.w̃) for s in A].<wm .&& [s.y0 for s in A].>0.25)
-    scatter!(a1,[s[goal] for s in A[id1]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id1]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id1]]]; markersize,alpha)
-    plotMedians(A,a1,id1, policies,goal)
-    score(a1,A,id1,goal)
-    id2=findall([fun(s.w̃) for s in A].<wm .&& [s.y0 for s in A].<0.25) 
-    scatter!(a2,[s[goal] for s in A[id2]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id2]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id2]]]; markersize,alpha)
-    plotMedians(A,a2,id2, policies,goal)
-    score(a2,A,id2,goal)
-
-    id3=findall([fun(s.w̃) for s in A].>wm .&& [s.y0 for s in A].>0.25)
-    scatter!(a3,[s[goal] for s in A[id3]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id3]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id3]]]; markersize,alpha)
-    plotMedians(A,a3,id3, policies,goal)
-    score(a3,A,id3,goal)
-
-    id4=findall([fun(s.w̃) for s in A].>wm .&& [s.y0 for s in A].<0.25)
-    scatter!(a4,[s[goal] for s in A[id4]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id4]],[s[goal] for s in A[id4]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id4]]]; markersize,alpha)
-    plotMedians(A,a4,id4, policies,goal)
-    score(a4,A,id4,goal)
-    [xlims!(a,xmin,xmax) for a in [a1,a2,a3,a4]]
-    linkaxes!([a1,a2,a3,a4])
-
-    goal=:relative_GI
-    a1=Axis(f[5,1], yreversed=true,ylabel="moderately\noverfished", backgroundcolor=bgc, yticks=(1:length(policies),policies),  yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false;xreversed)
-    hidexdecorations!(a1, grid=false)
-    a2=Axis(f[6,1], yreversed=true, ylabel="highly\noverfished",backgroundcolor=bgc, yticks=(1:length(policies),policies),  yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false;xreversed)
-    a3=Axis(f[5,2], yreversed=true, backgroundcolor=bgc, ygridvisible=false;xreversed)
-    hidexdecorations!(a3, grid=false)
-    hideydecorations!(a3)
-    a4=Axis(f[6,2], yreversed=true,  backgroundcolor=bgc, ygridvisible=false;xreversed)
-    hideydecorations!(a4)
-    Label(f[4,1:2],text="Gini (G)",fontsize=30, tellwidth=false)
-    [hidespines!(x) for x in [a1,a2,a3,a4]]
-    id1=findall([fun(s.w̃) for s in A].<wm .&& [s.y0 for s in A].>0.25) #mw.*(0.5 .- rand())
-    scatter!(a1,[s[goal] for s in A[id1]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id1]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id1]]]; markersize,alpha)
-    plotMedians(A,a1,id1, policies,goal)
-    score(a1,A,id1,goal)
-    id2=findall([fun(s.w̃) for s in A].<wm .&& [s.y0 for s in A].<0.25) 
-    scatter!(a2,[s[goal] for s in A[id2]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id2]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id2]]]; markersize,alpha)
-    plotMedians(A,a2,id2, policies,goal)
-    score(a2,A,id2,goal)
-
-    id3=findall([fun(s.w̃) for s in A].>wm .&& [s.y0 for s in A].>0.25)
-    scatter!(a3,[s[goal] for s in A[id3]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id3]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id3]]]; markersize,alpha)
-    plotMedians(A,a3,id3, policies,goal)
-    score(a3,A,id3,goal)
-
-    id4=findall([fun(s.w̃) for s in A].>wm .&& [s.y0 for s in A].<0.25)
-    scatter!(a4,[s[goal] for s in A[id4]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id4]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id4]]]; markersize,alpha)
-    plotMedians(A,a4,id4, policies,goal)
-    score(a4,A,id4,goal)
-    [xlims!(a,xmin,xmax) for a in [a1,a2,a3,a4]]
-    linkaxes!([a1,a2,a3,a4])
-
-
-    goal=:relative_score
-    a1=Axis(f[5,3], yreversed=true,ylabel="moderately\noverfished", backgroundcolor=bgc, yticks=(1:length(policies),policies),  yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false)
+    goal = :relative_ToR
+    a1 = Axis(f[2, 3], yreversed=true, ylabel="moderately\noverfished", backgroundcolor=bgc, yticks=(1:length(policies), policies), yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false; xreversed)
     hidexdecorations!(a1, grid=false)
     hideydecorations!(a1)
-    a2=Axis(f[6,3], yreversed=true, ylabel="highly\noverfished",backgroundcolor=bgc, yticks=(1:length(policies),policies),  yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false)
+    a2 = Axis(f[3, 3], yreversed=true, ylabel="highly\noverfished", backgroundcolor=bgc, yticks=(1:length(policies), policies), yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false; xreversed)
     hideydecorations!(a2)
-    a3=Axis(f[5,4], yreversed=true, backgroundcolor=bgc, ygridvisible=false)
+    a3 = Axis(f[2, 4], yreversed=true, backgroundcolor=bgc, ygridvisible=false; xreversed)
     hidexdecorations!(a3, grid=false)
     hideydecorations!(a3)
-    a4=Axis(f[6,4], yreversed=true,  backgroundcolor=bgc, ygridvisible=false)
+    a4 = Axis(f[3, 4], yreversed=true, backgroundcolor=bgc, ygridvisible=false; xreversed)
     hideydecorations!(a4)
-    Label(f[4,3:4],text=L"Governance: $$R^{0.2}⋅T^1⋅G^{-0.2}$$",fontsize=30, tellwidth=false)
-    [hidespines!(x) for x in [a1,a2,a3,a4]]
+    Label(f[1, 3], text="Low w̃", tellwidth=false)
+    Label(f[1, 4], text="High w̃", tellwidth=false)
+    Label(f[0, 3:4], text="Total Revenue (T)", fontsize=30, tellwidth=false)
+    [hidespines!(x) for x in [a1, a2, a3, a4]]
 
-    id1=findall([median(s.w̃) for s in A].<wm .&& [s.y0 for s in A].>0.25)
-    
+    id1 = findall([fun(s.w̃) for s in A] .< wm .&& [s.y0 for s in A] .> 0.25)
+    scatter!(a1, [s[goal] for s in A[id1]], [findall(s.name .== policies)[1] .+ scatterpoints(s) for s in A[id1]], color=ColorSchemes.tab20[[findall(s.name .== policies)[1] for s in A[id1]]]; markersize, alpha)
+    plotMedians(A, a1, id1, policies, goal)
+    score(a1, A, id1, goal)
+    id2 = findall([fun(s.w̃) for s in A] .< wm .&& [s.y0 for s in A] .< 0.25)
+    scatter!(a2, [s[goal] for s in A[id2]], [findall(s.name .== policies)[1] .+ scatterpoints(s) for s in A[id2]], color=ColorSchemes.tab20[[findall(s.name .== policies)[1] for s in A[id2]]]; markersize, alpha)
+    plotMedians(A, a2, id2, policies, goal)
+    score(a2, A, id2, goal)
+
+    id3 = findall([fun(s.w̃) for s in A] .> wm .&& [s.y0 for s in A] .> 0.25)
+    scatter!(a3, [s[goal] for s in A[id3]], [findall(s.name .== policies)[1] .+ scatterpoints(s) for s in A[id3]], color=ColorSchemes.tab20[[findall(s.name .== policies)[1] for s in A[id3]]]; markersize, alpha)
+    plotMedians(A, a3, id3, policies, goal)
+    score(a3, A, id3, goal)
+
+    id4 = findall([fun(s.w̃) for s in A] .> wm .&& [s.y0 for s in A] .< 0.25)
+    scatter!(a4, [s[goal] for s in A[id4]], [findall(s.name .== policies)[1] .+ scatterpoints(s) for s in A[id4]], [s[goal] for s in A[id4]], color=ColorSchemes.tab20[[findall(s.name .== policies)[1] for s in A[id4]]]; markersize, alpha)
+    plotMedians(A, a4, id4, policies, goal)
+    score(a4, A, id4, goal)
+    [xlims!(a, xmin, xmax) for a in [a1, a2, a3, a4]]
+    linkaxes!([a1, a2, a3, a4])
+
+    goal = :relative_GI
+    a1 = Axis(f[5, 1], yreversed=true, ylabel="moderately\noverfished", backgroundcolor=bgc, yticks=(1:length(policies), policies), yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false; xreversed)
+    hidexdecorations!(a1, grid=false)
+    a2 = Axis(f[6, 1], yreversed=true, ylabel="highly\noverfished", backgroundcolor=bgc, yticks=(1:length(policies), policies), yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false; xreversed)
+    a3 = Axis(f[5, 2], yreversed=true, backgroundcolor=bgc, ygridvisible=false; xreversed)
+    hidexdecorations!(a3, grid=false)
+    hideydecorations!(a3)
+    a4 = Axis(f[6, 2], yreversed=true, backgroundcolor=bgc, ygridvisible=false; xreversed)
+    hideydecorations!(a4)
+    Label(f[4, 1:2], text="Gini (G)", fontsize=30, tellwidth=false)
+    [hidespines!(x) for x in [a1, a2, a3, a4]]
+    id1 = findall([fun(s.w̃) for s in A] .< wm .&& [s.y0 for s in A] .> 0.25) #mw.*(0.5 .- rand())
+    scatter!(a1, [s[goal] for s in A[id1]], [findall(s.name .== policies)[1] .+ scatterpoints(s) for s in A[id1]], color=ColorSchemes.tab20[[findall(s.name .== policies)[1] for s in A[id1]]]; markersize, alpha)
+    plotMedians(A, a1, id1, policies, goal)
+    score(a1, A, id1, goal)
+    id2 = findall([fun(s.w̃) for s in A] .< wm .&& [s.y0 for s in A] .< 0.25)
+    scatter!(a2, [s[goal] for s in A[id2]], [findall(s.name .== policies)[1] .+ scatterpoints(s) for s in A[id2]], color=ColorSchemes.tab20[[findall(s.name .== policies)[1] for s in A[id2]]]; markersize, alpha)
+    plotMedians(A, a2, id2, policies, goal)
+    score(a2, A, id2, goal)
+
+    id3 = findall([fun(s.w̃) for s in A] .> wm .&& [s.y0 for s in A] .> 0.25)
+    scatter!(a3, [s[goal] for s in A[id3]], [findall(s.name .== policies)[1] .+ scatterpoints(s) for s in A[id3]], color=ColorSchemes.tab20[[findall(s.name .== policies)[1] for s in A[id3]]]; markersize, alpha)
+    plotMedians(A, a3, id3, policies, goal)
+    score(a3, A, id3, goal)
+
+    id4 = findall([fun(s.w̃) for s in A] .> wm .&& [s.y0 for s in A] .< 0.25)
+    scatter!(a4, [s[goal] for s in A[id4]], [findall(s.name .== policies)[1] .+ scatterpoints(s) for s in A[id4]], color=ColorSchemes.tab20[[findall(s.name .== policies)[1] for s in A[id4]]]; markersize, alpha)
+    plotMedians(A, a4, id4, policies, goal)
+    score(a4, A, id4, goal)
+    [xlims!(a, xmin, xmax) for a in [a1, a2, a3, a4]]
+    linkaxes!([a1, a2, a3, a4])
+
+
+    goal = :relative_score
+    a1 = Axis(f[5, 3], yreversed=true, ylabel="moderately\noverfished", backgroundcolor=bgc, yticks=(1:length(policies), policies), yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false)
+    hidexdecorations!(a1, grid=false)
+    hideydecorations!(a1)
+    a2 = Axis(f[6, 3], yreversed=true, ylabel="highly\noverfished", backgroundcolor=bgc, yticks=(1:length(policies), policies), yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false)
+    hideydecorations!(a2)
+    a3 = Axis(f[5, 4], yreversed=true, backgroundcolor=bgc, ygridvisible=false)
+    hidexdecorations!(a3, grid=false)
+    hideydecorations!(a3)
+    a4 = Axis(f[6, 4], yreversed=true, backgroundcolor=bgc, ygridvisible=false)
+    hideydecorations!(a4)
+    Label(f[4, 3:4], text=L"Governance: $$R^{0.2}⋅T^1⋅G^{-0.2}$$", fontsize=30, tellwidth=false)
+    [hidespines!(x) for x in [a1, a2, a3, a4]]
+
+    id1 = findall([median(s.w̃) for s in A] .< wm .&& [s.y0 for s in A] .> 0.25)
+
     #wid=findall(a.wonky==true for a in A[id1])
-    scatter!(a1,[s[goal] for s in A[id1]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id1]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id1]]]; markersize,alpha)
+    scatter!(a1, [s[goal] for s in A[id1]], [findall(s.name .== policies)[1] .+ scatterpoints(s) for s in A[id1]], color=ColorSchemes.tab20[[findall(s.name .== policies)[1] for s in A[id1]]]; markersize, alpha)
     #scatter!(a1,[s[goal] for s in A[id1[wid]]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id1[wid]]], color=:crimson; markersize,alpha)
-    
-    plotMedians(A,a1,id1, policies,goal)
-    score(a1,A,id1,goal)
-    id2=findall([fun(s.w̃) for s in A].<wm .&& [s.y0 for s in A].<0.25) 
-    scatter!(a2,[s[goal] for s in A[id2]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id2]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id2]]]; markersize,alpha)
-    plotMedians(A,a2,id2, policies,goal)
-    score(a2,A,id2,goal)
 
-    id3=findall([fun(s.w̃) for s in A].>wm .&& [s.y0 for s in A].>0.25)
-    scatter!(a3,[s[goal] for s in A[id3]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id3]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id3]]]; markersize,alpha)
-    plotMedians(A,a3,id3, policies,goal)
-    score(a3,A,id3,goal)
+    plotMedians(A, a1, id1, policies, goal)
+    score(a1, A, id1, goal)
+    id2 = findall([fun(s.w̃) for s in A] .< wm .&& [s.y0 for s in A] .< 0.25)
+    scatter!(a2, [s[goal] for s in A[id2]], [findall(s.name .== policies)[1] .+ scatterpoints(s) for s in A[id2]], color=ColorSchemes.tab20[[findall(s.name .== policies)[1] for s in A[id2]]]; markersize, alpha)
+    plotMedians(A, a2, id2, policies, goal)
+    score(a2, A, id2, goal)
 
-    id4=findall([fun(s.w̃) for s in A].>wm .&& [s.y0 for s in A].<0.25)
-    scatter!(a4,[s[goal] for s in A[id4]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id4]],[s[goal] for s in A[id4]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id4]]]; markersize,alpha)
-    plotMedians(A,a4,id4, policies,goal)
-    score(a4,A,id4,goal)
-    [xlims!(a,xmin,xmax) for a in [a1,a2,a3,a4]]
-    linkaxes!([a1,a2,a3,a4])
-    Label(f[7,1:4], text="performance score →", fontsize=18)
+    id3 = findall([fun(s.w̃) for s in A] .> wm .&& [s.y0 for s in A] .> 0.25)
+    scatter!(a3, [s[goal] for s in A[id3]], [findall(s.name .== policies)[1] .+ scatterpoints(s) for s in A[id3]], color=ColorSchemes.tab20[[findall(s.name .== policies)[1] for s in A[id3]]]; markersize, alpha)
+    plotMedians(A, a3, id3, policies, goal)
+    score(a3, A, id3, goal)
+
+    id4 = findall([fun(s.w̃) for s in A] .> wm .&& [s.y0 for s in A] .< 0.25)
+    scatter!(a4, [s[goal] for s in A[id4]], [findall(s.name .== policies)[1] .+ scatterpoints(s) for s in A[id4]], [s[goal] for s in A[id4]], color=ColorSchemes.tab20[[findall(s.name .== policies)[1] for s in A[id4]]]; markersize, alpha)
+    plotMedians(A, a4, id4, policies, goal)
+    score(a4, A, id4, goal)
+    [xlims!(a, xmin, xmax) for a in [a1, a2, a3, a4]]
+    linkaxes!([a1, a2, a3, a4])
+    Label(f[7, 1:4], text="performance score →", fontsize=18)
     f
 end
 
 
 function analyzePoliciesTable(A; goal=:relative_score)
-    bgc=:black
-    alpha=0.5
-    markersize=2
-    mw=1.0
-    C=clamp.([cov(s.w̃,s.ū).*100 for s in A],-1,1)
+    bgc = :black
+    alpha = 0.5
+    markersize = 2
+    mw = 1.0
+    C = clamp.([cov(s.w̃, s.ū) .* 100 for s in A], -1, 1)
 
-    wm=median([median(s.w̃) for s in A ])
-    um=median([median(s.ū) for s in A ])
-    policies=unique([s.name for s in A])
-    f=Figure(size=(800,800), title=string(goal), rowgap=1, colgap=1)
+    wm = median([median(s.w̃) for s in A])
+    um = median([median(s.ū) for s in A])
+    policies = unique([s.name for s in A])
+    f = Figure(size=(800, 800), title=string(goal), rowgap=1, colgap=1)
 
     #scatterpoints(s)=-clamp.(cov(1:s.N,s.ū).*1 ,-1,1) #0.01
-    scatterpoints(s)=-clamp.(cov(1:s.N,s.w̃).*0.01 ,-1,1) #0.01
+    scatterpoints(s) = -clamp.(cov(1:s.N, s.w̃) .* 0.01, -1, 1) #0.01
     #scatterpoints(s)=-clamp.(cov(s.ū,s.w̃).*0.01 ,-1,1)
 
-    goal=:relative_RR
-    xreversed=false
-    a1=Axis(f[2,1], yreversed=true,ylabel="moderately\noverfished", backgroundcolor=bgc, yticks=(1:length(policies),policies),  yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false;xreversed)
+    goal = :relative_RR
+    xreversed = false
+    a1 = Axis(f[2, 1], yreversed=true, ylabel="moderately\noverfished", backgroundcolor=bgc, yticks=(1:length(policies), policies), yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false; xreversed)
     hidexdecorations!(a1, grid=false)
-    a2=Axis(f[3,1],yreversed=true, ylabel="highly\noverfished",backgroundcolor=bgc, yticks=(1:length(policies),policies),  yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false;xreversed)
-    a3=Axis(f[2,2],yreversed=true, backgroundcolor=bgc, ygridvisible=false;xreversed)
+    a2 = Axis(f[3, 1], yreversed=true, ylabel="highly\noverfished", backgroundcolor=bgc, yticks=(1:length(policies), policies), yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false; xreversed)
+    a3 = Axis(f[2, 2], yreversed=true, backgroundcolor=bgc, ygridvisible=false; xreversed)
     hidexdecorations!(a3, grid=false)
     hideydecorations!(a3)
-    a4=Axis(f[3,2],yreversed=true,  backgroundcolor=bgc, ygridvisible=false;xreversed)
+    a4 = Axis(f[3, 2], yreversed=true, backgroundcolor=bgc, ygridvisible=false; xreversed)
     hideydecorations!(a4)
-    Label(f[1,1],text="Low w̃", tellwidth=false)
-    Label(f[1,2],text="High w̃", tellwidth=false)
-    Label(f[0,1:2],text="Resource Revenue",fontsize=30, tellwidth=false)
-    [hidespines!(x) for x in [a1,a2,a3,a4]]
+    Label(f[1, 1], text="Low w̃", tellwidth=false)
+    Label(f[1, 2], text="High w̃", tellwidth=false)
+    Label(f[0, 1:2], text="Resource Revenue", fontsize=30, tellwidth=false)
+    [hidespines!(x) for x in [a1, a2, a3, a4]]
 
-    id1=findall([median(s.w̃) for s in A].<wm .&& [s.y0 for s in A].>0.25)
+    id1 = findall([median(s.w̃) for s in A] .< wm .&& [s.y0 for s in A] .> 0.25)
     #scatter!(a1,[s[goal] for s in A[id1]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id1]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id1]]]; markersize,alpha)
     #plotMedians(A,a1,id1, policies,goal)
-    score(a1,A,id1,goal)
-    id2=findall([median(s.w̃) for s in A].<wm .&& [s.y0 for s in A].<0.25) 
+    score(a1, A, id1, goal)
+    id2 = findall([median(s.w̃) for s in A] .< wm .&& [s.y0 for s in A] .< 0.25)
     #scatter!(a2,[s[goal] for s in A[id2]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id2]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id2]]]; markersize,alpha)
     #plotMedians(A,a2,id2, policies,goal)
-    score(a2,A,id2,goal)
+    score(a2, A, id2, goal)
 
-    id3=findall([median(s.w̃) for s in A].>wm .&& [s.y0 for s in A].>0.25)
+    id3 = findall([median(s.w̃) for s in A] .> wm .&& [s.y0 for s in A] .> 0.25)
     #scatter!(a3,[s[goal] for s in A[id3]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id3]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id3]]]; markersize,alpha)
     #plotMedians(A,a3,id3, policies,goal)
-    score(a3,A,id3,goal)
-    id4=findall([median(s.w̃) for s in A].>wm .&& [s.y0 for s in A].<0.25)
+    score(a3, A, id3, goal)
+    id4 = findall([median(s.w̃) for s in A] .> wm .&& [s.y0 for s in A] .< 0.25)
     #scatter!(a4,[s[goal] for s in A[id4]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id4]],[s[goal] for s in A[id4]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id4]]]; markersize,alpha)
     #plotMedians(A,a4,id4, policies,goal)
-    score(a4,A,id4,goal)
+    score(a4, A, id4, goal)
     #[xlims!(a,0.4,1.01) for a in [a1,a2,a3,a4]]
-    [ylims!(a,0,7) for a in [a1,a2,a3,a4]]
-    [xlims!(a,0,1) for a in [a1,a2,a3,a4]]
-    linkaxes!([a1,a2,a3,a4])
+    [ylims!(a, 0, 7) for a in [a1, a2, a3, a4]]
+    [xlims!(a, 0, 1) for a in [a1, a2, a3, a4]]
+    linkaxes!([a1, a2, a3, a4])
 
-    goal=:relative_ToR
-    a1=Axis(f[2,3], yreversed=true,ylabel="moderately\noverfished", backgroundcolor=bgc, yticks=(1:length(policies),policies),  yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false;xreversed)
+    goal = :relative_ToR
+    a1 = Axis(f[2, 3], yreversed=true, ylabel="moderately\noverfished", backgroundcolor=bgc, yticks=(1:length(policies), policies), yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false; xreversed)
     hidexdecorations!(a1, grid=false)
     hideydecorations!(a1)
-    a2=Axis(f[3,3],yreversed=true, ylabel="highly\noverfished",backgroundcolor=bgc, yticks=(1:length(policies),policies),  yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false;xreversed)
+    a2 = Axis(f[3, 3], yreversed=true, ylabel="highly\noverfished", backgroundcolor=bgc, yticks=(1:length(policies), policies), yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false; xreversed)
     hideydecorations!(a2)
-    a3=Axis(f[2,4], yreversed=true, backgroundcolor=bgc, ygridvisible=false;xreversed)
+    a3 = Axis(f[2, 4], yreversed=true, backgroundcolor=bgc, ygridvisible=false; xreversed)
     hidexdecorations!(a3, grid=false)
     hideydecorations!(a3)
-    a4=Axis(f[3,4],yreversed=true,  backgroundcolor=bgc, ygridvisible=false;xreversed)
+    a4 = Axis(f[3, 4], yreversed=true, backgroundcolor=bgc, ygridvisible=false; xreversed)
     hideydecorations!(a4)
-    Label(f[1,3],text="Low w̃", tellwidth=false)
-    Label(f[1,4],text="High w̃", tellwidth=false)
-    Label(f[0,3:4],text="Total Revenue",fontsize=30, tellwidth=false)
-    [hidespines!(x) for x in [a1,a2,a3,a4]]
+    Label(f[1, 3], text="Low w̃", tellwidth=false)
+    Label(f[1, 4], text="High w̃", tellwidth=false)
+    Label(f[0, 3:4], text="Total Revenue", fontsize=30, tellwidth=false)
+    [hidespines!(x) for x in [a1, a2, a3, a4]]
 
-    id1=findall([median(s.w̃) for s in A].<wm .&& [s.y0 for s in A].>0.25)
+    id1 = findall([median(s.w̃) for s in A] .< wm .&& [s.y0 for s in A] .> 0.25)
     #scatter!(a1,[s[goal] for s in A[id1]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id1]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id1]]]; markersize,alpha)
     #plotMedians(A,a1,id1, policies,goal)
-    score(a1,A,id1,goal)
-    id2=findall([median(s.w̃) for s in A].<wm .&& [s.y0 for s in A].<0.25) 
+    score(a1, A, id1, goal)
+    id2 = findall([median(s.w̃) for s in A] .< wm .&& [s.y0 for s in A] .< 0.25)
     #scatter!(a2,[s[goal] for s in A[id2]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id2]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id2]]]; markersize,alpha)
     #plotMedians(A,a2,id2, policies,goal)
-    score(a2,A,id2,goal)
+    score(a2, A, id2, goal)
 
-    id3=findall([median(s.w̃) for s in A].>wm .&& [s.y0 for s in A].>0.25)
+    id3 = findall([median(s.w̃) for s in A] .> wm .&& [s.y0 for s in A] .> 0.25)
     #scatter!(a3,[s[goal] for s in A[id3]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id3]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id3]]]; markersize,alpha)
     #plotMedians(A,a3,id3, policies,goal)
-    score(a3,A,id3,goal)
+    score(a3, A, id3, goal)
 
-    id4=findall([median(s.w̃) for s in A].>wm .&& [s.y0 for s in A].<0.25)
+    id4 = findall([median(s.w̃) for s in A] .> wm .&& [s.y0 for s in A] .< 0.25)
     #scatter!(a4,[s[goal] for s in A[id4]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id4]],[s[goal] for s in A[id4]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id4]]]; markersize,alpha)
     #plotMedians(A,a4,id4, policies,goal)
-    score(a4,A,id4,goal)
+    score(a4, A, id4, goal)
     #[xlims!(a,0.4,1.01) for a in [a1,a2,a3,a4]]
-    [ylims!(a,0,7) for a in [a1,a2,a3,a4]]
-    [xlims!(a,0,1) for a in [a1,a2,a3,a4]]
-    linkaxes!([a1,a2,a3,a4])
+    [ylims!(a, 0, 7) for a in [a1, a2, a3, a4]]
+    [xlims!(a, 0, 1) for a in [a1, a2, a3, a4]]
+    linkaxes!([a1, a2, a3, a4])
 
-    goal=:relative_GI
-    a1=Axis(f[5,1], yreversed=true,ylabel="moderately\noverfished", backgroundcolor=bgc, yticks=(1:length(policies),policies),  yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false;xreversed)
+    goal = :relative_GI
+    a1 = Axis(f[5, 1], yreversed=true, ylabel="moderately\noverfished", backgroundcolor=bgc, yticks=(1:length(policies), policies), yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false; xreversed)
     hidexdecorations!(a1, grid=false)
-    a2=Axis(f[6,1], yreversed=true, ylabel="highly\noverfished",backgroundcolor=bgc, yticks=(1:length(policies),policies),  yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false;xreversed)
+    a2 = Axis(f[6, 1], yreversed=true, ylabel="highly\noverfished", backgroundcolor=bgc, yticks=(1:length(policies), policies), yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false; xreversed)
     hidexdecorations!(a2, grid=false)
-    a3=Axis(f[5,2], yreversed=true, backgroundcolor=bgc, ygridvisible=false;xreversed)
+    a3 = Axis(f[5, 2], yreversed=true, backgroundcolor=bgc, ygridvisible=false; xreversed)
     hidexdecorations!(a3, grid=false)
     hideydecorations!(a3)
-    a4=Axis(f[6,2], yreversed=true,  backgroundcolor=bgc, ygridvisible=false;xreversed)
+    a4 = Axis(f[6, 2], yreversed=true, backgroundcolor=bgc, ygridvisible=false; xreversed)
     hideydecorations!(a4)
     hidexdecorations!(a4, grid=false)
-    Label(f[4,1:2],text="Gini",fontsize=30, tellwidth=false)
-    [hidespines!(x) for x in [a1,a2,a3,a4]]
+    Label(f[4, 1:2], text="Gini", fontsize=30, tellwidth=false)
+    [hidespines!(x) for x in [a1, a2, a3, a4]]
 
-    id1=findall([median(s.w̃) for s in A].<wm .&& [s.y0 for s in A].>0.25) #mw.*(0.5 .- rand())
+    id1 = findall([median(s.w̃) for s in A] .< wm .&& [s.y0 for s in A] .> 0.25) #mw.*(0.5 .- rand())
     #scatter!(a1,[s[goal] for s in A[id1]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id1]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id1]]]; markersize,alpha)
     #plotMedians(A,a1,id1, policies,goal)
-    score(a1,A,id1,goal)
-    id2=findall([median(s.w̃) for s in A].<wm .&& [s.y0 for s in A].<0.25) 
+    score(a1, A, id1, goal)
+    id2 = findall([median(s.w̃) for s in A] .< wm .&& [s.y0 for s in A] .< 0.25)
     #scatter!(a2,[s[goal] for s in A[id2]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id2]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id2]]]; markersize,alpha)
     #plotMedians(A,a2,id2, policies,goal)
-    score(a2,A,id2,goal)
+    score(a2, A, id2, goal)
 
-    id3=findall([median(s.w̃) for s in A].>wm .&& [s.y0 for s in A].>0.25)
+    id3 = findall([median(s.w̃) for s in A] .> wm .&& [s.y0 for s in A] .> 0.25)
     #scatter!(a3,[s[goal] for s in A[id3]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id3]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id3]]]; markersize,alpha)
     #plotMedians(A,a3,id3, policies,goal)
-    score(a3,A,id3,goal)
+    score(a3, A, id3, goal)
 
-    id4=findall([median(s.w̃) for s in A].>wm .&& [s.y0 for s in A].<0.25)
+    id4 = findall([median(s.w̃) for s in A] .> wm .&& [s.y0 for s in A] .< 0.25)
     #scatter!(a4,[s[goal] for s in A[id4]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id4]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id4]]]; markersize,alpha)
     #plotMedians(A,a4,id4, policies,goal)
-    score(a4,A,id4,goal)
+    score(a4, A, id4, goal)
     #[xlims!(a,0.4,1.01) for a in [a1,a2,a3,a4]]
-    [ylims!(a,0,7) for a in [a1,a2,a3,a4]]
-    [xlims!(a,0,1) for a in [a1,a2,a3,a4]]
-    linkaxes!([a1,a2,a3,a4])
+    [ylims!(a, 0, 7) for a in [a1, a2, a3, a4]]
+    [xlims!(a, 0, 1) for a in [a1, a2, a3, a4]]
+    linkaxes!([a1, a2, a3, a4])
 
 
-    goal=:relative_score
-    a1=Axis(f[5,3], yreversed=true,ylabel="moderately\noverfished", backgroundcolor=bgc, yticks=(1:length(policies),policies),  yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false)
+    goal = :relative_score
+    a1 = Axis(f[5, 3], yreversed=true, ylabel="moderately\noverfished", backgroundcolor=bgc, yticks=(1:length(policies), policies), yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false)
     hidexdecorations!(a1, grid=false)
     hideydecorations!(a1)
-    a2=Axis(f[6,3], yreversed=true, ylabel="highly\noverfished",backgroundcolor=bgc, yticks=(1:length(policies),policies),  yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false)
+    a2 = Axis(f[6, 3], yreversed=true, ylabel="highly\noverfished", backgroundcolor=bgc, yticks=(1:length(policies), policies), yticklabelcolor=ColorSchemes.tab20[1:length(policies)], ygridvisible=false)
     hideydecorations!(a2)
-    a3=Axis(f[5,4], yreversed=true, backgroundcolor=bgc, ygridvisible=false)
+    a3 = Axis(f[5, 4], yreversed=true, backgroundcolor=bgc, ygridvisible=false)
     hidexdecorations!(a3, grid=false)
     hideydecorations!(a3)
-    a4=Axis(f[6,4], yreversed=true,  backgroundcolor=bgc, ygridvisible=false)
+    a4 = Axis(f[6, 4], yreversed=true, backgroundcolor=bgc, ygridvisible=false)
     hideydecorations!(a4)
-    Label(f[4,3:4],text="Governance goal",fontsize=30, tellwidth=false)
-    [hidespines!(x) for x in [a1,a2,a3,a4]]
+    Label(f[4, 3:4], text="Governance goal", fontsize=30, tellwidth=false)
+    [hidespines!(x) for x in [a1, a2, a3, a4]]
 
-    id1=findall([median(s.w̃) for s in A].<wm .&& [s.y0 for s in A].>0.25)
+    id1 = findall([median(s.w̃) for s in A] .< wm .&& [s.y0 for s in A] .> 0.25)
     #scatter!(a1,[s[goal] for s in A[id1]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id1]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id1]]]; markersize,alpha)
     #plotMedians(A,a1,id1, policies,goal)
-    score(a1,A,id1,goal)
-    id2=findall([median(s.w̃) for s in A].<wm .&& [s.y0 for s in A].<0.25) 
+    score(a1, A, id1, goal)
+    id2 = findall([median(s.w̃) for s in A] .< wm .&& [s.y0 for s in A] .< 0.25)
     #scatter!(a2,[s[goal] for s in A[id2]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id2]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id2]]]; markersize,alpha)
     #plotMedians(A,a2,id2, policies,goal)
-    score(a2,A,id2,goal)
+    score(a2, A, id2, goal)
 
-    id3=findall([median(s.w̃) for s in A].>wm .&& [s.y0 for s in A].>0.25)
+    id3 = findall([median(s.w̃) for s in A] .> wm .&& [s.y0 for s in A] .> 0.25)
     #scatter!(a3,[s[goal] for s in A[id3]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id3]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id3]]]; markersize,alpha)
     #plotMedians(A,a3,id3, policies,goal)
-    score(a3,A,id3,goal)
+    score(a3, A, id3, goal)
 
-    id4=findall([median(s.w̃) for s in A].>wm .&& [s.y0 for s in A].<0.25)
+    id4 = findall([median(s.w̃) for s in A] .> wm .&& [s.y0 for s in A] .< 0.25)
     #scatter!(a4,[s[goal] for s in A[id4]],[findall(s.name.==policies)[1].+scatterpoints(s) for s in A[id4]],[s[goal] for s in A[id4]], color=ColorSchemes.tab20[[findall(s.name.==policies)[1] for s in A[id4]]]; markersize,alpha)
     #plotMedians(A,a4,id4, policies,goal)
-    score(a4,A,id4,goal)
+    score(a4, A, id4, goal)
     #[xlims!(a,0.4,1.01) for a in [a1,a2,a3,a4]]
-    [ylims!(a,0,7) for a in [a1,a2,a3,a4]]
-    [xlims!(a,0,1) for a in [a1,a2,a3,a4]]
-    linkaxes!([a1,a2,a3,a4])
+    [ylims!(a, 0, 7) for a in [a1, a2, a3, a4]]
+    [xlims!(a, 0, 1) for a in [a1, a2, a3, a4]]
+    linkaxes!([a1, a2, a3, a4])
 
     f
 end
 
-f=Figure()
-xreversed=true
-a=Axis(f[1,1];xreversed=true)
-scatter(1:10,1:10)
+f = Figure()
+xreversed = true
+a = Axis(f[1, 1]; xreversed=true)
+scatter(1:10, 1:10)
 f
