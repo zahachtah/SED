@@ -610,21 +610,26 @@ begin
 		First processes independent SEDs, then dependent ones.
 		Uses s.N as the length of the distributions.
 		"""
-    function dist!(s)
-        N = s.N
+    # Build dependency graph for SED fields in a NamedTuple context.
+    # Returns (nodes, edges, order), where edges[k] is a Vector of symbols that k depends on,
+    # and order is a valid topological ordering of nodes.
+    function dependency_graph(s)
+        # Robust SED detection: treat as SED if it is the SED type or a struct
+        # with fields typical of SED (e.g., :dependent and :dependency_function)
+        is_sed_val(v) = (v isa SED) || (hasfield(typeof(v), :dependent) && hasfield(typeof(v), :dependency_function))
         sedkeys = Symbol[]
         for (k, v) in pairs(s)
-            v isa SED && push!(sedkeys, k)
+            is_sed_val(v) && push!(sedkeys, k)
         end
         deps = Dict{Symbol, Vector{Symbol}}(k => Symbol[] for k in sedkeys)
         for k in sedkeys
             v = getfield(s, k)
-            if has_dependencies(v)
+            if is_sed_val(v) && has_dependencies(v)
                 for dk in keys(v.dependent)
                     dk == :fun && continue
                     dk in sedkeys && push!(deps[k], dk)
                 end
-            elseif v.dependency_function isa AbstractString
+            elseif is_sed_val(v) && (v.dependency_function isa AbstractString)
                 # infer dependencies from expression string
                 for dk in _infer_dep_keys(v.dependency_function, s)
                     dk in sedkeys && push!(deps[k], dk)
@@ -646,7 +651,13 @@ begin
             end
         end
         length(order) == length(sedkeys) || error("Cyclic SED dependencies detected among: $(setdiff(sedkeys, order))")
-        for k in order
+        return (; nodes=sedkeys, edges=deps, order)
+    end
+
+    function dist!(s)
+        N = s.N
+        g = dependency_graph(s)
+        for k in g.order
             v = getfield(s, k)
             needs_deps = has_dependencies(v) || (v.dependency_function isa AbstractString) ||
                          ((v.dependency_function isa Function) && !isempty(v.dependent))
@@ -829,6 +840,92 @@ begin
             Y = scenario.policy_target==:effort ? ones(length(y)) : y
             lines!(axis, y, Φ.(1 .-(1-scenario.regulation)./Y, Ref(scenario)); color, linewidth, linestyle)
         end
+    end
+
+    """
+        dependency_graph_plot(s; node_color=:steelblue, edge_color=:gray, markersize=14, fontsize=12, figsize=(700, 450))
+
+    Plot the dependency graph for SED fields present in the NamedTuple `s`.
+    Nodes are layered by dependency depth (sources at the top), and directed
+    edges point from dependency to dependent.
+
+    Returns a Makie Figure.
+    """
+    function dependency_graph_plot(s; node_color=:steelblue, edge_color=:gray, markersize=14, fontsize=12, figsize=(700, 450))
+        g = dependency_graph(s)
+
+        # Build reverse adjacency: dep -> [dependents]
+        children = Dict{Symbol, Vector{Symbol}}(k => Symbol[] for k in g.nodes)
+        for (k, deps) in g.edges
+            for d in deps
+                push!(children[d], k)
+            end
+        end
+
+        # Compute levels: level[k] = max(level[dep] + 1)
+        level = Dict{Symbol, Int}()
+        for k in g.order
+            deps = get(g.edges, k, Symbol[])
+            if isempty(deps)
+                level[k] = 0
+            else
+                level[k] = maximum(get(level, d, 0) + 1 for d in deps)
+            end
+        end
+
+        # Group nodes by level
+        levels = Dict{Int, Vector{Symbol}}()
+        for k in g.nodes
+            l = level[k]
+            if !haskey(levels, l)
+                levels[l] = Symbol[]
+            end
+            push!(levels[l], k)
+        end
+
+        # Assign positions: x spaced within level, y by level
+        pos = Dict{Symbol, Point2f}()
+        max_level = maximum(values(level))
+        for (l, ks) in levels
+            n = length(ks)
+            xs = n == 1 ? [0.5] : range(0.1, 0.9, length=n)
+            ys = fill(1.0 - (max_level == 0 ? 0.5 : l / (max_level + 0.5)), n)
+            for (i, k) in enumerate(ks)
+                pos[k] = Point2f(xs[i], ys[i])
+            end
+        end
+
+        fig = Figure(size=figsize)
+        ax = Axis(fig[1, 1]; xticksvisible=false, yticksvisible=false, xgridvisible=false, ygridvisible=false)
+        limits!(ax, 0, 1, 0, 1)
+
+        # Draw edges with arrows from dep -> k
+        r = 0.03
+        for (k, deps) in g.edges
+            for d in deps
+                p1 = pos[d]; p2 = pos[k]
+                v = p2 - p1
+                nv = norm(v)
+                if nv == 0
+                    continue
+                end
+                u = v / nv
+                start = p1 + u * r
+                stop = p2 - u * r
+                dxdy = stop - start
+                arrows!(ax, [start[1]], [start[2]], [dxdy[1]], [dxdy[2]]; color=edge_color, linewidth=2)
+            end
+        end
+
+        # Draw nodes and labels
+        xs = Float32[p[1] for p in values(pos)]
+        ys = Float32[p[2] for p in values(pos)]
+        scatter!(ax, xs, ys; color=node_color, markersize)
+        for (k, p) in pos
+            text!(ax, p[1], p[2] + 0.035, text=String(k), align=(:center, :bottom), space=:relative, color=:black, fontsize)
+        end
+
+        fig
     end
 
     """

@@ -17,4 +17,5 @@ module SEDist
     export Uniform, LogNormal, Normal, Exponential, Dirac
     export incomes, regulation_scan, gini
     export phase_plot!,incomes_plot!
+    export dependency_graph, dependency_graph_plot
 end
