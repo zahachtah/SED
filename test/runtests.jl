@@ -2,44 +2,46 @@ using Test
 
 include(joinpath(@__DIR__, "..", "SEDist.jl"))
 using .SEDist
-using .SEDist: @dep
 
-@testset "Context + @dep basics" begin
+@testset "tuple dependent + function" begin
     N = 50
-    ctx = Context((
+    s = (
+        N = N,
         q = sed(min=1/N, max=1/N, normalize=true),
         w = sed(min=0.2, max=0.4),
         K = 2.0,
-        w̃ = @dep (q, w, K) -> q .* w ./ K,
-        s = @dep (q, w̃)    -> q ./ w̃,
-    ))
-    dist!(ctx; N=N)
-
-    @test length(ctx[:q]) == N
-    @test length(ctx[:w]) == N
-    @test length(ctx[:w̃]) == N
-    @test length(ctx[:s]) == N
-
-    # Scalar broadcasting
-    @test all(ctx[:w̃] .≈ ctx[:q] .* ctx[:w] ./ 2.0)
+        w̃ = sed(min=0.0, max=0.0, dependent=(q,w,K),
+                 dependency_fun=(indep, dep) -> dep.q .* dep.w ./ dep.K .+ indep),
+        s2 = sed(dependent=(q,w̃), dependency_fun=(dep) -> dep.q ./ dep.w̃),
+    )
+    dist!(s)
+    @test length(s.q.data) == N
+    @test length(s.w.data) == N
+    @test length(s.w̃.data) == N
+    @test length(s.s2.data) == N
+    @test all(s.w̃ .≈ s.q .* s.w ./ s.K)
+    @test all(s.s2 .≈ s.q ./ s.w̃)
 end
 
-@testset "Inline sed in @dep" begin
+@testset "tuple dependent + string" begin
     N = 30
-    ctx = Context((
+    s = (
+        N = N,
         q = sed(min=1/N, max=1/N, normalize=true),
         w = sed(min=0.1, max=0.3),
-        w̃ = @dep (q, w) -> q .* w .+ sed(min=0.0, max=0.0), # zero-width noise for determinism
-    ))
-    dist!(ctx; N=N)
-    @test all(ctx[:w̃] .≈ ctx[:q] .* ctx[:w])
+        K = 2.0,
+        w̃ = sed(min=0.0, max=0.0, dependent=(q,w,K), dependency_fun="q .* w ./ K .+ sed"),
+    )
+    dist!(s)
+    @test all(s.w̃ .≈ s.q .* s.w ./ s.K)
 end
 
 @testset "Cycle detection" begin
     N = 10
-    cyc = Context((
-        a = @dep (b) -> b .+ 1,
-        b = @dep (a) -> a .+ 1,
-    ))
-    @test_throws ArgumentError dist!(cyc; N=N)
+    cyc = (
+        N = N,
+        a = sed(dependent=(b,), dependency_fun=(dep)->dep.b .+ 1),
+        b = sed(dependent=(a,), dependency_fun=(dep)->dep.a .+ 1),
+    )
+    @test_throws ArgumentError dist!(cyc)
 end

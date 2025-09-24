@@ -48,24 +48,30 @@ flowchart TB
     two --> c2
 ```
 
-## Dependent distributions (macro)
+## Dependent distributions
 
-Define primaries and dependents in one go, then realize in order:
+Define primaries and dependents in one go using the existing `SED` fields.
+Use tuple-style `dependent=(q,w,K)` plus a `dependency_function` that can be a
+function or a string expression evaluated with variables bound.
 
 ```julia
 include("SEDist.jl"); using .SEDist
 N = 100
-ctx = Context((
+s = (
+  N = N,
   q = sed(min=1/N, max=1/N, normalize=true),
   w = sed(min=0.2, max=0.4),
   K = 2.0,
-  w̃ = SEDist.@dep((q, w, K) -> q .* w ./ K .+ sed(min=0.05, max=0.10)),
-  ū = SEDist.@dep((q, w̃)    -> q ./ w̃),
-))
-dist!(ctx; N=N)
+  # function form: (indep, dep) -> ... ; `indep` is the base SED values
+  w̃ = sed(min=0.0, max=0.0, dependent=(q,w,K),
+           dependency_fun = (indep, dep) -> dep.q .* dep.w ./ dep.K .+ indep),
+  # string form: variables q,w,K and `sed` (the base) are in scope
+  ū = sed(dependent=(q,w̃), dependency_fun = "q ./ w̃"),
+)
+dist!(s)
 ```
 
-Run the demo: `julia --project examples/dep_macro_demo.jl`.
+Notes: `dist!(s)` resolves order by dependencies (primaries → secondaries → tertiaries).
 
 ```mermaid
 flowchart TB
