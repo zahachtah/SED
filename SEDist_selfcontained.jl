@@ -652,8 +652,8 @@ begin
     Generate distributions for the SED parameter specified by name.
     Uses s.N as the length of the distribution.
     """
-    function dist!(s, param_name::Symbol; random::Union{Nothing,Bool}=nothing)
-        N = s.N
+    function dist!(s, param_name::Symbol; N::Union{Nothing,Int}=nothing, random::Union{Nothing,Bool}=nothing)
+        N === nothing && (N = s.N)
         sed = find_sed_by_name(s, param_name)
         if sed === nothing
             error("Could not find SED parameter named $(param_name) in the scenario")
@@ -716,8 +716,8 @@ begin
         return (; nodes=sedkeys, edges=deps, order)
     end
 
-    function dist!(s; random::Union{Nothing,Bool}=nothing)
-        N = s.N
+    function dist!(s; N::Union{Nothing,Int}=nothing, random::Union{Nothing,Bool}=nothing)
+        N === nothing && (N = s.N)
         g = dependency_graph(s)
         for k in g.order
             v = getfield(s, k)
@@ -741,6 +741,15 @@ begin
     function dist!(context::NamedTuple, N::Int; random::Union{Nothing,Bool}=nothing)
         new_context = map(x -> (x isa SED ? dist!(x, N; context=context, random) : x), context)
         return new_context
+    end
+
+    # Keyword form for contexts: dist!(context; N=...)
+    function dist!(context::NamedTuple; N::Union{Nothing,Int}=nothing, random::Union{Nothing,Bool}=nothing)
+        if N === nothing
+            haskey(context, :N) || error("Provide N=... or include :N in the context NamedTuple")
+            N = context.N
+        end
+        return dist!(context, N; random)
     end
 
     # -----------------------------------------------------------------------------
