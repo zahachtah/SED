@@ -66,7 +66,7 @@ function __ensure_vec__(x, N::Int)
     elseif x isa AbstractVector
         length(x) == N || throw(ArgumentError("dependent expression returned length $(length(x)); expected $N"))
         return x
-    elseif x isa SEDist.SED
+    elseif x isa SED
         return __realize_sed__(x, N)
     else
         throw(ArgumentError("unsupported dependent result of type $(typeof(x))"))
