@@ -15,11 +15,25 @@ struct DepSpec
 end
 
 """
-    Context(specs::NamedTuple)
+    Context(specs::NamedTuple; N=nothing)
 
-Container for primary and dependent specifications. Call `dist!(ctx; N)` to
-materialize all variables in topological order. Access realized values via
-`ctx[:name]`.
+Container for primary and dependent specifications.
+
+- Primaries: `sed(...)`, numbers (broadcast), or vectors of length `N`.
+- Dependents: created with `@dep (a,b,...) -> expr` where `a,b,...` are upstream variables.
+
+Call `dist!(ctx; N)` to materialize in topological order, then access with `ctx[:name]`.
+
+Example
+    N = 100
+    ctx = Context((
+        q = sed(min=1/N, max=1/N, normalize=true),
+        w = sed(min=0.2, max=0.4),
+        K = 2.0,
+        w̃ = @dep (q, w, K) -> q .* w ./ K,
+    ))
+    dist!(ctx; N=N)
+    ctx[:w̃]
 """
 mutable struct Context
     specs::NamedTuple
@@ -63,12 +77,13 @@ end
 """
     @dep (a, b, ...) -> expr
 
-Define a dependent spec whose value is computed from already realized upstream
-variables `a, b, ...` and may include `sed(...)` calls inline. Example:
+Define a dependent spec computed from already realized upstream variables
+`a, b, ...`. You can include `sed(...)` inline; it is realized to a vector of
+length `N` automatically at evaluation.
 
-    w̃ = @dep (q, w, K) -> q .* w ./ K .+ sed(min=0.1, max=0.6)
-
-The macro rewrites `sed(...)` into a realized vector of length `N` at evaluation.
+Examples
+    w̃ = @dep (q, w, K) -> q .* w ./ K
+    ū  = @dep (q, w̃)    -> q ./ w̃ .+ sed(min=0.05, max=0.10)
 """
 macro dep(fn)
     # Expect (args...) -> body
