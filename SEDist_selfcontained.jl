@@ -1,4 +1,5 @@
 using Colors, Statistics, Distributions, OrdinaryDiffEq, CairoMakie, Random, ColorSchemes
+using LinearAlgebra
 using DataFrames, GLM, StatsModels
 using DiffEqCallbacks: TerminateSteadyState
 import Base: show
