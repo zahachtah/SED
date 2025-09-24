@@ -398,7 +398,20 @@ begin
                     missing = join(unknown, ", ")
                     error("Unknown variable(s) in dependency_fun: $(missing). Available: $(available). The special name `sed` refers to the base vector.")
                 end
+                # Parse and rewrite basic ops to broadcasting when vectors are involved
                 ex = Meta.parse(df)
+                function _broadcast_ops(e)
+                    if e isa Expr && e.head == :call && (e.args[1] == :* || e.args[1] == :/)
+                        a, b = e.args[2], e.args[3]
+                        isa_vec(x) = (x == :sed) || (x isa Symbol && (x in keys_list))
+                        if isa_vec(a) || isa_vec(b)
+                            op = (e.args[1] == :*) ? :.* : :./
+                            return Expr(:call, op, _broadcast_ops(a), _broadcast_ops(b))
+                        end
+                    end
+                    return (e isa Expr) ? Expr(e.head, (_broadcast_ops(arg) for arg in e.args)... ) : e
+                end
+                ex = _broadcast_ops(ex)
                 assigns = [:($(k) = $(depvals[k])) for k in keys_list]
                 let_block = :(
                     let sed = $(indep)
