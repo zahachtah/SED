@@ -1,14 +1,12 @@
-module SocialEconomicDiversity
+module SEDist
 
-    using Colors, Statistics, Distributions, OrdinaryDiffEq, CairoMakie, FileIO, Random, ColorSchemes
-    using DiffEqCallbacks: TerminateSteadyState
-    using Parameters
-    import Base: show
-    using Base: @kwdef
+    include("SEDist_selfcontained.jl")
+    include("SEDContext.jl")
     using Reexport
+    using .SEDContext: Context, @dep
     @reexport using CairoMakie, FileIO, ColorSchemes
 
-    include("SED_selfcontained.jl")
+
     export SED, sed, dist!, astext
     export has_dependencies, is_distribution_type, find_sed_by_name
     export sim
@@ -20,4 +18,6 @@ module SocialEconomicDiversity
     export γ_economic_incentive, μ_economic_incentive, regulate_economic_incentive
     export Uniform, LogNormal, Normal, Exponential, Dirac
     export incomes, regulation_scan, gini
+    export phase_plot!,incomes_plot!
+    export Context, @dep
 end
