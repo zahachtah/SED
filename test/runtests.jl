@@ -2,6 +2,7 @@ using Test
 
 include(joinpath(@__DIR__, "..", "SEDist.jl"))
 using .SEDist
+using .SEDist: @dep
 
 @testset "Context + @dep basics" begin
     N = 50
@@ -42,4 +43,3 @@ end
     ))
     @test_throws ArgumentError dist!(cyc; N=N)
 end
-

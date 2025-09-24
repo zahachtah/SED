@@ -1,6 +1,6 @@
 import Base: getindex
 
-export @dep, Context
+export Context
 
 """
     DepSpec
@@ -132,7 +132,7 @@ end
     dist!(ctx::Context; N)
 
 Realize all specs in dependency order. Scalars broadcast to length `N`.
-`SED` primaries are realized by `SEDist.dist!`.
+`SED` primaries are realized by `dist!`.
 """
 function dist!(ctx::Context; N::Union{Nothing,Int}=ctx.N)
     N === nothing && throw(ArgumentError("provide N either in Context(...; N) or dist!(ctx; N=...)"))
