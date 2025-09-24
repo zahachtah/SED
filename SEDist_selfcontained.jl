@@ -399,7 +399,7 @@ begin
                 end
                 ex = Meta.parse(df)
                 assigns = [:( $(k) = $(depvals[k]) ) for k in keys_list]
-                let_block = :(let sed = indep; $(Expr(:block, assigns...)); $ex; end)
+                let_block = :(let sed = $(indep); $(Expr(:block, assigns...)); $ex; end)
                 sed.data = Core.eval(@__MODULE__, let_block)
                 return sed
             end
