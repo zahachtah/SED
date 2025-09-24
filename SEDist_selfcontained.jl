@@ -283,6 +283,26 @@ begin
 		using the provided `context`. The key `:fun` (if present) is reserved for a custom function
 		and is not used to scale dependency variables.
 		"""
+    # Extract dependency symbols from a string expression by finding symbols
+    # that also exist as keys in the provided context. Excludes the special
+    # identifier `sed` which refers to the independent values.
+    function _infer_dep_keys(expr_str::AbstractString, context::NamedTuple)
+        ex = Meta.parse(expr_str)
+        syms = Set{Symbol}()
+        function walk(e)
+            if e isa Symbol
+                push!(syms, e)
+            elseif e isa Expr
+                for a in e.args
+                    walk(a)
+                end
+            end
+        end
+        walk(ex)
+        delete!(syms, :sed)
+        return [s for s in syms if haskey(context, s)]
+    end
+
     function apply_dependencies!(sed::SED, N::Int, context::NamedTuple)
         isempty(sed.dependent) && return sed
 
@@ -324,6 +344,14 @@ begin
                 return sed
             elseif df isa AbstractString
                 # Evaluate an expression like "q .* w ./ K .+ sed"
+                # If keys_list empty, infer from string and available context keys
+                if isempty(keys_list)
+                    keys_list = _infer_dep_keys(df, context)
+                    for k in keys_list
+                        v = context[k]
+                        depvals[k] = hasproperty(v, :data) ? v.data : v
+                    end
+                end
                 ex = Meta.parse(df)
                 assigns = [:( $(k) = $(depvals[k]) ) for k in keys_list]
                 let_block = :(let sed = indep; $(Expr(:block, assigns...)); $ex; end)
@@ -540,6 +568,11 @@ begin
             if has_dependencies(v)
                 for dk in keys(v.dependent)
                     dk == :fun && continue
+                    dk in sedkeys && push!(deps[k], dk)
+                end
+            elseif v.dependency_function isa AbstractString
+                # infer dependencies from expression string
+                for dk in _infer_dep_keys(v.dependency_function, s)
                     dk in sedkeys && push!(deps[k], dk)
                 end
             end

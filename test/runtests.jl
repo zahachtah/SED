@@ -36,6 +36,19 @@ end
     @test all(s.w̃ .≈ s.q .* s.w ./ s.K)
 end
 
+@testset "infer deps from string when dependent omitted" begin
+    N = 20
+    s = (
+        N = N,
+        q = sed(min=1/N, max=1/N, normalize=true),
+        w = sed(min=0.1, max=0.3),
+        K = 2.0,
+        w̃ = sed(min=0.0, max=0.0, dependency_fun="q .* w ./ K .+ sed"),
+    )
+    dist!(s)
+    @test all(s.w̃ .≈ s.q .* s.w ./ s.K)
+end
+
 @testset "Cycle detection" begin
     N = 10
     cyc = (
