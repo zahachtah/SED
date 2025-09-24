@@ -425,7 +425,7 @@ begin
                         if (op == :+ || op == :- || op == :* || op == :/) && length(e.args) == 3
                             a, b = e.args[2], e.args[3]
                             if _is_veclike(a) || _is_veclike(b)
-                                bop = op == :+ ? :. + : op == :- ? :.- : op == :* ? :.* : :./
+                                bop = op == :+ ? :.+ : op == :- ? :.- : op == :* ? :.* : :./
                                 return Expr(:call, bop, _broadcast_ops(a), _broadcast_ops(b))
                             end
                         end
