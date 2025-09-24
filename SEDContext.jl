@@ -1,6 +1,4 @@
-module SEDContext
 import Base: getindex
-import ..SEDist: dist!
 
 export @dep, Context
 
@@ -47,12 +45,12 @@ Context(specs::NamedTuple; N=nothing) = Context(specs, Dict{Symbol,Any}(), N)
 getindex(ctx::Context, s::Symbol) = get(ctx.values, s, nothing)
 
 """
-    __realize_sed__(s::SEDist.SED, N) -> Vector
+    __realize_sed__(s::SED, N) -> Vector
 
 Helper: realize a `SED` to concrete data of length `N` without exposing a draw API.
 """
-function __realize_sed__(s::SEDist.SED, N::Int)
-    SEDist.dist!(s, N)
+function __realize_sed__(s::SED, N::Int)
+    dist!(s, N)
     return s.data
 end
 
@@ -110,7 +108,7 @@ macro dep(fn)
     function wrap_sed_calls(ex)
         if ex isa Expr
             if ex.head == :call && ex.args[1] === :sed
-                return :(SEDContext.__realize_sed__($(Expr(:call, :sed, ex.args[2:end]...)), __N__))
+                return :(__realize_sed__($(Expr(:call, :sed, ex.args[2:end]...)), __N__))
             else
                 return Expr(ex.head, map(wrap_sed_calls, ex.args)...)
             end
@@ -124,10 +122,10 @@ macro dep(fn)
     get_bindings = [:($d = get($(QuoteNode(d)))) for d in deps]
     eval_fn = :( (get, __N__) -> begin
                     $(Expr(:block, get_bindings...))
-                    SEDContext.__ensure_vec__($wrapped_body, __N__)
+                    __ensure_vec__($wrapped_body, __N__)
                 end )
 
-    return :(SEDContext.DepSpec($(deps), $eval_fn))
+    return :(DepSpec($(deps), $eval_fn))
 end
 
 """
@@ -172,7 +170,7 @@ function dist!(ctx::Context; N::Union{Nothing,Int}=ctx.N)
                 ctx.values[s]
             end
             ctx.values[n] = spec.eval(getfn, N)
-        elseif spec isa SEDist.SED
+        elseif spec isa SED
             ctx.values[n] = __realize_sed__(spec, N)
         elseif spec isa Number
             ctx.values[n] = fill(spec, N)
@@ -202,4 +200,4 @@ function dist!(ctx::Context; N::Union{Nothing,Int}=ctx.N)
     return ctx
 end
 
-end # module
+ 

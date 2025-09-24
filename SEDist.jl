@@ -3,7 +3,6 @@ module SEDist
     include("SEDist_selfcontained.jl")
     include("SEDContext.jl")
     using Reexport
-    using .SEDContext: Context, @dep
     @reexport using CairoMakie, FileIO, ColorSchemes
 
 
