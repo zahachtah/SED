@@ -220,8 +220,10 @@ begin
 		   is taken as a coefficient for the corresponding variable. If a key `:fun` is present, its value
 		   (which must be a function) is used to compute the dependent contribution.
 		- `distribution`: The base distribution type (e.g. `Uniform`, `LogNormal`, etc.).
-		- `dependency_function::Function`: A function that combines the independent data with the dependent
-		   contribution. (Default: elementwise addition.)
+        - `dependency_function::Union{Function,AbstractString,Nothing}`: A function or expression that
+           combines the independent data with the dependent contribution. (Default: elementwise
+           addition.) If a `String`, variables in `dependent` (or inferred from the string) and `sed`
+           (the independent vector) are in scope.
 		"""
 		@kwdef mutable struct SED{T, N, A<:AbstractArray{T, N}} <: AbstractArray{T, N}
 		    data::A = nothing
@@ -235,7 +237,7 @@ begin
 		    normalize::Bool = false
 		    dependent::NamedTuple = NamedTuple()   # e.g., (ē = 1.0, q = 1.0, r = 1.0, fun = (dep -> (dep.ē * dep.q) / dep.r))
 		    distribution::Any = Uniform              # e.g., Uniform, LogNormal, etc.
-		    dependency_function::Function = (indep, dep) -> indep .+ dep
+        dependency_function::Union{Function,AbstractString,Nothing} = (indep, dep) -> indep .+ dep
 		end
 		
 		# -----------------------------------------------------------------------------
