@@ -400,16 +400,46 @@ begin
                 end
                 # Parse and rewrite basic ops to broadcasting when vectors are involved
                 ex = Meta.parse(df)
-                function _broadcast_ops(e)
-                    if e isa Expr && e.head == :call && (e.args[1] == :* || e.args[1] == :/)
-                        a, b = e.args[2], e.args[3]
-                        isa_vec(x) = (x == :sed) || (x isa Symbol && (x in keys_list))
-                        if isa_vec(a) || isa_vec(b)
-                            op = (e.args[1] == :*) ? :.* : :./
-                            return Expr(:call, op, _broadcast_ops(a), _broadcast_ops(b))
+                # Determine if an expression is vector-like (contains sed or a dependent symbol)
+                function _is_veclike(e)
+                    if e === :sed
+                        return true
+                    elseif e isa Symbol
+                        return e in keys_list
+                    elseif e isa Expr
+                        # If any argument is veclike, propagate
+                        for a in e.args
+                            if _is_veclike(a)
+                                return true
+                            end
                         end
+                        return false
+                    else
+                        return false
                     end
-                    return (e isa Expr) ? Expr(e.head, (_broadcast_ops(arg) for arg in e.args)... ) : e
+                end
+                function _broadcast_ops(e)
+                    if e isa Expr && e.head == :call
+                        op = e.args[1]
+                        # Binary ops: +, -, *, /
+                        if (op == :+ || op == :- || op == :* || op == :/) && length(e.args) == 3
+                            a, b = e.args[2], e.args[3]
+                            if _is_veclike(a) || _is_veclike(b)
+                                bop = op == :+ ? :. + : op == :- ? :.- : op == :* ? :.* : :./
+                                return Expr(:call, bop, _broadcast_ops(a), _broadcast_ops(b))
+                            end
+                        end
+                        # Unary minus on veclike: rewrite to elementwise negation
+                        if op == :- && length(e.args) == 2
+                            a = e.args[2]
+                            if _is_veclike(a)
+                                return Expr(:call, :.* , -1, _broadcast_ops(a))
+                            end
+                        end
+                        return Expr(e.head, (_broadcast_ops(arg) for arg in e.args)...)
+                    else
+                        return e
+                    end
                 end
                 ex = _broadcast_ops(ex)
                 assigns = [:($(k) = $(depvals[k])) for k in keys_list]
