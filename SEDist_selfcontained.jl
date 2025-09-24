@@ -639,7 +639,11 @@ begin
         length(order) == length(sedkeys) || error("Cyclic SED dependencies detected among: $(setdiff(sedkeys, order))")
         for k in order
             v = getfield(s, k)
-            has_dependencies(v) ? dist!(v, N; context=s) : dist!(v, N)
+            if has_dependencies(v) || (v.dependency_function !== nothing)
+                dist!(v, N; context=s)
+            else
+                dist!(v, N)
+            end
         end
         return s
     end
