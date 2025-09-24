@@ -48,6 +48,25 @@ flowchart TB
     two --> c2
 ```
 
+## Dependent distributions (macro)
+
+Define primaries and dependents in one go, then realize in order:
+
+```julia
+include("SEDist.jl"); using .SEDist
+N = 100
+ctx = Context((
+  q = sed(min=1/N, max=1/N, normalize=true),
+  w = sed(min=0.2, max=0.4),
+  K = 2.0,
+  w̃ = @dep (q, w, K) -> q .* w ./ K .+ sed(min=0.05, max=0.10),
+  ū = @dep (q, w̃)    -> q ./ w̃,
+))
+dist!(ctx; N=N)
+```
+
+Run the demo: `julia --project examples/dep_macro_demo.jl`.
+
 ```mermaid
 flowchart TB
     subgraph External
@@ -76,4 +95,3 @@ flowchart TB
     q-->w_tilde
 
 ```
-
