@@ -13,8 +13,8 @@ ctx = Context((
     q   = sed(min=1/N, max=1/N, normalize=true),
     w   = sed(min=0.2, max=0.4),
     K   = 2.0,
-    w̃   = SEDist.@dep (q, w, K) -> q .* w ./ K .+ sed(min=0.05, max=0.10),
-    ubar = SEDist.@dep (q, w̃)    -> q ./ w̃,
+    w̃   = SEDist.@dep((q, w, K) -> q .* w ./ K .+ sed(min=0.05, max=0.10)),
+    ubar = SEDist.@dep((q, w̃)    -> q ./ w̃),
 ))
 
 dist!(ctx; N=N)

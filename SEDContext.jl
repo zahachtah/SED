@@ -81,8 +81,8 @@ Define a dependent spec computed from already realized upstream variables
 length `N` automatically at evaluation.
 
 Examples
-    w̃ = @dep (q, w, K) -> q .* w ./ K
-    ū  = @dep (q, w̃)    -> q ./ w̃ .+ sed(min=0.05, max=0.10)
+    w̃ = SEDist.@dep((q, w, K) -> q .* w ./ K)
+    ū  = SEDist.@dep((q, w̃)    -> q ./ w̃ .+ sed(min=0.05, max=0.10))
 """
 macro dep(fn)
     # Expect (args...) -> body
