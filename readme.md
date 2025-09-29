@@ -73,6 +73,8 @@ dist!(s)
 
 Notes: `dist!(s)` resolves order by dependencies (primaries → secondaries → tertiaries).
 
+Manuscript figures: `julia --project manuscript/figures.jl` writes images to `manuscript/figures/`.
+
 ### dist! Overrides
 
 Control sampling mode and length at call-site without mutating SEDs:
