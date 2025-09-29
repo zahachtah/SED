@@ -32,4 +32,16 @@ module SEDist
     catch
         # no-op
     end
+
+    # Declare plotting function names so the Makie extension can add methods.
+    function Γ_plot! end
+    function Φ_plot! end
+    function attractor_plot! end
+    function trajecory_plot! end
+    function bg_plot! end
+    function target_plot! end
+    function phase_plot! end
+    function phase_plot end
+    function incomes_plot! end
+    function dependency_graph_plot end
 end
