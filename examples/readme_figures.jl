@@ -12,6 +12,11 @@ const S = Main.SED
 using CairoMakie
 CairoMakie.activate!()
 
+# Ensure latest visualization helpers are available even if SED was loaded earlier
+if !isdefined(S, :dist_plot_compare)
+    Base.include(S, joinpath(@__DIR__, "..", "SED_visualizations.jl"))
+end
+
 outdir = joinpath(@__DIR__, "figures")
 isdir(outdir) || mkpath(outdir)
 
