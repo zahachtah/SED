@@ -26,6 +26,11 @@
 - Use `Test`: `using Test; @test ...`. Name files by feature (e.g., `test/sed_generation.jl`).
 - Run tests: `julia --project -e 'using Pkg; Pkg.test()'`.
 - For scripts, add lightweight assertions to catch regressions.
+ 
+### Dependent SED tests
+- Tuple deps + function: `sed(dependent=(q,w,K), dependency_fun=(indep,dep)-> ...)`.
+- Tuple deps + string: `sed(dependency_fun="q .* w ./ K .+ sed")` (deps inferred from string).
+- Cycle detection: circular dependent SEDs should throw in `dist!(s)`.
 
 ## Commit & PR Guidelines
 - Commits: imperative, concise, describe intent (e.g., "Add μ/γ dependency handling").
@@ -37,4 +42,3 @@
 - Reproducibility: respect `Manifest.toml`; bump deps via a dedicated PR.
 - Performance: set `JULIA_NUM_THREADS` as needed for simulations.
 - Secrets: do not embed credentials in scripts or notebooks.
-

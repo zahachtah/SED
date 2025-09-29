@@ -1,9 +1,7 @@
 module SEDist
 
     include("SEDist_selfcontained.jl")
-    include("SEDContext.jl")
     using Reexport
-    using .SEDContext: Context, @dep
     @reexport using CairoMakie, FileIO, ColorSchemes
 
 
@@ -16,8 +14,8 @@ module SEDist
     export γ_exclusive_use_rights, regulate_exclusive_use_rights
     export γ_tradable_use_rights, ϕ_tradable_use_rights, regulate_tradable_use_rights
     export γ_economic_incentive, μ_economic_incentive, regulate_economic_incentive
-    export Uniform, LogNormal, Normal, Exponential, Dirac
+    export Uniform, LogNormal, Normal, Exponential, Dirac, Bernoulli
     export incomes, regulation_scan, gini
     export phase_plot!,incomes_plot!
-    export Context, @dep
+    export dependency_graph, dependency_graph_plot
 end
