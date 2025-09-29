@@ -15,33 +15,7 @@ module SEDist
     export γ_economic_incentive, μ_economic_incentive, regulate_economic_incentive
     export Uniform, LogNormal, Normal, Exponential, Dirac, Bernoulli
     export incomes, regulation_scan, gini
-    # Plotting functions are provided via a Makie extension when Makie is loaded.
+    # Plotting functions (CairoMakie-based)
     export phase_plot!, incomes_plot!, dependency_graph, dependency_graph_plot
-
-    # Optional helper to load plotting methods in non-package contexts
-    function load_plots!()
-        include("ext/SEDMakieExt.jl")
-        return nothing
-    end
-
-    # Auto-load plots if Makie is already loaded in the session
-    try
-        if isdefined(Main, :Makie)
-            load_plots!()
-        end
-    catch
-        # no-op
-    end
-
-    # Declare plotting function names so the Makie extension can add methods.
-    function Γ_plot! end
-    function Φ_plot! end
-    function attractor_plot! end
-    function trajecory_plot! end
-    function bg_plot! end
-    function target_plot! end
-    function phase_plot! end
-    function phase_plot end
-    function incomes_plot! end
-    function dependency_graph_plot end
+    include("SEDist_plotting.jl")
 end

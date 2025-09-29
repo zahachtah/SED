@@ -1,29 +1,22 @@
-module SEDMakieExt
-
-using Makie
+using CairoMakie
 using ColorSchemes
 using LinearAlgebra
-import ..SEDist
 
 # Bring core helpers into scope
-const Γ = SEDist.Γ
-const Φ = SEDist.Φ
-const sim = SEDist.sim
-const dependency_graph = SEDist.dependency_graph
-const incomes = SEDist.incomes
-
-# Declare that we’re extending these names in SEDist
-import ..SEDist: Γ_plot!, Φ_plot!, attractor_plot!, trajecory_plot!, bg_plot!, target_plot!,
-                 phase_plot!, phase_plot, incomes_plot!, dependency_graph_plot
+const _Γ = Γ
+const _Φ = Φ
+const _sim = sim
+const _dependency_graph = dependency_graph
+const _incomes = incomes
 
 function Γ_plot!(axis, sol; color=:darkorange, linewidth=3, t=0.0)
     y = range(0.0, stop=1.0, length=100)
-    lines!(axis, y, Γ.(y, Ref(sol.prob.p), x=sol.u[end-1]; t); color, linewidth)
+    lines!(axis, y, _Γ.(y, Ref(sol.prob.p), x=sol.u[end-1]; t); color, linewidth)
 end
 
 function Φ_plot!(axis, sol; color=:darkorange, linewidth=3, t=0.0)
     y = range(0.0, stop=1.0, length=100)
-    lines!(axis, y, Φ.(y, Ref(sol.prob.p); t); color, linewidth)
+    lines!(axis, y, _Φ.(y, Ref(sol.prob.p); t); color, linewidth)
 end
 
 function attractor_plot!(axis, sol; color=:darkorange, markersize=15, marker=:circle)
@@ -52,12 +45,12 @@ function target_plot!(axis, sol; color=:darkorange, linestyle=:dash, linewidth=3
     y = range(0.0, stop=1.0, length=100)
     if haskey(scenario, :policy_target)
         Y = scenario.policy_target == :effort ? ones(length(y)) : y
-        lines!(axis, y, Φ.(1 .- (1 - scenario.regulation) ./ Y, Ref(scenario)); color, linewidth, linestyle)
+        lines!(axis, y, _Φ.(1 .- (1 - scenario.regulation) ./ Y, Ref(scenario)); color, linewidth, linestyle)
     end
 end
 
 function dependency_graph_plot(s; node_color=:steelblue, edge_color=:gray, markersize=28, fontsize=12, figsize=(700, 450))
-    g = dependency_graph(s)
+    g = _dependency_graph(s)
     # Build reverse adjacency: dep -> [dependents]
     children = Dict{Symbol, Vector{Symbol}}(k => Symbol[] for k in g.nodes)
     for (k, deps) in g.edges
@@ -123,16 +116,16 @@ function phase_plot!(axis, sol; show_trajectory=false, show_target=false, open_a
     limits!(axis, 0.0, 1.0, 0.0, 1.0)
     y = range(0.0, stop=1.0, length=100)
     if show_oa
-        oa = SEDist.change(scenario, policy="Open Access", γ=SEDist.γ, μ=SEDist.μ, regulate=SEDist.regulate, ϕ=SEDist.ϕ)
-        oasol = sim(oa)
-        lines!(axis, y, Γ.(y, Ref(oa), x=sol.u[end-1]), color=open_access_color, linewidth=3)
-        lines!(axis, y, Φ.(y, Ref(oa)), color=open_access_color, linewidth=1)
+        oa = change(scenario, policy="Open Access", γ=γ, μ=μ, regulate=regulate, ϕ=ϕ)
+        oasol = _sim(oa)
+        lines!(axis, y, _Γ.(y, Ref(oa), x=sol.u[end-1]), color=open_access_color, linewidth=3)
+        lines!(axis, y, _Φ.(y, Ref(oa)), color=open_access_color, linewidth=1)
     end
-    lines!(axis, y, Γ.(y, Ref(scenario), x=sol.u[end-1]; t), color=incentive_line_color, linewidth=3)
-    lines!(axis, y, Φ.(y, Ref(scenario); t), color=impact_line_color, linewidth=1)
+    lines!(axis, y, _Γ.(y, Ref(scenario), x=sol.u[end-1]; t), color=incentive_line_color, linewidth=3)
+    lines!(axis, y, _Φ.(y, Ref(scenario); t), color=impact_line_color, linewidth=1)
     if show_target && haskey(scenario, :policy_target)
         Y = scenario.policy_target == :effort ? ones(length(y)) : y
-        lines!(axis, y, Φ.(1 .- (1 - scenario.regulation) ./ Y, Ref(scenario)), color=:darkorange, linestyle=:dot)
+        lines!(axis, y, _Φ.(1 .- (1 - scenario.regulation) ./ Y, Ref(scenario)), color=:darkorange, linestyle=:dot)
     end
     if show_trajectory
         lines!(axis,
@@ -153,14 +146,11 @@ function phase_plot(sol)
 end
 
 function incomes_plot!(ax, sol; order=false, color=:darkorange, dimensional::Bool=false, resource_incomes=true)
-    p = sol.prob.p
-    inc = incomes(sol)
+    inc = _incomes(sol)
     res = inc.resource; wage = inc.wages; trd = inc.trade; total = inc.total
     idx = order ? sortperm(total) : eachindex(total)
     barplot!(ax, (res[idx] .+ wage[idx]), color=color, alpha=1.0, offset=trd[idx])
     barplot!(ax, trd[idx], color=color)
     barplot!(ax, trd[idx], color=HSLA(0, 0, 0, 0.2))
 end
-
-end # module
 
