@@ -73,6 +73,49 @@ dist!(s)
 
 Notes: `dist!(s)` resolves order by dependencies (primaries → secondaries → tertiaries).
 
+### dist! Overrides
+
+Control sampling mode and length at call-site without mutating SEDs:
+
+```julia
+# Per param in context
+dist!(s, :q; N=50)          # realize `q` at length 50
+dist!(s, :q; random=true)   # force random sampling for this call
+
+# Whole context (topological order)
+dist!(s; N=50)              # override length for this call
+dist!(s; random=false)      # force quantile-based (non-random) sampling
+dist!(s; N=50, random=true) # combine overrides
+
+# Plain NamedTuple context
+dist!(s, 50)                # existing positional form
+dist!(s; N=50)              # keyword form (uses s.N if N omitted)
+```
+
+## Core API
+
+- `sed(...)`: define a primary or dependent SED distribution (see dependent examples above).
+- `dist!(...)`: realize data vectors. Supports:
+  - `dist!(sed, N; random)`
+  - `dist!(s, :param; N, random)`
+  - `dist!(s; N, random)` (topological across all SEDs in `s`)
+  - `dist!(s, N)` for plain NamedTuple contexts
+- `scenario(...)`, `base(...)`, `high_impact(...)`, `low_impact(...)`, `high_incentives(...)`: build model scenarios.
+- `sim(s; kwargs...)`: run the ODE model and return a solution.
+- `incomes(sol)`, `gini(vec)`: compute income components and inequality.
+- `regulation_scan(s; kwargs...)`: scan policy parameter and aggregate outcomes.
+- Useful helpers: `has_dependencies(sed)`, `find_sed_by_name(s, :key)`.
+
+## Plotting
+
+- Solution/phase plots:
+  - `phase_plot!(ax, sol; ...)`, `phase_plot(sol)`
+  - `incomes_plot!(ax, sol; ...)`
+  - Components: `Γ_plot!`, `Φ_plot!`, `attractor_plot!`, `trajecory_plot!`, `bg_plot!`, `target_plot!`
+- Dependency graph:
+  - `dependency_graph(s)` → `(; nodes, edges, order)`
+  - `dependency_graph_plot(s; kwargs...)` → Makie `Figure`
+
 ```mermaid
 flowchart TB
     subgraph External

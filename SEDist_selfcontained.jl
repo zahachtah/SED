@@ -9,10 +9,11 @@ using Base: @kwdef
 begin
 
     function dxdt(dx, x, p, t)
+
         # Extract parameters to make equations prettier
         N = p.N
         # Actor resource use change
-        dx[1:N] = p.α * (x[N+1] .- p.γ(x, p, t))
+        dx[1:N] = p.α .* (x[N+1] .- p.γ(x, p, t))
 
         # Resource level dynamics
         dx[N+1] = x[N+1] * ((1 - x[N+1]) - sum(x[1:N]))
