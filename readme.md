@@ -22,12 +22,17 @@ sample!(s)   # resolves dependencies topologically
 sol = sim(scenario(base(N=N); w̃=dist(data=s.w̃), ū=dist(data=s.ū)))
 ```
 
+Example output:
+
+![Phase + incomes](examples/figures/readme_phase_incomes.png)
+```
+
 What’s Next
 
-- Core: concepts, context, and simulation → docs/core.md
-- Distributions: independent/dependent, function vs string, sampling → docs/distributions.md
-- Visualizations: phase, incomes, Γ and Φ, dependency graph → docs/visualizations.md
-- Policies: scenarios, regulation scan, evaluation → docs/policies.md
+- [Core](docs/core.md): concepts, context, simulation
+- [Distributions](docs/distributions.md): independent/dependent, function vs string, sampling
+- [Visualizations](docs/visualizations.md): phase, incomes, Γ and Φ, dependency graph
+- [Policies](docs/policies.md): scenarios, regulation scan, evaluation
 
 Plotting (optional)
 
@@ -41,6 +46,18 @@ Figures
 
 - README: `julia --project examples/readme_figures.jl` → `examples/figures`
 - Manuscript: `julia --project manuscript/figures.jl` → `manuscript/figures`
+
+Dependency graph (README example):
+
+![Dependency Graph](examples/figures/readme_dep_graph.png)
+
+Sampling compare (non‑random vs random):
+
+![Sampling Compare](examples/figures/readme_sampling_compare.png)
+
+Γ and Φ curves (README example):
+
+![Gamma Phi](examples/figures/readme_gamma_phi.png)
 
 sample! Overrides
 
