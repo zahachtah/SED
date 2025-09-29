@@ -35,8 +35,8 @@ begin
 
     # Solve ODE
     function sim(s; u0=zeros(s.N), y0=1.0, ϕ0=0.0, regulation=0.0, start_from_OA=false, t_end=1000.0)
-        isempty(s.w̃.data) ? dist!(s.w̃, s.N) : nothing
-        isempty(s.ū.data) ? dist!(s.ū, s.N) : nothing
+        isempty(s.w̃.data) ? sample!(s.w̃, s.N) : nothing
+        isempty(s.ū.data) ? sample!(s.ū, s.N) : nothing
         tspan = (0.0, t_end)
         p = s.regulate(s, regulation)
 
@@ -172,29 +172,29 @@ begin
     function base(; N=100, sigma=0.0, random=false)
         (; N,
          α=0.1,
-         w̃=sed(min=0.1, max=1.0, distribution=LogNormal, random=random),
-         ū=sed(mean=1.0, sigma=sigma, normalize=true, random=random),
+         w̃=dist(min=0.1, max=1.0, distribution=LogNormal, random=random),
+         ū=dist(mean=1.0, sigma=sigma, normalize=true, random=random),
          R=ones(N), γ, μ, ϕ, regulate, policy="Open Access")
     end
 
     function high_impact(; N=100, sigma=0.0)
         (; N, α=0.1,
-         w̃=sed(min=0.01, max=1.0, distribution=LogNormal),
-         ū=sed(mean=2.0, sigma=sigma, normalize=true),
+         w̃=dist(min=0.01, max=1.0, distribution=LogNormal),
+         ū=dist(mean=2.0, sigma=sigma, normalize=true),
          R=ones(N), γ, μ, ϕ, regulate, policy="Open Access")
     end
 
     function low_impact(; N=100, sigma=0.0)
         (; N, α=0.1,
-         w̃=sed(min=0.01, max=0.6, distribution=LogNormal),
-         ū=sed(mean=0.5, sigma=sigma, normalize=true),
+         w̃=dist(min=0.01, max=0.6, distribution=LogNormal),
+         ū=dist(mean=0.5, sigma=sigma, normalize=true),
          R=ones(N), γ, μ, ϕ, regulate, policy="Open Access")
     end
 
     function high_incentives(; N=100, sigma=0.0)
         (; N, α=0.1,
-         w̃=sed(min=0.3, max=0.7, distribution=LogNormal),
-         ū=sed(mean=1.0, sigma=sigma, normalize=true),
+         w̃=dist(min=0.3, max=0.7, distribution=LogNormal),
+         ū=dist(mean=1.0, sigma=sigma, normalize=true),
          R=ones(N), γ, μ, ϕ, regulate, policy="Open Access")
     end
 end
@@ -212,7 +212,7 @@ begin
     #     w̃ = sed(dependent=(ē = 1.0, q = 1.0, r = 1.0, fun = (dep -> (dep.ē * dep.q) / dep.r)),
     #              min = 0.1, max = 0.2, distribution = LogNormal)
     #
-    # and later call `dist!(w̃, N, context)` where `context` is a NamedTuple containing
+    # and later call `sample!(w̃, N, context)` where `context` is a NamedTuple containing
     # w̃ and the SEDs named `ē`, `q`, and `r`.
     #
     # Written with clarity, type safety, and efficiency in mind.
@@ -256,7 +256,7 @@ begin
     # -----------------------------------------------------------------------------
 
     """
-        SED{T, N, A<:AbstractArray{T, N}} <: AbstractArray{T, N}
+        Dist{T, N, A<:AbstractArray{T, N}} <: AbstractArray{T, N}
 
     A container for a (stochastic or deterministic) distribution with optional
     dependencies on other variables.
@@ -275,7 +275,7 @@ begin
              addition.) If a `String`, variables in `dependent` (or inferred from the string) and `sed`
              (the independent vector) are in scope.
     """
-    @kwdef mutable struct SED{T,N,A<:AbstractArray{T,N}} <: AbstractArray{T,N}
+    @kwdef mutable struct Dist{T,N,A<:AbstractArray{T,N}} <: AbstractArray{T,N}
         data::A = nothing
         min::Union{Nothing,Float64} = nothing
         max::Union{Nothing,Float64} = nothing
@@ -328,7 +328,7 @@ begin
     # -----------------------------------------------------------------------------
 
     """
-        apply_dependencies!(sed::SED, N::Int, context::NamedTuple) -> sed
+        apply_dependencies!(sed::Dist, N::Int, context::NamedTuple) -> sed
 
     Updates `sed.data` by combining its independent data with a dependent contribution.
     The dependent contribution is computed from the dependency specification in `sed.dependent`
@@ -351,7 +351,9 @@ begin
             end
         end
         walk(ex)
+        # Remove special identifiers which are provided by the evaluator
         delete!(syms, :sed)
+        delete!(syms, :independent)
         return [s for s in syms if haskey(context, s)]
     end
 
@@ -371,7 +373,9 @@ begin
             end
         end
         walk(ex)
+        # Allow the special identifiers provided by the evaluator
         delete!(syms, :sed)
+        delete!(syms, :independent)
         unknown = Symbol[]
         for s in syms
             # filter out operator-like symbols (not identifier names)
@@ -382,7 +386,7 @@ begin
         return unknown
     end
 
-    function apply_dependencies!(sed::SED, N::Int, context::NamedTuple)
+    function apply_dependencies!(sed::Dist, N::Int, context::NamedTuple)
         # If nothing to apply (no dependent keys and no dependency_function), skip
         if isempty(sed.dependent) && (sed.dependency_function === nothing)
             return sed
@@ -451,7 +455,7 @@ begin
                 ex = Meta.parse(df)
                 # Determine if an expression is vector-like (contains sed or a dependent symbol)
                 function _is_veclike(e)
-                    if e === :sed
+                    if e === :sed || e === :independent
                         return true
                     elseif e isa Symbol
                         return e in keys_list
@@ -493,7 +497,7 @@ begin
                 ex = _broadcast_ops(ex)
                 assigns = [:($(k) = $(depvals[k])) for k in keys_list]
                 let_block = :(
-                    let sed = $(indep)
+                    let sed = $(indep); independent = $(indep)
                         $(Expr(:block, assigns...))
                         $ex
                     end
@@ -515,7 +519,7 @@ begin
 
 
     """
-        is_distribution_type(sed::SED, T::DataType) -> Bool
+        is_distribution_type(sed::Dist, T::DataType) -> Bool
 
     Returns true if `sed.distribution` is either exactly the bare type `T`
     (or a subtype of `T` when stored as a bare type) or is an instance of `T`.
@@ -525,11 +529,11 @@ begin
     end
 
     """
-        has_dependencies(sed::SED) -> Bool
+        has_dependencies(sed::Dist) -> Bool
 
     Returns true if the SED has dependencies.
     """
-    function has_dependencies(sed::SED)
+    function has_dependencies(sed::Dist)
         return !isempty(sed.dependent)
     end
 
@@ -546,13 +550,13 @@ begin
     end
 
     """
-        find_sed_by_name(context::NamedTuple, name::Symbol) -> Union{SED, Nothing}
+        find_dist_by_name(context::NamedTuple, name::Symbol) -> Union{SED, Nothing}
 
     Find an SED by name in the context, handling special cases for w̃ and ū.
     """
-    function find_sed_by_name(context::NamedTuple, name::Symbol)
+    function find_dist_by_name(context::NamedTuple, name::Symbol)
         for (k, v) in pairs(context)
-            if v isa SED && is_property_name(name, k)
+            if v isa Dist && is_property_name(name, k)
                 return v
             end
         end
@@ -564,11 +568,11 @@ begin
     # -----------------------------------------------------------------------------
 
     """
-        generate_distribution!(sed::SED, N::Int) -> sed
+        generate_distribution!(sed::Dist, N::Int) -> sed
 
     Generate the distribution data for the SED, without applying dependencies.
     """
-    function generate_distribution!(sed::SED, N::Int)
+    function generate_distribution!(sed::Dist, N::Int)
         rev = false  # Flag for reversed quantiles
         # If no distribution parameters are provided but this SED will be
         # computed from dependencies, initialize a zero vector and skip
@@ -668,13 +672,13 @@ begin
     end
 
     """
-        dist!(sed::SED, N::Int; context=nothing) -> sed
+        sample!(sed::Dist, N::Int; context=nothing) -> sed
 
     Generate (or update) `sed.data` with `N` points using the specified distribution.
     After generating the independent data, apply dependency calculations using the
     provided `context`.
     """
-    function dist!(sed::SED, N::Int; context=nothing, random::Union{Nothing,Bool}=nothing)
+    function sample!(sed::Dist, N::Int; context=nothing, random::Union{Nothing,Bool}=nothing)
         # Optionally override randomness for this call
         old_random = sed.random
         if random !== nothing
@@ -696,22 +700,22 @@ begin
     end
 
     """
-        dist!(s, param_name::Symbol) -> SED
+        sample!(s, param_name::Symbol) -> SED
 
     Generate distributions for the SED parameter specified by name.
     Uses s.N as the length of the distribution.
     """
-    function dist!(s, param_name::Symbol; N::Union{Nothing,Int}=nothing, random::Union{Nothing,Bool}=nothing)
+    function sample!(s, param_name::Symbol; N::Union{Nothing,Int}=nothing, random::Union{Nothing,Bool}=nothing)
         N === nothing && (N = s.N)
-        sed = find_sed_by_name(s, param_name)
+        sed = find_dist_by_name(s, param_name)
         if sed === nothing
             error("Could not find SED parameter named $(param_name) in the scenario")
         end
-        return dist!(sed, N; context=s, random)
+        return sample!(sed, N; context=s, random)
     end
 
     """
-        dist!(s) -> NamedTuple
+        sample!(s) -> NamedTuple
 
     Generate distributions for all SED parameters in the scenario.
     First processes independent SEDs, then dependent ones.
@@ -723,7 +727,7 @@ begin
     function dependency_graph(s)
         # Robust SED detection: treat as SED if it is the SED type or a struct
         # with fields typical of SED (e.g., :dependent and :dependency_function)
-        is_sed_val(v) = (v isa SED) || (hasfield(typeof(v), :dependent) && hasfield(typeof(v), :dependency_function))
+        is_sed_val(v) = (v isa Dist) || (hasfield(typeof(v), :dependent) && hasfield(typeof(v), :dependency_function))
         sedkeys = Symbol[]
         for (k, v) in pairs(s)
             is_sed_val(v) && push!(sedkeys, k)
@@ -765,7 +769,7 @@ begin
         return (; nodes=sedkeys, edges=deps, order)
     end
 
-    function dist!(s; N::Union{Nothing,Int}=nothing, random::Union{Nothing,Bool}=nothing)
+    function sample!(s; N::Union{Nothing,Int}=nothing, random::Union{Nothing,Bool}=nothing)
         N === nothing && (N = s.N)
         g = dependency_graph(s)
         for k in g.order
@@ -773,50 +777,50 @@ begin
             needs_deps = has_dependencies(v) || (v.dependency_function isa AbstractString) ||
                          ((v.dependency_function isa Function) && !isempty(v.dependent))
             if needs_deps
-                dist!(v, N; context=s, random)
+                sample!(v, N; context=s, random)
             else
-                dist!(v, N; random)
+                sample!(v, N; random)
             end
         end
         return s
     end
 
     """
-        dist!(context::NamedTuple, N::Int) -> NamedTuple
+        sample!(context::NamedTuple, N::Int) -> NamedTuple
 
-    Applies `dist!(sed, N, context)` to each SED in the provided context and returns
+    Applies `sample!(sed, N, context)` to each SED in the provided context and returns
     a new NamedTuple with the updated SEDs.
     """
-    function dist!(context::NamedTuple, N::Int; random::Union{Nothing,Bool}=nothing)
-        new_context = map(x -> (x isa SED ? dist!(x, N; context=context, random) : x), context)
+    function sample!(context::NamedTuple, N::Int; random::Union{Nothing,Bool}=nothing)
+        new_context = map(x -> (x isa Dist ? sample!(x, N; context=context, random) : x), context)
         return new_context
     end
 
-    # Keyword form for contexts: dist!(context; N=...)
-    function dist!(context::NamedTuple; N::Union{Nothing,Int}=nothing, random::Union{Nothing,Bool}=nothing)
+    # Keyword form for contexts: sample!(context; N=...)
+    function sample!(context::NamedTuple; N::Union{Nothing,Int}=nothing, random::Union{Nothing,Bool}=nothing)
         if N === nothing
             haskey(context, :N) || error("Provide N=... or include :N in the context NamedTuple")
             N = context.N
         end
-        return dist!(context, N; random)
+        return sample!(context, N; random)
     end
 
     # -----------------------------------------------------------------------------
     # Making SED Behave Like an Array
     # -----------------------------------------------------------------------------
 
-    Base.size(sed::SED) = size(sed.data)
-    Base.getindex(sed::SED, idx...) = getindex(sed.data, idx...)
-    Base.setindex!(sed::SED, value, idx...) = setindex!(sed.data, value, idx...)
+    Base.size(sed::Dist) = size(sed.data)
+    Base.getindex(sed::Dist, idx...) = getindex(sed.data, idx...)
+    Base.setindex!(sed::Dist, value, idx...) = setindex!(sed.data, value, idx...)
 
     """
-        similar(sed::SED, ::Type{T}, dims::Dims) -> SED
+        similar(sed::Dist, ::Type{T}, dims::Dims) -> SED
 
     Creates a new SED instance with an uninitialized data array of type `T` and dimensions
     `dims`, copying all other parameters from the original.
     """
-    function Base.similar(sed::SED{T,N,A}, ::Type{T}, dims::Dims) where {T,N,A<:AbstractArray{T,N}}
-        return SED(
+    function Base.similar(sed::Dist{T,N,A}, ::Type{T}, dims::Dims) where {T,N,A<:AbstractArray{T,N}}
+        return Dist(
             data=similar(sed.data, T, dims),
             min=sed.min,
             max=sed.max,
@@ -832,20 +836,20 @@ begin
         )
     end
 
-    Base.iterate(sed::SED, state...) = iterate(sed.data, state...)
+    Base.iterate(sed::Dist, state...) = iterate(sed.data, state...)
 
     # -----------------------------------------------------------------------------
     # Constructor Function
     # -----------------------------------------------------------------------------
 
     """
-        sed(; data=nothing, min=nothing, max=nothing, kwargs...) -> SED
+        dist(; data=nothing, min=nothing, max=nothing, kwargs...) -> SED
 
     Construct a new SED instance. If `data` is provided, its element type and dimensionality
     are used; otherwise, an empty array of type `Float64` is created. Additional keyword arguments
     are passed directly to the SED constructor.
     """
-    function sed(; data=nothing, min=nothing, max=nothing, kwargs...)
+    function dist(; data=nothing, min=nothing, max=nothing, kwargs...)
         kw = (; kwargs...)
         if haskey(kw, :dependency_fun) && !haskey(kw, :dependency_function)
             kw = change(kw; dependency_function=kw.dependency_fun)
@@ -881,7 +885,7 @@ begin
         else
             data = Array{T,ND}(undef, 0)
         end
-        return SED{T,ND,A}(; data, min, max, filtered_kw...)
+        return Dist{T,ND,A}(; data, min, max, filtered_kw...)
     end
 
 end
