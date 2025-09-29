@@ -12,6 +12,7 @@ const S = Main.SEDist
 # Choose a Makie backend (uncomment your preference)
 import CairoMakie
 CairoMakie.activate!()
+S.load_plots!()
 
 # Output folder
 outdir = joinpath(@__DIR__, "figures")
@@ -25,8 +26,8 @@ sol = S.sim(s)
 fig1 = Figure(size=(900, 420))
 ax1 = Axis(fig1[1, 1])
 ax2 = Axis(fig1[1, 2])
-phase_plot!(ax1, sol)
-incomes_plot!(ax2, sol)
+S.phase_plot!(ax1, sol)
+S.incomes_plot!(ax2, sol)
 save(joinpath(outdir, "baseline_phase_incomes.png"), fig1)
 
 # Example 2: Dependency graph for a simple dependent context

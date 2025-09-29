@@ -20,11 +20,12 @@ N = 100
 s = S.scenario(S.base(N=N))
 sol = S.sim(s)
 
+S.load_plots!()
 fig1 = Figure(size=(900, 420))
 ax1 = Axis(fig1[1, 1])
 ax2 = Axis(fig1[1, 2])
-phase_plot!(ax1, sol)
-incomes_plot!(ax2, sol)
+S.phase_plot!(ax1, sol)
+S.incomes_plot!(ax2, sol)
 save(joinpath(outdir, "readme_phase_incomes.png"), fig1)
 
 # 2) Dependency graph for a simple context

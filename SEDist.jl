@@ -17,4 +17,19 @@ module SEDist
     export incomes, regulation_scan, gini
     # Plotting functions are provided via a Makie extension when Makie is loaded.
     export phase_plot!, incomes_plot!, dependency_graph, dependency_graph_plot
+
+    # Optional helper to load plotting methods in non-package contexts
+    function load_plots!()
+        include("ext/SEDMakieExt.jl")
+        return nothing
+    end
+
+    # Auto-load plots if Makie is already loaded in the session
+    try
+        if isdefined(Main, :Makie)
+            load_plots!()
+        end
+    catch
+        # no-op
+    end
 end
