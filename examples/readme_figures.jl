@@ -61,4 +61,22 @@ lines!(gx, y, S.Γ.(y, Ref(sol.prob.p), x=sol.u[end-1]))
 lines!(hx, y, S.Φ.(y, Ref(sol.prob.p)))
 save(joinpath(outdir, "readme_gamma_phi.png"), fig4)
 
+# 5) Distribution gallery (Uniform, LogNormal, Normal, Exponential, Bernoulli)
+N2 = 100
+gallery = [
+    ("Uniform",     () -> S.dist(min=0.1, max=0.9, distribution=Uniform)),
+    ("LogNormal",   () -> S.dist(min=0.1, max=1.0, distribution=LogNormal)),
+    ("Normal",      () -> S.dist(mean=0.5, sigma=0.1, distribution=Normal)),
+    ("Exponential", () -> S.dist(mean=0.5, sigma=0.0, distribution=Exponential)),
+    ("Bernoulli",   () -> S.dist(mean=0.5, distribution=Bernoulli)),
+]
+for (name, make) in gallery
+    try
+        f = S.dist_plot_compare(make, N2; title=name)
+        save(joinpath(outdir, "readme_dist_$(lowercase(name)).png"), f)
+    catch err
+        @warn "Could not render gallery item" name err
+    end
+end
+
 println("README figures saved to ", outdir)

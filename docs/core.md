@@ -11,3 +11,6 @@ Contents
 
 See `examples/readme_figures.jl` for small, runnable scripts.
 
+Example Figures
+
+- Phase + incomes: `examples/figures/readme_phase_incomes.png`

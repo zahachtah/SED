@@ -154,3 +154,46 @@ function incomes_plot!(ax, sol; order=false, color=:darkorange, dimensional::Boo
     barplot!(ax, trd[idx], color=color)
     barplot!(ax, trd[idx], color=HSLA(0, 0, 0, 0.2))
 end
+
+# --- distribution visualization helpers ---
+
+"""
+    dist_plot!(ax, v; title="", kind=:line, bins=30, color=:steelblue)
+
+Visualize a sampled distribution `v` (either a `Dist` or a `Vector`).
+- `kind=:line` plots the sorted values as a line.
+- `kind=:hist` plots a histogram with `bins`.
+"""
+function dist_plot!(ax, v; title="", kind=:line, bins=30, color=:steelblue)
+    data = hasproperty(v, :data) ? v.data : v
+    if kind == :hist
+        hist!(ax, data; bins, color)
+    else
+        lines!(ax, 1:length(data), sort(data); color)
+    end
+    if !isempty(title)
+        ax.title[] = title
+    end
+    ax
+end
+
+"""
+    dist_plot_compare(v::Function, N; kwargs...)
+
+Convenience function: given a zero-arg constructor `v()` that returns a `Dist`
+with parameters set (min/max/mean/...), produce a side-by-side comparison of
+non-random (quantiles) vs random sampling for length `N`.
+Returns a `Figure`.
+"""
+function dist_plot_compare(make::Function, N; title="", color=:steelblue)
+    d_nr = make()
+    d_r  = make()
+    sample!(d_nr, N; random=false)
+    sample!(d_r,  N; random=true)
+    fig = Figure(size=(800, 320))
+    a = Axis(fig[1,1], title = isempty(title) ? "non-random (quantiles)" : "$(title) — non-random")
+    b = Axis(fig[1,2], title = isempty(title) ? "random (samples)" : "$(title) — random")
+    dist_plot!(a, d_nr; kind=:line, color)
+    dist_plot!(b, d_r;  kind=:line, color)
+    fig
+end
