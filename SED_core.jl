@@ -351,7 +351,9 @@ begin
             end
         end
         walk(ex)
+        # Remove special identifiers which are provided by the evaluator
         delete!(syms, :sed)
+        delete!(syms, :independent)
         return [s for s in syms if haskey(context, s)]
     end
 
@@ -371,7 +373,9 @@ begin
             end
         end
         walk(ex)
+        # Allow the special identifiers provided by the evaluator
         delete!(syms, :sed)
+        delete!(syms, :independent)
         unknown = Symbol[]
         for s in syms
             # filter out operator-like symbols (not identifier names)
@@ -451,7 +455,7 @@ begin
                 ex = Meta.parse(df)
                 # Determine if an expression is vector-like (contains sed or a dependent symbol)
                 function _is_veclike(e)
-                    if e === :sed
+                    if e === :sed || e === :independent
                         return true
                     elseif e isa Symbol
                         return e in keys_list
@@ -493,7 +497,7 @@ begin
                 ex = _broadcast_ops(ex)
                 assigns = [:($(k) = $(depvals[k])) for k in keys_list]
                 let_block = :(
-                    let sed = $(indep)
+                    let sed = $(indep); independent = $(indep)
                         $(Expr(:block, assigns...))
                         $ex
                     end

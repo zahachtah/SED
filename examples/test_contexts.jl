@@ -1,26 +1,26 @@
 w = (
         N = 100,
-        health = sed(min=0.0001, max=1.0, distribution=LogNormal),
-        gender = sed(mean=0.5,  distribution=Bernoulli),
-        parental = sed(min=0.1, max=1.0, distribution=LogNormal),
-        time=sed(dependency_fun="health*(1-gender*sed)", min=0, max=1),
-        efficiency = sed(min=0.1, max=0.9,  dependency_fun="parental*(1-gender*0.5)"),
-        alternatives = sed(min=0.001, max=0.6, distribution=LogNormal, dependency_fun="(1-gender*0.3)*sed"),
+        health = dist(min=0.0001, max=1.0, distribution=LogNormal),
+        gender = dist(mean=0.5,  distribution=Bernoulli),
+        parental = dist(min=0.1, max=1.0, distribution=LogNormal),
+        time=dist(dependency_fun="health*(1-gender*dist)", min=0, max=1),
+        efficiency = dist(min=0.1, max=0.9,  dependency_fun="parental*(1-gender*0.5)"),
+        alternatives = dist(min=0.001, max=0.6, distribution=LogNormal, dependency_fun="(1-gender*0.3)*dist"),
         K = 2.0,
-        IMPACT = sed(min=-0.1,max=0.1,dependency_fun="time*efficiency"),
-        INCENTIVE = sed(min=-0.1, max=0.1, dependency_fun="(alternatives ./ efficiency) .+ sed"),
+        IMPACT = dist(min=-0.1,max=0.1,dependency_fun="time*efficiency"),
+        INCENTIVE = dist(min=-0.1, max=0.1, dependency_fun="(alternatives ./ efficiency) .+ dist"),
     )
 
 W = (
         N = 100,
-        health = sed(min=0.0001, max=1.0, distribution=LogNormal),
-        gender = sed(mean=0.5,  distribution=Bernoulli),
-        parental = sed(min=0.1, max=1.0, distribution=LogNormal),
-        time=sed(dependency_fun="health*(1-gender*sed)", min=0, max=1),
-        efficiency = sed(min=0.1, max=0.9,  dependency_fun="parental*(1-gender*0.5)"),
-        alternatives = sed(min=0.001, max=0.6, distribution=LogNormal, dependency_fun="(1-gender*0.3)*sed"),
+        health = dist(min=0.0001, max=1.0, distribution=LogNormal),
+        gender = dist(mean=0.5,  distribution=Bernoulli),
+        parental = dist(min=0.1, max=1.0, distribution=LogNormal),
+        time=dist(dependency_fun="health*(1-gender*dist)", min=0, max=1),
+        efficiency = dist(min=0.1, max=0.9,  dependency_fun="parental*(1-gender*0.5)"),
+        alternatives = dist(min=0.001, max=0.6, distribution=LogNormal, dependency_fun="(1-gender*0.3)*independent"),
         K = 2.0,
-        ū = sed(min=-0.1,max=0.1,dependency_fun="time*efficiency"),
-        w̃ = sed(min=-0.1, max=0.1, dependency_fun="(alternatives ./ efficiency) .+ sed"),
-        α = sed(min=0.1, max=0.1,distribution=Uniform) #fill(0.1,100)#
+        ū = dist(min=-0.1,max=0.1,dependency_fun="time*efficiency"),
+        w̃ = dist(min=-0.1, max=0.1, dependency_fun="(alternatives ./ efficiency) .+ independent"),
+        α = dist(min=0.1, max=0.1,distribution=Uniform) #fill(0.1,100)#
     )
