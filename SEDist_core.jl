@@ -1,4 +1,4 @@
-using Colors, Statistics, Distributions, OrdinaryDiffEq, Random, ColorSchemes
+using Statistics, Distributions, OrdinaryDiffEq, Random
 using LinearAlgebra
 using DataFrames, GLM, StatsModels
 using DiffEqCallbacks: TerminateSteadyState

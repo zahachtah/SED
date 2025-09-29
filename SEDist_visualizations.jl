@@ -1,4 +1,5 @@
 using CairoMakie
+using Colors
 using ColorSchemes
 using LinearAlgebra
 
@@ -153,4 +154,3 @@ function incomes_plot!(ax, sol; order=false, color=:darkorange, dimensional::Boo
     barplot!(ax, trd[idx], color=color)
     barplot!(ax, trd[idx], color=HSLA(0, 0, 0, 0.2))
 end
-
