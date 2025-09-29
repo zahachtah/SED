@@ -1,1 +1,0 @@
-[ ] Make exclusive and tradable be able to assign trait to base allocation on
