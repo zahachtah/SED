@@ -10,9 +10,8 @@ end
 const S = Main.SEDist
 
 # Choose a Makie backend (uncomment your preference)
-import CairoMakie
+using CairoMakie
 CairoMakie.activate!()
-S.load_plots!()
 
 # Output folder
 outdir = joinpath(@__DIR__, "figures")

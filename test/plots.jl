@@ -6,7 +6,7 @@ using .SEDist
 let makie_loaded = false
     try
         @eval begin
-            import CairoMakie
+            using CairoMakie
             CairoMakie.activate!()
             makie_loaded = true
         end

@@ -9,7 +9,7 @@ if !isdefined(Main, :SEDist)
 end
 const S = Main.SEDist
 
-import CairoMakie
+using CairoMakie
 CairoMakie.activate!()
 
 outdir = joinpath(@__DIR__, "figures")
