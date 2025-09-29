@@ -2,7 +2,6 @@ module SEDist
 
     include("SEDist_selfcontained.jl")
     using Reexport
-    @reexport using CairoMakie, FileIO, ColorSchemes
 
 
     export SED, sed, dist!, astext
@@ -16,6 +15,6 @@ module SEDist
     export γ_economic_incentive, μ_economic_incentive, regulate_economic_incentive
     export Uniform, LogNormal, Normal, Exponential, Dirac, Bernoulli
     export incomes, regulation_scan, gini
-    export phase_plot!,incomes_plot!
-    export dependency_graph, dependency_graph_plot
+    # Plotting functions are provided via a Makie extension when Makie is loaded.
+    export phase_plot!, incomes_plot!, dependency_graph, dependency_graph_plot
 end
