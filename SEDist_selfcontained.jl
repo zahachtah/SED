@@ -6,7 +6,7 @@ import Base: show
 using Base: @kwdef
 
 # ODE	setup
-begin
+begin 
 
     function dxdt(dx, x, p, t)
 
@@ -63,7 +63,7 @@ begin
 end
 
 # Γ Φ incomes and gini definitions
-begin
+begin 
 
     function Γ(y, p; x=zeros(p.N + 1), t=0.0)
         x[p.N+1] = y
@@ -151,10 +151,58 @@ begin
 
 end
 
-# SED the distributional feature
+# Minimal policy functions and scenario builders
 begin
-    #
-    # This module provides a type `SED` for generating socio‐economic distributions
+    # Open Access policy primitives
+    function γ(x, p, t)
+        return hasproperty(p, :w̃) && hasproperty(p.w̃, :data) ? p.w̃.data : p.w̃
+    end
+    function μ(x, p, t)
+        return hasproperty(p, :ū) && hasproperty(p.ū, :data) ? p.ū.data : p.ū
+    end
+    ϕ(dx, x, p, t) = nothing
+    regulate(p, f) = p
+
+    # Scenario builder (policy can override later)
+    function scenario(p; kwargs...)
+        temp = (; p..., policy="Open Access", γ=γ, μ=μ, ϕ=ϕ, regulate=regulate, kwargs...)
+        return (; temp...)
+    end
+
+    function base(; N=100, sigma=0.0, random=false)
+        (; N,
+         α=0.1,
+         w̃=sed(min=0.1, max=1.0, distribution=LogNormal, random=random),
+         ū=sed(mean=1.0, sigma=sigma, normalize=true, random=random),
+         R=ones(N), γ, μ, ϕ, regulate, policy="Open Access")
+    end
+
+    function high_impact(; N=100, sigma=0.0)
+        (; N, α=0.1,
+         w̃=sed(min=0.01, max=1.0, distribution=LogNormal),
+         ū=sed(mean=2.0, sigma=sigma, normalize=true),
+         R=ones(N), γ, μ, ϕ, regulate, policy="Open Access")
+    end
+
+    function low_impact(; N=100, sigma=0.0)
+        (; N, α=0.1,
+         w̃=sed(min=0.01, max=0.6, distribution=LogNormal),
+         ū=sed(mean=0.5, sigma=sigma, normalize=true),
+         R=ones(N), γ, μ, ϕ, regulate, policy="Open Access")
+    end
+
+    function high_incentives(; N=100, sigma=0.0)
+        (; N, α=0.1,
+         w̃=sed(min=0.3, max=0.7, distribution=LogNormal),
+         ū=sed(mean=1.0, sigma=sigma, normalize=true),
+         R=ones(N), γ, μ, ϕ, regulate, policy="Open Access")
+    end
+end
+
+# SED the distributional feature
+begin 
+		#
+		# This module provides a type `SED` for generating socio‐economic distributions
     # that can optionally depend on other variables. Dependencies are now resolved
     # by passing in a context (a NamedTuple containing all SEDs), rather than by a
     # global lookup. In addition, you can specify a custom dependency relationship.
@@ -837,4 +885,3 @@ begin
     end
 
 end
-
