@@ -62,6 +62,50 @@ begin
 
 end
 
+# ------------------------------------------------------------
+# Regulation scan (policy evaluation helper)
+# ------------------------------------------------------------
+
+"""
+    regulation_scan(p; m=100)
+
+Scan regulation in [0,1) with `m` steps for a given scenario `p`.
+Returns a NamedTuple with arrays for resource revenues (RR), wages (WR), trade (TR),
+total revenues (ToR), inequality (GI), ecological status (EH), a simple governance score (Gov),
+and the index of the optimum per metric (oRR, oWR, oTR, oToR, oGI, oEH, oGov).
+"""
+function regulation_scan(p; m=100)
+    r = range(0.0, stop=1.0 - 1.0/m, length=m)
+    RR = zeros(m); WR = zeros(m); TR = zeros(m); ToR = zeros(m)
+    GI = zeros(m); EH = zeros(m); Gov = zeros(m)
+    # baseline for behaviour change (optional)
+    oau = zeros(p.N)
+    for (j, reg) in enumerate(r)
+        sol = sim(p, regulation=reg, t_end=1000.0)
+        inc = incomes(sol)
+        RR[j] = sum(inc.resource)
+        WR[j] = sum(inc.wages)
+        TR[j] = sum(inc.trade)
+        ToR[j] = sum(inc.total)
+        GI[j] = inc.gini
+        EH[j] = inc.ecological
+        # a simple governance score (tunable): higher R and T, lower inequality
+        Gov[j] = (RR[j])^0.5 * (ToR[j])^1.0 * (1 .- GI[j])^0.2 * (EH[j])^0.0
+        # store OA baseline on first iteration (approximate)
+        if j == 1
+            oau .= sol[1:p.N, end-1]
+        end
+    end
+    oRR   = argmax(RR)
+    oWR   = argmax(WR)
+    oTR   = argmax(TR)
+    oToR  = argmax(ToR)
+    oGI   = argmin(GI)
+    oEH   = argmax(EH)
+    oGov  = argmax(Gov)
+    (; r, RR, WR, TR, ToR, GI, EH, Gov, oRR, oWR, oTR, oToR, oGI, oEH, oGov)
+end
+
 # Γ Φ incomes and gini definitions
 begin 
 
