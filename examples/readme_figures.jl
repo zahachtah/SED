@@ -4,10 +4,10 @@
 using Random
 Random.seed!(1234)
 
-if !isdefined(Main, :SEDist)
-    include(joinpath(@__DIR__, "..", "SEDist.jl"))
+if !isdefined(Main, :SED)
+    include(joinpath(@__DIR__, "..", "SED.jl"))
 end
-const S = Main.SEDist
+const S = Main.SED
 
 using CairoMakie
 CairoMakie.activate!()
@@ -30,13 +30,13 @@ save(joinpath(outdir, "readme_phase_incomes.png"), fig1)
 # 2) Dependency graph for a simple context
 ctx = (
     N = N,
-    q = S.sed(min=1/N, max=1/N, normalize=true),
-    w = S.sed(min=0.2, max=0.4),
+    q = S.dist(min=1/N, max=1/N, normalize=true),
+    w = S.dist(min=0.2, max=0.4),
     K = 2.0,
-    w̃ = S.sed(min=0.1, max=1.0, dependency_fun="q .* w ./ K .+ sed"),
-    ū  = S.sed(dependency_fun="q ./ w̃"),
+    w̃ = S.dist(min=0.1, max=1.0, dependency_fun="q .* w ./ K .+ sed"),
+    ū  = S.dist(dependency_fun="q ./ w̃"),
 )
-S.dist!(ctx)
+S.sample!(ctx)
 fig2 = S.dependency_graph_plot(ctx)
 save(joinpath(outdir, "readme_dep_graph.png"), fig2)
 
