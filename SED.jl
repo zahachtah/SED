@@ -1,15 +1,14 @@
-module SEDist
+module SED
 
     using Reexport
 
-    # Core must be included first
-    include("SEDist_core.jl")
-    # Plotting/visualization helpers (CairoMakie-based)
-    include("SEDist_visualizations.jl")
+    # Core then visualizations
+    include("SED_core.jl")
+    include("SED_visualizations.jl")
 
     # Exports (core)
-    export SED, sed, dist!, astext
-    export has_dependencies, is_distribution_type, find_sed_by_name
+    export Dist, dist, sample!, astext
+    export has_dependencies, is_distribution_type, find_dist_by_name
     export sim
     export scenario, base, high_impact, low_impact, high_incentives
     export γ, μ, ϕ, regulate
@@ -24,3 +23,4 @@ module SEDist
     export phase_plot!, incomes_plot!, dependency_graph, dependency_graph_plot
 
 end
+
