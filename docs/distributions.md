@@ -7,6 +7,8 @@ Topics
 - Independent: `dist(min/max/mean/median/sigma; distribution, random, normalize)`
 - Dependent (function): `dist(dependent=(...), dependency_fun=(indep, dep)-> ...)`
 - Dependent (string): `dist(dependency_fun="...")` with `independent` bound to the base vector
+- Allowed functions inside strings: `min`, `max`, `clamp`, `abs`, `sqrt`, `exp`, `log`.
+  These auto‑broadcast when any argument is a vector (e.g., `max(0.0, independent)`).
 - Sampling: `sample!(dist, N; random)` vs `sample!(context; N, random)`
 - Weighted dependents and broadcasting rules
 

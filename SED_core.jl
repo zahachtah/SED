@@ -420,6 +420,9 @@ begin
         # Allow the special identifiers provided by the evaluator
         delete!(syms, :sed)
         delete!(syms, :independent)
+        # Allow selected Base functions used inside expressions
+        allowed_funcs = Set([:min, :max, :clamp, :abs, :sqrt, :exp, :log])
+        syms = setdiff(syms, allowed_funcs)
         unknown = Symbol[]
         for s in syms
             # filter out operator-like symbols (not identifier names)
@@ -523,6 +526,17 @@ begin
                             a = e.args[2]
                             if _is_veclike(a)
                                 return Expr(:call, :.* , -1, _broadcast_ops(a))
+                            end
+                        end
+                        # Elementwise wrappers for selected Base functions
+                        if op isa Symbol && (op == :min || op == :max || op == :clamp || op == :abs || op == :sqrt || op == :exp || op == :log)
+                            # transform arguments first
+                            args = [ _broadcast_ops(arg) for arg in e.args[2:end] ]
+                            # If any argument is veclike, wrap in broadcast
+                            if any(_is_veclike, args)
+                                return Expr(:call, :broadcast, op, args...)
+                            else
+                                return Expr(:call, op, args...)
                             end
                         end
                         # N-ary ops: +, -, *, /
