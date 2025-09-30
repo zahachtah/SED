@@ -518,20 +518,29 @@ begin
                 function _broadcast_ops(e)
                     if e isa Expr && e.head == :call
                         op = e.args[1]
-                        # Binary ops: +, -, *, /
-                        if (op == :+ || op == :- || op == :* || op == :/) && length(e.args) == 3
-                            a, b = e.args[2], e.args[3]
-                            if _is_veclike(a) || _is_veclike(b)
-                                bop = op == :+ ? :.+ : op == :- ? :.- : op == :* ? :.* : :./
-                                return Expr(:call, bop, _broadcast_ops(a), _broadcast_ops(b))
-                            end
-                        end
                         # Unary minus on veclike: rewrite to elementwise negation
                         if op == :- && length(e.args) == 2
                             a = e.args[2]
                             if _is_veclike(a)
                                 return Expr(:call, :.* , -1, _broadcast_ops(a))
                             end
+                        end
+                        # N-ary ops: +, -, *, /
+                        if (op == :+ || op == :- || op == :* || op == :/)
+                            # Recursively transform all operands first
+                            ops = [ _broadcast_ops(arg) for arg in e.args[2:end] ]
+                            # If more than 2 operands, fold left with broadcasted operator when veclike
+                            bop = op == :+ ? :.+ : op == :- ? :.- : op == :* ? :.* : :./
+                            acc = ops[1]
+                            for k in 2:length(ops)
+                                a = acc; b = ops[k]
+                                if _is_veclike(a) || _is_veclike(b)
+                                    acc = Expr(:call, bop, a, b)
+                                else
+                                    acc = Expr(:call, op, a, b)
+                                end
+                            end
+                            return acc
                         end
                         return Expr(e.head, (_broadcast_ops(arg) for arg in e.args)...)
                     else
