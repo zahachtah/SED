@@ -710,8 +710,16 @@ begin
                 sed.data = (N == 1) ? [quantile(sed.distribution, 0.5)] : (rev ? reverse(qs) : qs)
             end
         elseif is_distribution_type(sed, Dirac)
-            p = sed.mean !== nothing ? sed.mean :
-                sed.distribution = Dirac(p)
+            # Dirac (point mass) at a specified value
+            if sed.mean !== nothing
+                sed.distribution = Dirac(sed.mean)
+            elseif sed.median !== nothing
+                sed.distribution = Dirac(sed.median)
+            elseif sed.min !== nothing && sed.max !== nothing && sed.min == sed.max
+                sed.distribution = Dirac(sed.min)
+            else
+                error("For Dirac, specify a value in mean or median (or min==max)")
+            end
             sed.data = rand(sed.distribution, N)
         elseif is_distribution_type(sed, Bernoulli)
             # Bernoulli branch: use sed.mean as the probability parameter.
