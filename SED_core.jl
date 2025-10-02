@@ -963,4 +963,58 @@ begin
         return Dist{T,ND,A}(; data, min, max, filtered_kw...)
     end
 
+    # -----------------------------------------------------------------------------
+    # Pretty printing
+    # -----------------------------------------------------------------------------
+
+    """
+        astext(d::Dist) -> String
+
+    Return a human‑readable summary of a `Dist`, including distribution, parameters,
+    dependency info, and data summary (length/min/max when present).
+    """
+    function astext(d::Dist)
+        b = IOBuffer()
+        show(b, MIME"text/plain"(), d)
+        String(take!(b))
+    end
+
+    function Base.show(io::IO, d::Dist)
+        # compact 1‑line summary
+        distname = try nameof(typeof(d.distribution)) catch; string(typeof(d.distribution)) end
+        ndata = (d.data isa AbstractArray) ? length(d.data) : 0
+        print(io, "Dist($distname, length=$ndata)")
+    end
+
+    function Base.show(io::IO, ::MIME"text/plain", d::Dist)
+        distname = try nameof(typeof(d.distribution)) catch; string(typeof(d.distribution)) end
+        println(io, "Dist(")
+        println(io, "  distribution : ", distname)
+        println(io, "  params       : ", "min=", d.min, ", max=", d.max, ", mean=", d.mean,
+                ", median=", d.median, ", sigma=", d.sigma, ", sum=", d.sum)
+        println(io, "  options      : ", "random=", d.random, ", normalize=", d.normalize)
+        if !isempty(d.dependent)
+            println(io, "  dependent    : ", join(Symbol.(keys(d.dependent)), ", "))
+        else
+            println(io, "  dependent    : ∅")
+        end
+        depf = d.dependency_function
+        if depf === nothing
+            println(io, "  dep_fun      : ∅")
+        elseif depf isa AbstractString
+            println(io, "  dep_fun      : \"", depf, "\"")
+        else
+            println(io, "  dep_fun      : Function")
+        end
+        if d.data isa AbstractArray && !isempty(d.data)
+            dmin = try minimum(d.data) catch; "?" end
+            dmax = try maximum(d.data) catch; "?" end
+            println(io, "  data         : length=", length(d.data), ", eltype=", eltype(d.data),
+                    ", min=", dmin, ", max=", dmax)
+        else
+            println(io, "  data         : ∅ (not sampled)")
+        end
+        print(io, ")")
+    end
+
 end
