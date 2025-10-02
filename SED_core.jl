@@ -1082,10 +1082,20 @@ begin
     or to provided fields (`d.median`, `(d.min+d.max)/2`, `d.mean`) as a last resort.
     """
     function getmedian(d::Dist)
-        # Try distribution quantile where available
+        # If we have a concrete distribution instance, use it
         try
             return quantile(d.distribution, 0.5)
         catch
+        end
+        # If LogNormal specified by min/max, derive μ,σ from bounds_quantiles and return exp(μ)
+        if d.distribution === LogNormal && d.min !== nothing && d.max !== nothing && d.max != d.min
+            xlo = min(d.min, d.max); xhi = max(d.min, d.max)
+            xlo = xlo <= 0 ? 1e-6 : xlo
+            qlo, qhi = d.bounds_quantiles
+            z1 = quantile(Normal(), qlo); z2 = quantile(Normal(), qhi)
+            σ = (log(xhi) - log(xlo)) / (z2 - z1)
+            μ = log(xlo) - σ * z1
+            return exp(μ)
         end
         # Fallbacks
         if d.median !== nothing
@@ -1107,6 +1117,7 @@ begin
     provided `d.sigma` if present, otherwise returns `missing`.
     """
     function getsigma(d::Dist)
+        # If we have a concrete distribution instance, extract σ when meaningful
         try
             if d.distribution isa LogNormal
                 return (d.distribution::LogNormal).σ
@@ -1114,6 +1125,14 @@ begin
                 return (d.distribution::Normal).σ
             end
         catch
+        end
+        # If LogNormal specified by min/max, derive σ from bounds_quantiles
+        if d.distribution === LogNormal && d.min !== nothing && d.max !== nothing && d.max != d.min
+            xlo = min(d.min, d.max); xhi = max(d.min, d.max)
+            xlo = xlo <= 0 ? 1e-6 : xlo
+            qlo, qhi = d.bounds_quantiles
+            z1 = quantile(Normal(), qlo); z2 = quantile(Normal(), qhi)
+            return (log(xhi) - log(xlo)) / (z2 - z1)
         end
         return d.sigma === nothing ? missing : d.sigma
     end
