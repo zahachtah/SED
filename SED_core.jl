@@ -1069,4 +1069,53 @@ begin
         print(io, ")")
     end
 
+    # -----------------------------------------------------------------------------
+    # Parameter helpers
+    # -----------------------------------------------------------------------------
+
+    """
+        getmedian(d::Dist)
+
+    Return the distribution's median parameter (not the sample median). For
+    common distributions, this is computed from `d.distribution` (e.g., exp(μ)
+    for LogNormal). Falls back to `quantile(d.distribution, 0.5)` when available,
+    or to provided fields (`d.median`, `(d.min+d.max)/2`, `d.mean`) as a last resort.
+    """
+    function getmedian(d::Dist)
+        # Try distribution quantile where available
+        try
+            return quantile(d.distribution, 0.5)
+        catch
+        end
+        # Fallbacks
+        if d.median !== nothing
+            return d.median
+        elseif d.min !== nothing && d.max !== nothing
+            return (d.min + d.max) / 2
+        elseif d.mean !== nothing
+            return d.mean
+        else
+            return NaN
+        end
+    end
+
+    """
+        getsigma(d::Dist)
+
+    Return a scale parameter when it is well-defined for the current
+    distribution type (e.g., log-scale σ for LogNormal). Falls back to the
+    provided `d.sigma` if present, otherwise returns `missing`.
+    """
+    function getsigma(d::Dist)
+        try
+            if d.distribution isa LogNormal
+                return (d.distribution::LogNormal).σ
+            elseif d.distribution isa Normal
+                return (d.distribution::Normal).σ
+            end
+        catch
+        end
+        return d.sigma === nothing ? missing : d.sigma
+    end
+
 end
