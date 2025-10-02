@@ -332,6 +332,11 @@ begin
         dependent::NamedTuple = NamedTuple()   # e.g., (ē = 1.0, q = 1.0, r = 1.0, fun = (dep -> (dep.ē * dep.q) / dep.r))
         distribution::Any = Uniform              # e.g., Uniform, LogNormal, etc.
         dependency_function::Union{Function,AbstractString,Nothing} = (indep, dep) -> indep .+ dep
+        # Sampling policy options (for lognormal min/max mapping & bounds)
+        bounds_quantiles::Tuple{Float64,Float64} = (0.01, 0.99)
+        determ_bounds::Symbol = :within      # :within | :full | :clip
+        random_bounds::Symbol = :none        # :none | :truncate | :reject (truncate/reject equivalent here)
+        enforce_after_deps::Symbol = :none   # :none | :clamp | :truncate
     end
 
     # -----------------------------------------------------------------------------
@@ -459,6 +464,14 @@ begin
             end
             dep_contrib = fun(NamedTuple{Tuple(keys(scaled))}(values(scaled)))
             sed.data = sed.dependency_function(sed.data, dep_contrib)
+            # Optional post-dependency enforcement
+            if sed.enforce_after_deps != :none && sed.min !== nothing && sed.max !== nothing && sed.max > sed.min
+                if sed.enforce_after_deps == :clamp
+                    sed.data = clamp.(sed.data, sed.min, sed.max)
+                elseif sed.enforce_after_deps == :truncate
+                    sed.data = clamp.(sed.data, sed.min, sed.max)
+                end
+            end
             return sed
         end
 
@@ -479,6 +492,14 @@ begin
                     sed.data = df(indep, deps_nt)
                 catch
                     sed.data = df(deps_nt)
+                end
+                # Optional post-dependency enforcement
+                if sed.enforce_after_deps != :none && sed.min !== nothing && sed.max !== nothing && sed.max > sed.min
+                    if sed.enforce_after_deps == :clamp
+                        sed.data = clamp.(sed.data, sed.min, sed.max)
+                    elseif sed.enforce_after_deps == :truncate
+                        sed.data = clamp.(sed.data, sed.min, sed.max)
+                    end
                 end
                 return sed
             elseif df isa AbstractString
@@ -651,35 +672,55 @@ begin
             return sed
         end
         if is_distribution_type(sed, LogNormal)
-            # LogNormal branch...
-            if sed.min !== nothing && sed.max !== nothing
-                rev = sed.min > sed.max
-                if sed.max != sed.min && N > 1
-                    tmp = lognormal_range(minimum((sed.min, sed.max)),
-                        stop=maximum((sed.min, sed.max)),
-                        length=N)
-                    medianLN = median(tmp)
-                    spreadLN = std(log.(tmp))
-                    sed.distribution = LogNormal(log(medianLN), spreadLN)
-                else
-                    sed.distribution = Constant(N == 1 ? (sed.min + sed.max) / 2 : sed.min)
-                end
+            # LogNormal parameterization: prefer min/max as quantiles if provided
+            if sed.min !== nothing && sed.max !== nothing && sed.max != sed.min
+                xlo = min(sed.min, sed.max); xhi = max(sed.min, sed.max)
+                xlo = xlo <= 0 ? 1e-6 : xlo
+                qlo, qhi = sed.bounds_quantiles
+                z1 = quantile(Normal(), qlo)
+                z2 = quantile(Normal(), qhi)
+                σ = (log(xhi) - log(xlo)) / (z2 - z1)
+                μ = log(xlo) - σ * z1
+                sed.distribution = LogNormal(μ, abs(σ))
             elseif sed.mean !== nothing && sed.sigma !== nothing
-                rev = sed.sigma < 0
                 sed.distribution = (sed.sigma != 0.0) ?
                                    LogNormal(log(sed.mean) - abs(sed.sigma)^2 / 2, abs(sed.sigma)) :
                                    Constant(sed.mean)
             elseif sed.median !== nothing && sed.sigma !== nothing
-                rev = sed.sigma < 0
                 sed.distribution = (sed.sigma != 0.0) ?
                                    LogNormal(log(sed.median), abs(sed.sigma)) :
                                    Constant(sed.median)
             end
             if sed.random
-                sed.data = rand(sed.distribution, N)
+                if sed.random_bounds == :none || sed.min === nothing || sed.max === nothing || sed.min >= sed.max
+                    sed.data = rand(sed.distribution, N)
+                else
+                    lo, hi = sed.min, sed.max
+                    data = similar(zeros(N))
+                    i = 1
+                    while i <= N
+                        x = rand(sed.distribution)
+                        if lo <= x <= hi
+                            data[i] = x
+                            i += 1
+                        end
+                    end
+                    sed.data = data
+                end
             else
-                qs = quantile.(Ref(sed.distribution), range(1 / N, stop=1 - 1 / N, length=N))
-                sed.data = (N > 1) ? (rev ? reverse(qs) : qs) : [quantile(sed.distribution, 0.5)]
+                if sed.min !== nothing && sed.max !== nothing && sed.max != sed.min && sed.determ_bounds == :within
+                    qlo, qhi = sed.bounds_quantiles
+                    probs = (N == 1) ? [0.5] : collect(range(qlo, qhi, length=N))
+                    sed.data = quantile.(Ref(sed.distribution), probs)
+                elseif sed.determ_bounds == :clip && sed.min !== nothing && sed.max !== nothing && sed.max != sed.min
+                    probs = collect(range(1 / N, stop=1 - 1 / N, length=N))
+                    qlo, qhi = sed.bounds_quantiles
+                    probs = clamp.(probs, qlo, qhi)
+                    sed.data = quantile.(Ref(sed.distribution), probs)
+                else
+                    probs = collect(range(1 / N, stop=1 - 1 / N, length=N))
+                    sed.data = quantile.(Ref(sed.distribution), probs)
+                end
             end
 
         elseif is_distribution_type(sed, Uniform)
@@ -945,8 +986,9 @@ begin
             end
         end
 
-        # filter to allowed SED keywords
-        allowed = Set([:min, :max, :mean, :median, :sigma, :sum, :random, :normalize, :dependent, :distribution, :dependency_function])
+        # filter to allowed Dist keywords
+        allowed = Set([:min, :max, :mean, :median, :sigma, :sum, :random, :normalize, :dependent, :distribution, :dependency_function,
+                       :bounds_quantiles, :determ_bounds, :random_bounds, :enforce_after_deps])
         filtered_pairs = [(k => getproperty(kw, k)) for k in keys(kw) if k in allowed]
         filtered_kw = (; filtered_pairs...)
 
