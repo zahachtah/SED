@@ -750,6 +750,10 @@ begin
                 qs = quantile.(Ref(sed.distribution), range(1 / N, stop=1 - 1 / N, length=N))
                 sed.data = (N == 1) ? [quantile(sed.distribution, 0.5)] : (rev ? reverse(qs) : qs)
             end
+            # Notice: bounds_quantiles/determ_bounds/random_bounds have no additional effect for Uniform
+            if (sed.determ_bounds != :within || sed.random_bounds != :none || sed.bounds_quantiles != (0.01, 0.99))
+                @info "bounds_quantiles/determ_bounds/random_bounds options are only applied to LogNormal(min,max) mapping; ignored for Uniform"
+            end
         elseif is_distribution_type(sed, Dirac)
             # Dirac (point mass) at a specified value
             if sed.mean !== nothing
@@ -762,6 +766,9 @@ begin
                 error("For Dirac, specify a value in mean or median (or min==max)")
             end
             sed.data = rand(sed.distribution, N)
+            if (sed.determ_bounds != :within || sed.random_bounds != :none || sed.bounds_quantiles != (0.01, 0.99))
+                @info "bounds_quantiles/determ_bounds/random_bounds options are only applied to LogNormal(min,max) mapping; ignored for Dirac"
+            end
         elseif is_distribution_type(sed, Bernoulli)
             # Bernoulli branch: use sed.mean as the probability parameter.
             p = sed.mean !== nothing ? sed.mean :
@@ -773,6 +780,9 @@ begin
                 # For a discrete distribution like Bernoulli, quantiles are defined (0 or 1)
                 qs = quantile.(Ref(sed.distribution), range(1 / N, stop=1 - 1 / N, length=N))
                 sed.data = qs
+            end
+            if (sed.determ_bounds != :within || sed.random_bounds != :none || sed.bounds_quantiles != (0.01, 0.99))
+                @info "bounds_quantiles/determ_bounds/random_bounds options are only applied to LogNormal(min,max) mapping; ignored for Bernoulli"
             end
             # ... other branches for ConstantDistribution, Exponential, Beta, etc.
 
