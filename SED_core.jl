@@ -6,7 +6,7 @@ import Base: show
 using Base: @kwdef
 
 # ODE	setup
-begin 
+begin
 
     function dxdt(dx, x, p, t)
 
@@ -75,9 +75,14 @@ total revenues (ToR), inequality (GI), ecological status (EH), a simple governan
 and the index of the optimum per metric (oRR, oWR, oTR, oToR, oGI, oEH, oGov).
 """
 function regulation_scan(p; m=100)
-    r = range(0.0, stop=1.0 - 1.0/m, length=m)
-    RR = zeros(m); WR = zeros(m); TR = zeros(m); ToR = zeros(m)
-    GI = zeros(m); EH = zeros(m); Gov = zeros(m)
+    r = range(0.0, stop=1.0 - 1.0 / m, length=m)
+    RR = zeros(m)
+    WR = zeros(m)
+    TR = zeros(m)
+    ToR = zeros(m)
+    GI = zeros(m)
+    EH = zeros(m)
+    Gov = zeros(m)
     # baseline for behaviour change (optional)
     oau = zeros(p.N)
     for (j, reg) in enumerate(r)
@@ -96,18 +101,18 @@ function regulation_scan(p; m=100)
             oau .= sol[1:p.N, end-1]
         end
     end
-    oRR   = argmax(RR)
-    oWR   = argmax(WR)
-    oTR   = argmax(TR)
-    oToR  = argmax(ToR)
-    oGI   = argmin(GI)
-    oEH   = argmax(EH)
-    oGov  = argmax(Gov)
+    oRR = argmax(RR)
+    oWR = argmax(WR)
+    oTR = argmax(TR)
+    oToR = argmax(ToR)
+    oGI = argmin(GI)
+    oEH = argmax(EH)
+    oGov = argmax(Gov)
     (; r, RR, WR, TR, ToR, GI, EH, Gov, oRR, oWR, oTR, oToR, oGI, oEH, oGov)
 end
 
 # Γ Φ incomes and gini definitions
-begin 
+begin
 
     function Γ(y, p; x=zeros(p.N + 1), t=0.0)
         x[p.N+1] = y
@@ -173,7 +178,7 @@ begin
             scale = p.rpk
             resource = resource_nd .* scale
             wages = wages_nd .* scale
-            wages_0 = wages_o_nd .* scale
+            wages_0 = wages_0_nd .* scale
             trade = trade_nd .* scale
             total = total_nd .* scale
         else
@@ -215,38 +220,38 @@ begin
 
     function base(; N=100, sigma=0.0, random=false)
         (; N,
-         α=0.1,
-         w̃=dist(min=0.1, max=1.0, distribution=LogNormal, random=random),
-         ū=dist(mean=1.0, sigma=sigma, normalize=true, random=random),
-         R=ones(N), γ, μ, ϕ, regulate, policy="Open Access")
+            α=0.1,
+            w̃=dist(min=0.1, max=1.0, distribution=LogNormal, random=random),
+            ū=dist(mean=1.0, sigma=sigma, normalize=true, random=random),
+            R=ones(N), γ, μ, ϕ, regulate, policy="Open Access")
     end
 
     function high_impact(; N=100, sigma=0.0)
         (; N, α=0.1,
-         w̃=dist(min=0.01, max=1.0, distribution=LogNormal),
-         ū=dist(mean=2.0, sigma=sigma, normalize=true),
-         R=ones(N), γ, μ, ϕ, regulate, policy="Open Access")
+            w̃=dist(min=0.01, max=1.0, distribution=LogNormal),
+            ū=dist(mean=2.0, sigma=sigma, normalize=true),
+            R=ones(N), γ, μ, ϕ, regulate, policy="Open Access")
     end
 
     function low_impact(; N=100, sigma=0.0)
         (; N, α=0.1,
-         w̃=dist(min=0.01, max=0.6, distribution=LogNormal),
-         ū=dist(mean=0.5, sigma=sigma, normalize=true),
-         R=ones(N), γ, μ, ϕ, regulate, policy="Open Access")
+            w̃=dist(min=0.01, max=0.6, distribution=LogNormal),
+            ū=dist(mean=0.5, sigma=sigma, normalize=true),
+            R=ones(N), γ, μ, ϕ, regulate, policy="Open Access")
     end
 
     function high_incentives(; N=100, sigma=0.0)
         (; N, α=0.1,
-         w̃=dist(min=0.3, max=0.7, distribution=LogNormal),
-         ū=dist(mean=1.0, sigma=sigma, normalize=true),
-         R=ones(N), γ, μ, ϕ, regulate, policy="Open Access")
+            w̃=dist(min=0.3, max=0.7, distribution=LogNormal),
+            ū=dist(mean=1.0, sigma=sigma, normalize=true),
+            R=ones(N), γ, μ, ϕ, regulate, policy="Open Access")
     end
 end
 
 # SED the distributional feature
-begin 
-		#
-		# This module provides a type `SED` for generating socio‐economic distributions
+begin
+    #
+    # This module provides a type `SED` for generating socio‐economic distributions
     # that can optionally depend on other variables. Dependencies are now resolved
     # by passing in a context (a NamedTuple containing all SEDs), rather than by a
     # global lookup. In addition, you can specify a custom dependency relationship.
@@ -327,6 +332,8 @@ begin
         median::Union{Nothing,Float64} = nothing
         sigma::Union{Nothing,Float64} = nothing
         sum::Union{Nothing,Float64} = nothing
+        alpha::Union{Nothing,Float64} = nothing
+        beta::Union{Nothing,Float64} = nothing
         random::Bool = false
         normalize::Bool = false
         dependent::NamedTuple = NamedTuple()   # e.g., (ē = 1.0, q = 1.0, r = 1.0, fun = (dep -> (dep.ē * dep.q) / dep.r))
@@ -546,13 +553,13 @@ begin
                         if op == :- && length(e.args) == 2
                             a = e.args[2]
                             if _is_veclike(a)
-                                return Expr(:call, :.* , -1, _broadcast_ops(a))
+                                return Expr(:call, :.*, -1, _broadcast_ops(a))
                             end
                         end
                         # Elementwise wrappers for selected Base functions
                         if op isa Symbol && (op == :min || op == :max || op == :clamp || op == :abs || op == :sqrt || op == :exp || op == :log)
                             # transform arguments first
-                            args = [ _broadcast_ops(arg) for arg in e.args[2:end] ]
+                            args = [_broadcast_ops(arg) for arg in e.args[2:end]]
                             # If any argument is veclike, wrap in broadcast
                             if any(_is_veclike, args)
                                 return Expr(:call, :broadcast, op, args...)
@@ -563,12 +570,13 @@ begin
                         # N-ary ops: +, -, *, /
                         if (op == :+ || op == :- || op == :* || op == :/)
                             # Recursively transform all operands first
-                            ops = [ _broadcast_ops(arg) for arg in e.args[2:end] ]
+                            ops = [_broadcast_ops(arg) for arg in e.args[2:end]]
                             # If more than 2 operands, fold left with broadcasted operator when veclike
                             bop = op == :+ ? :.+ : op == :- ? :.- : op == :* ? :.* : :./
                             acc = ops[1]
                             for k in 2:length(ops)
-                                a = acc; b = ops[k]
+                                a = acc
+                                b = ops[k]
                                 if _is_veclike(a) || _is_veclike(b)
                                     acc = Expr(:call, bop, a, b)
                                 else
@@ -585,7 +593,8 @@ begin
                 ex = _broadcast_ops(ex)
                 assigns = [:($(k) = $(depvals[k])) for k in keys_list]
                 let_block = :(
-                    let sed = $(indep); independent = $(indep)
+                    let sed = $(indep)
+                        independent = $(indep)
                         $(Expr(:block, assigns...))
                         $ex
                     end
@@ -663,18 +672,22 @@ begin
     function generate_distribution!(sed::Dist, N::Int)
         rev = false  # Flag for reversed quantiles
         # If no distribution parameters are provided but this SED will be
-        # computed from dependencies, initialize a zero vector and skip
+        # computed purely from dependencies, initialize a zero vector and skip
         # distribution-specific generation. The dependency pass will fill it.
+        # Note: the default dependency_function is a no-op when there are no
+        # dependent variables; do not treat that case as dependent-only.
         if sed.min === nothing && sed.max === nothing && sed.mean === nothing &&
            sed.median === nothing && sed.sigma === nothing && sed.sum === nothing &&
-           (sed.dependency_function !== nothing || !isempty(sed.dependent))
+           sed.alpha === nothing && sed.beta === nothing &&
+           ( (!isempty(sed.dependent)) || (sed.dependency_function isa AbstractString) )
             sed.data = zeros(eltype(sed.data), N)
             return sed
         end
         if is_distribution_type(sed, LogNormal)
             # LogNormal parameterization: prefer min/max as quantiles if provided
             if sed.min !== nothing && sed.max !== nothing && sed.max != sed.min
-                xlo = min(sed.min, sed.max); xhi = max(sed.min, sed.max)
+                xlo = min(sed.min, sed.max)
+                xhi = max(sed.min, sed.max)
                 xlo = xlo <= 0 ? 1e-6 : xlo
                 qlo, qhi = sed.bounds_quantiles
                 z1 = quantile(Normal(), qlo)
@@ -753,6 +766,93 @@ begin
             # Notice: bounds_quantiles/determ_bounds/random_bounds have no additional effect for Uniform
             if (sed.determ_bounds != :within || sed.random_bounds != :none || sed.bounds_quantiles != (0.01, 0.99))
                 @info "bounds_quantiles/determ_bounds/random_bounds options are only applied to LogNormal(min,max) mapping; ignored for Uniform"
+            end
+        elseif is_distribution_type(sed, Beta)
+            # Beta distribution on [0,1]
+            if sed.alpha !== nothing && sed.beta !== nothing
+                (sed.alpha <= 0 || sed.beta <= 0) && error("For Beta, alpha and beta must be > 0")
+                sed.distribution = Beta(sed.alpha, sed.beta)
+            elseif sed.mean !== nothing && sed.sigma !== nothing
+                m = sed.mean
+                s = abs(sed.sigma)
+                if s == 0.0
+                    sed.distribution = Dirac(m)
+                else
+                    (m <= 0 || m >= 1) && error("For Beta mean+sigma, mean must be in (0,1)")
+                    v = s^2
+                    vmax = m * (1 - m)
+                    (v <= 0 || v >= vmax) && error("For Beta mean+sigma, sigma too large for mean (requires sigma^2 < mean*(1-mean))")
+                    κ = m * (1 - m) / v - 1
+                    α = m * κ
+                    β = (1 - m) * κ
+                    sed.alpha = α
+                    sed.beta = β
+                    sed.distribution = Beta(α, β)
+                end
+            elseif sed.median !== nothing
+                error("undetermined, use mean")
+            else
+                error("For Beta, specify alpha & beta, or mean & sigma")
+            end
+            if sed.random
+                sed.data = rand(sed.distribution, N)
+            else
+                qs = quantile.(Ref(sed.distribution), range(1 / N, stop=1 - 1 / N, length=N))
+                sed.data = (N == 1) ? [quantile(sed.distribution, 0.5)] : qs
+            end
+            if (sed.determ_bounds != :within || sed.random_bounds != :none || sed.bounds_quantiles != (0.01, 0.99))
+                @info "bounds_quantiles/determ_bounds/random_bounds options are only applied to LogNormal(min,max) mapping; ignored for Beta"
+            end
+        elseif is_distribution_type(sed, Normal)
+            # Normal distribution on (-∞, ∞)
+            if sed.distribution isa Normal
+                nothing
+            elseif sed.mean !== nothing && sed.sigma !== nothing
+                s = abs(sed.sigma)
+                sed.distribution = (s == 0.0) ? Dirac(sed.mean) : Normal(sed.mean, s)
+            elseif sed.median !== nothing && sed.sigma !== nothing
+                s = abs(sed.sigma)
+                sed.distribution = (s == 0.0) ? Dirac(sed.median) : Normal(sed.median, s)
+            else
+                error("For Normal, specify mean & sigma (or median & sigma), or pass a Normal instance")
+            end
+            if sed.random
+                sed.data = rand(sed.distribution, N)
+            else
+                qs = quantile.(Ref(sed.distribution), range(1 / N, stop=1 - 1 / N, length=N))
+                sed.data = (N == 1) ? [quantile(sed.distribution, 0.5)] : qs
+            end
+            if (sed.determ_bounds != :within || sed.random_bounds != :none || sed.bounds_quantiles != (0.01, 0.99))
+                @info "bounds_quantiles/determ_bounds/random_bounds options are only applied to LogNormal(min,max) mapping; ignored for Normal"
+            end
+        elseif is_distribution_type(sed, LogitNormal)
+            # Logit-Normal on [0,1]
+            if sed.median !== nothing && sed.sigma !== nothing
+                m = sed.median
+                s = abs(sed.sigma)
+                (m <= 0 || m >= 1) && error("For LogitNormal median+sigma, median must be in (0,1)")
+                if s == 0.0
+                    sed.distribution = Dirac(m)
+                else
+                    μ = log(m / (1 - m))
+                    sed.distribution = LogitNormal(μ, s)
+                end
+            elseif sed.mean !== nothing && sed.sigma !== nothing
+                error("undetermined, use median")
+            elseif sed.distribution isa LogitNormal
+                # already an instance
+                nothing
+            else
+                error("For LogitNormal, specify median & sigma, or pass a LogitNormal instance")
+            end
+            if sed.random
+                sed.data = rand(sed.distribution, N)
+            else
+                qs = quantile.(Ref(sed.distribution), range(1 / N, stop=1 - 1 / N, length=N))
+                sed.data = (N == 1) ? [quantile(sed.distribution, 0.5)] : qs
+            end
+            if (sed.determ_bounds != :within || sed.random_bounds != :none || sed.bounds_quantiles != (0.01, 0.99))
+                @info "bounds_quantiles/determ_bounds/random_bounds options are only applied to LogNormal(min,max) mapping; ignored for LogitNormal"
             end
         elseif is_distribution_type(sed, Dirac)
             # Dirac (point mass) at a specified value
@@ -954,6 +1054,8 @@ begin
             median=sed.median,
             sigma=sed.sigma,
             sum=sed.sum,
+            alpha=sed.alpha,
+            beta=sed.beta,
             random=sed.random,
             normalize=sed.normalize,
             dependent=sed.dependent,
@@ -997,8 +1099,8 @@ begin
         end
 
         # filter to allowed Dist keywords
-        allowed = Set([:min, :max, :mean, :median, :sigma, :sum, :random, :normalize, :dependent, :distribution, :dependency_function,
-                       :bounds_quantiles, :determ_bounds, :random_bounds, :enforce_after_deps])
+        allowed = Set([:min, :max, :mean, :median, :sigma, :sum, :alpha, :beta, :random, :normalize, :dependent, :distribution, :dependency_function,
+            :bounds_quantiles, :determ_bounds, :random_bounds, :enforce_after_deps])
         filtered_pairs = [(k => getproperty(kw, k)) for k in keys(kw) if k in allowed]
         filtered_kw = (; filtered_pairs...)
 
@@ -1033,17 +1135,27 @@ begin
 
     function Base.show(io::IO, d::Dist)
         # compact 1‑line summary
-        distname = try nameof(typeof(d.distribution)) catch; string(typeof(d.distribution)) end
+        distname = d.distribution isa Type ? string(d.distribution) :
+                   try
+                       nameof(typeof(d.distribution))
+                   catch
+                       string(typeof(d.distribution))
+                   end
         ndata = (d.data isa AbstractArray) ? length(d.data) : 0
         print(io, "Dist($distname, length=$ndata)")
     end
 
     function Base.show(io::IO, ::MIME"text/plain", d::Dist)
-        distname = try nameof(typeof(d.distribution)) catch; string(typeof(d.distribution)) end
+        distname = d.distribution isa Type ? string(d.distribution) :
+                   try
+                       nameof(typeof(d.distribution))
+                   catch
+                       string(typeof(d.distribution))
+                   end
         println(io, "Dist(")
         println(io, "  distribution : ", distname)
         println(io, "  params       : ", "min=", d.min, ", max=", d.max, ", mean=", d.mean,
-                ", median=", d.median, ", sigma=", d.sigma, ", sum=", d.sum)
+            ", median=", d.median, ", sigma=", d.sigma, ", sum=", d.sum, ", alpha=", d.alpha, ", beta=", d.beta)
         println(io, "  options      : ", "random=", d.random, ", normalize=", d.normalize)
         if !isempty(d.dependent)
             println(io, "  dependent    : ", join(Symbol.(keys(d.dependent)), ", "))
@@ -1059,10 +1171,18 @@ begin
             println(io, "  dep_fun      : Function")
         end
         if d.data isa AbstractArray && !isempty(d.data)
-            dmin = try minimum(d.data) catch; "?" end
-            dmax = try maximum(d.data) catch; "?" end
+            dmin = try
+                minimum(d.data)
+            catch
+                "?"
+            end
+            dmax = try
+                maximum(d.data)
+            catch
+                "?"
+            end
             println(io, "  data         : length=", length(d.data), ", eltype=", eltype(d.data),
-                    ", min=", dmin, ", max=", dmax)
+                ", min=", dmin, ", max=", dmax)
         else
             println(io, "  data         : ∅ (not sampled)")
         end
@@ -1081,7 +1201,13 @@ begin
     for LogNormal). Falls back to `quantile(d.distribution, 0.5)` when available,
     or to provided fields (`d.median`, `(d.min+d.max)/2`, `d.mean`) as a last resort.
     """
-    function getmedian(d::Dist)
+    function getmedian(d::Dist; sampled::Bool=false)
+        # If sampled=true, compute median from actual data
+        if sampled && d.data !== nothing && !isempty(d.data)
+            return median(d.data)
+        end
+
+        # Otherwise return theoretical median (default behavior)
         # If we have a concrete distribution instance, use it
         try
             return quantile(d.distribution, 0.5)
@@ -1089,10 +1215,12 @@ begin
         end
         # If LogNormal specified by min/max, derive μ,σ from bounds_quantiles and return exp(μ)
         if d.distribution === LogNormal && d.min !== nothing && d.max !== nothing && d.max != d.min
-            xlo = min(d.min, d.max); xhi = max(d.min, d.max)
+            xlo = min(d.min, d.max)
+            xhi = max(d.min, d.max)
             xlo = xlo <= 0 ? 1e-6 : xlo
             qlo, qhi = d.bounds_quantiles
-            z1 = quantile(Normal(), qlo); z2 = quantile(Normal(), qhi)
+            z1 = quantile(Normal(), qlo)
+            z2 = quantile(Normal(), qhi)
             σ = (log(xhi) - log(xlo)) / (z2 - z1)
             μ = log(xlo) - σ * z1
             return exp(μ)
@@ -1116,7 +1244,13 @@ begin
     distribution type (e.g., log-scale σ for LogNormal). Falls back to the
     provided `d.sigma` if present, otherwise returns `missing`.
     """
-    function getsigma(d::Dist)
+    function getsigma(d::Dist; sampled::Bool=false)
+        # If sampled=true, compute standard deviation from actual data
+        if sampled && d.data !== nothing && !isempty(d.data)
+            return std(d.data)
+        end
+
+        # Otherwise return theoretical σ (default behavior)
         # If we have a concrete distribution instance, extract σ when meaningful
         try
             if d.distribution isa LogNormal
@@ -1128,10 +1262,12 @@ begin
         end
         # If LogNormal specified by min/max, derive σ from bounds_quantiles
         if d.distribution === LogNormal && d.min !== nothing && d.max !== nothing && d.max != d.min
-            xlo = min(d.min, d.max); xhi = max(d.min, d.max)
+            xlo = min(d.min, d.max)
+            xhi = max(d.min, d.max)
             xlo = xlo <= 0 ? 1e-6 : xlo
             qlo, qhi = d.bounds_quantiles
-            z1 = quantile(Normal(), qlo); z2 = quantile(Normal(), qhi)
+            z1 = quantile(Normal(), qlo)
+            z2 = quantile(Normal(), qhi)
             return (log(xhi) - log(xlo)) / (z2 - z1)
         end
         return d.sigma === nothing ? missing : d.sigma
