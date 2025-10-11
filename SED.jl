@@ -10,7 +10,7 @@ include("src/SED/Sim/Metrics.jl")
 include("SED_core.jl")
 
 # Visualizations (optional; depends on Makie)
-include("SED_visualizations.jl")
+include("src/SED/Plots/Plots.jl")
 include("src/SED/Policies/Policies.jl")
 
 # Exports (core)

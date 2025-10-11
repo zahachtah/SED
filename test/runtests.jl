@@ -23,6 +23,39 @@ using .SED
     @test all(s.s2 .≈ s.q ./ s.w̃)
 end
 
+@testset "policy smoke tests" begin
+    N = 50
+    base = scenario(base(N=N))
+    # Minimal w̃, ū for testing
+    w = dist(min=0.2, max=0.4)
+    q = dist(min=1/N, max=1/N, normalize=true)
+    sample!(w, N); sample!(q, N)
+    w̃ = dist(min=0.1, max=1.0, dependency_fun="q .* w .+ independent")
+    ū = dist(dependency_fun="q")
+    sample!(w̃, N; context=(; base..., w, q))
+    sample!(ū, N; context=(; base..., w, q))
+    base = scenario(base; w̃, ū)
+
+    # OA
+    @test !isnothing(sim(base))
+    # EUR
+    eur = scenario(base; γ=γ_exclusive_use_rights, regulate=regulate_exclusive_use_rights)
+    @test !isnothing(sim(eur; regulation=0.3))
+    # TUR
+    tur = scenario(base; γ=γ_tradable_use_rights, ϕ=ϕ_tradable_use_rights, regulate=regulate_tradable_use_rights,
+        policy="Tradable Use Rights", policy_target=:effort, market_rate=0.05)
+    @test !isnothing(sim(tur; regulation=0.3))
+    # PA
+    pa = scenario(base; γ=γ_protected_area, μ=μ_protected_area, regulate=regulate_protected_area, policy="Protected Area", m=0.3)
+    @test !isnothing(sim(pa; regulation=0.3))
+    # Econ
+    econ = scenario(base; μ=μ_economic_incentive, γ=γ_economic_incentive, regulate=regulate_economic_incentive, policy_target=[:γ,:μ], policy_method=:multiplicative)
+    @test !isnothing(sim(econ; regulation=0.2))
+    # Dev
+    dev = scenario(base; μ=μ_development, γ=γ_development, regulate=regulate_development, μ_value=0.5, γ_value=0.5)
+    @test !isnothing(sim(dev; regulation=0.4))
+end
+
 @testset "tuple dependent + string" begin
     N = 30
     s = (
