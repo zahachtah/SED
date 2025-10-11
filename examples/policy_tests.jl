@@ -12,16 +12,16 @@ const S = Main.SED
 function make_T(N=100)
     (
         N=N,
-        health=S.dist(mean=0, sigma=2.0, distribution=Normal, dependency_fun="1/(1+exp(-2-independent))"),
-        gender=S.dist(mean=0.5, distribution=Bernoulli, random=true),
-        parental=S.dist(min=0.1, max=1.0, distribution=LogNormal),
+        health=S.dist(mean=0, sigma=2.0, distribution=S.Normal, dependency_fun="1/(1+exp(-2-independent))"),
+        gender=S.dist(mean=0.5, distribution=S.Bernoulli, random=true),
+        parental=S.dist(min=0.1, max=1.0, distribution=S.LogNormal),
         time=S.dist(dependency_fun="health*(1-gender*0.5)*independent", min=0, max=1),
         efficiency=S.dist(min=0.015, max=0.2, dependency_fun="1*parental*(1-gender*0.2)*independent", normalize=false),
-        opportunities=S.dist(min=0.1, max=1.6, distribution=LogNormal, dependency_fun="0.02*parental*(1-gender*0.5)*independent"),
+        opportunities=S.dist(min=0.1, max=1.6, distribution=S.LogNormal, dependency_fun="0.02*parental*(1-gender*0.5)*independent"),
         K=2.0,
         ū=S.dist(min=-0.1, max=0.1, dependency_fun="time*efficiency"),
         w̃=S.dist(min=-0.1, max=0.1, dependency_fun="(opportunities ./ efficiency) .+ independent"),
-        α=S.dist(min=0.1, max=0.1, distribution=Uniform)
+        α=S.dist(min=0.1, max=0.1, distribution=S.Uniform)
     )
 end
 
@@ -32,7 +32,7 @@ function baseline_from_T(T)
         ū=S.dist(data=T.ū))
 end
 
-function run_policy(name::String, s; regulation=0.3; kwargs...)
+function run_policy(name::String, s; regulation=0.3, kwargs...)
     sol = S.sim(s; regulation)
     inc = S.incomes(sol)
     println("[", rpad(name, 24), "] y*=" , round(sol.u[end][end], digits=3),
@@ -107,4 +107,3 @@ function main()
 end
 
 abspath(PROGRAM_FILE) == @__FILE__ && main()
-
