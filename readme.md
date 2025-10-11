@@ -28,10 +28,10 @@ Example output:
 
 Learn More
 
-- Core: concepts, contexts, simulation — see docs/core.md
-- Distributions: independent/dependent, function vs string, sampling — see docs/distributions.md
-- Visualizations: phase, incomes, Γ and Φ, dependency graph — see docs/visualizations.md
-- Policies: scenarios, regulation scan, evaluation — see docs/policies.md
+- [Core](docs/core.md): concepts, contexts, simulation
+- [Distributions](docs/distributions.md): independent/dependent, function vs string, sampling
+- [Visualizations](docs/visualizations.md): phase, incomes, Γ and Φ, dependency graph
+- [Policies](docs/policies.md): scenarios, regulation scan, evaluation
 
 Plotting (optional)
 
