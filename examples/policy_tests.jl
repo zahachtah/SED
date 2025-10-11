@@ -1,13 +1,12 @@
 #!/usr/bin/env julia
 # Quick policy validation script across major instruments
 
-using Random
-Random.seed!(123)
-
 if !isdefined(Main, :SED)
-    include(joinpath(@__DIR__, "..", "SED.jl"))
+    error("Load SED first: include(\"SED.jl\"); using .SED")
 end
 using .SED
+using Random
+Random.seed!(123)
 
 function make_T(N=100)
     (
@@ -42,7 +41,7 @@ function run_policy(name::String, s; regulation=0.3, kwargs...)
     return sol
 end
 
-function main()
+function policy_tests()
     T = make_T(100)
     base = baseline_from_T(T)
 
@@ -105,5 +104,3 @@ function main()
     R = regulation_scan(tur_eff; m=25)
     println("  max ToR@reg=", round(R.r[R.oToR], digits=2), "  ToR=", round(R.ToR[R.oToR], digits=3))
 end
-
-main()
