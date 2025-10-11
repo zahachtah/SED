@@ -4,27 +4,30 @@
 using Random
 Random.seed!(42)
 
-include(joinpath(@__DIR__, "..", "SEDist.jl"))
-using .SEDist
+if !isdefined(Main, :SED)
+    include(joinpath(@__DIR__, "..", "SED.jl"))
+end
+using .SED
 
 const N = 100
 
-ctx = Context((
-    q   = sed(min=1/N, max=1/N, normalize=true),
-    w   = sed(min=0.2, max=0.4),
+ctx = (
+    N = N,
+    q   = dist(min=1/N, max=1/N, normalize=true),
+    w   = dist(min=0.2, max=0.4),
     K   = 2.0,
-    w̃   = SEDist.@dep((q, w, K) -> q .* w ./ K .+ sed(min=0.05, max=0.10)),
-    ubar = SEDist.@dep((q, w̃)    -> q ./ w̃),
-))
+    w̃   = dist(min=0.05, max=0.10, dependency_fun="q .* w ./ K .+ independent"),
+    ubar = dist(dependency_fun="q ./ w̃"),
+)
 
-dist!(ctx; N=N)
+sample!(ctx)
 
-println("w̃ summary: min=$(minimum(ctx[:w̃])) max=$(maximum(ctx[:w̃]))")
-println("ū summary:  min=$(minimum(ctx[:ubar])) max=$(maximum(ctx[:ubar]))")
+println("w̃ summary: min=$(minimum(ctx.w̃)) max=$(maximum(ctx.w̃))")
+println("ū summary:  min=$(minimum(ctx.ubar)) max=$(maximum(ctx.ubar))")
 
 # Optional: run a quick simulation using realized distributions
 s = scenario(base(N=N);
-            w̃ = sed(data=ctx[:w̃]),
-            ū = sed(data=ctx[:ubar]))
+            w̃ = dist(data=ctx.w̃),
+            ū = dist(data=ctx.ubar))
 sol = sim(s)
 println("final resource level y* = ", round(sol.u[end][end], digits=3))
