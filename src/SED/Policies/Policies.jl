@@ -1,0 +1,172 @@
+# Adapted policy instrument implementations compatible with current Dist/sim APIs.
+
+using OrdinaryDiffEq
+using DiffEqCallbacks: TerminateSteadyState
+
+# ===== Open Access defaults are defined in core (γ, μ, ϕ, regulate) =====
+
+# ===== Assigned/Exclusive Use Rights =====
+
+function γ_exclusive_use_rights(x, p, t)
+    return p.w̃ .+ p.R
+end
+
+function regulate_exclusive_use_rights(scenario, f)
+    R = zeros(scenario.N)
+    n = Int64(round(f * scenario.N))
+    if n > 0
+        if haskey(scenario, :reverse) && scenario.reverse
+            R[max(1, length(R)-n+1):end] .= 1.0
+        else
+            R[1:n] .= 1.0
+        end
+    end
+    return change(scenario, R=R) # assign use rights
+end
+
+# ===== Tradable Use Rights =====
+
+function regulate_tradable_use_rights(s, f)
+    # Default allocation: equal shares of allowed effort or yield
+    R = fill(f == 0 ? 1.0 : (1 - Float64(f)) / s.N, s.N)
+
+    if haskey(s, :historical_use_rights)
+        # Solve OA once to estimate historical baselines
+        u0 = zeros(s.N); y0 = 1.0; ϕ0 = 0.0
+        oaprob = ODEProblem(dxdt, [u0; y0; ϕ0], (0.0, 1000.0), s)
+        oasol = solve(oaprob, SSPRK432(; stage_limiter!), callback=TerminateSteadyState(1e-6, 1e-4))
+        if s.policy_target == :yield
+            hist_u = oasol[1:s.N, end-1]
+            hist_y = oasol[s.N+1, end-1]
+            hist_yield = hist_u .* hist_y
+            total_hist_yield = sum(hist_yield)
+            if total_hist_yield > 0
+                R = hist_yield .* (1 - f) ./ total_hist_yield
+            end
+        else
+            hur = oasol[1:s.N, end-1] .> 0.0
+            denom = sum(hur)
+            if denom > 0
+                R = hur .* (1 - f) ./ denom
+            end
+        end
+    end
+    return change(s, R=R, regulation=f)
+end
+
+function γ_tradable_use_rights(x, p, t)
+    return p.w̃ .+ x[end]
+end
+
+function ϕ_tradable_use_rights(dx, x, p, t)
+    supply = if p.policy_target == :yield
+        sum(clamp.(p.R .- (x[1:p.N] .* x[p.N+1]), 0.0, Inf))
+    elseif p.policy_target == :effort
+        sum(clamp.(p.R .- x[1:p.N], 0.0, Inf))
+    else
+        0.0
+    end
+    id = findall((dx[1:p.N] .> 0.0))
+    ind_demand = if p.policy_target == :yield
+        max_extra_yield = (p.ū[id] .- x[id]) .* x[p.N+1]
+        desired_extra_yield = dx[id] .* x[p.N+1]
+        min.(max_extra_yield, desired_extra_yield)
+    else
+        min.(p.ū[id] - x[id], dx[id])
+    end
+    demand = sum(ind_demand)
+    dx[p.N+2] = p.market_rate * (demand - supply)
+    if demand > supply && demand > 0
+        dx[id] .= supply .* ind_demand ./ demand
+    end
+end
+
+# ===== Protected Area Two Populations =====
+
+function ϕ_protected_area_two_pop(dx, x, p, t)
+    mx = x[p.N+2] - x[p.N+1]
+    dx[p.N+2] = (1.0 - x[p.N+2]) * dx[p.N+2] - (1.0 - p.regulation) / p.regulation * p.m * mx
+    dx[p.N+1] += p.regulation / (1.0 - p.regulation) * p.m * mx
+end
+
+function γ_protected_area_two_pop(x, p, t)
+    return p.w̃
+end
+
+function μ_protected_area_two_pop(x, p, t)
+    y_u = x[p.N+1]
+    y_p = x[p.N+2]
+    r_s_local = ((1.0 - p.regulation) / p.regulation) * p.m * (y_p - y_u) / y_u
+    return p.ū .* (1 .+ r_s_local) .^ (-1)
+end
+
+# ===== Protected Area =====
+
+function regulate_protected_area(p, f)
+    return change(p, regulation=f)
+end
+
+function γ_protected_area(x, p, t)
+    return p.w̃ .* (1 - p.regulation) .^ -1
+end
+
+function yₚ(y::Float64, f_p::Float64, m::Float64; K::Float64=1.0, r::Float64=1.0, xK::Float64=0.0, xr::Float64=0.0)
+    if f_p == 0.0
+        return K
+    end
+    r_p = r * (1 + xr)
+    K_p = K * (1 + xK)
+    k = (1.0 - f_p) / f_p * m
+    discriminant = max(0.0, (r_p - k)^2 + 4.0 * r_p * k * y / K_p)
+    y_p = ((r_p - k) + sqrt(discriminant)) * K_p / (2.0 * r_p)
+    return y_p
+end
+
+function rₛ(y, fₚ, m; K::Float64=1.0, r::Float64=1.0, xK::Float64=0.0, xr::Float64=0.0)
+    (fₚ / (1 - fₚ) * m * (yₚ(y, fₚ, m; r, K, xK, xr) .- y)) ./ y
+end
+
+function μ_protected_area(x, p, t)
+    return p.ū .* (1 .+ rₛ(x[p.N+1], p.regulation, p.m)) .^ -1
+end
+
+# ===== Economic Incentives =====
+
+function regulate_economic_incentive(p, f)
+    return change(p, regulation=f)
+end
+
+function μ_economic_incentive(x, p, t)
+    if :μ in vcat(p.policy_target)
+        return p.ū .* (1 - p.regulation * (p.policy_method == :taxation ? -1.0 : 1.0))
+    else
+        return p.ū
+    end
+end
+
+function γ_economic_incentive(x, p, t)
+    if :γ in vcat(p.policy_target)
+        if p.policy_method == :additive
+            return p.w̃ .+ p.regulation
+        else
+            return p.w̃ .* (1 - p.regulation * (p.policy_method == :taxation ? -1.0 : 1.0))
+        end
+    else
+        return p.w̃
+    end
+end
+
+# ===== Development =====
+
+function regulate_development(p, f)
+    return change(p, regulation=f)
+end
+
+function μ_development(x, p, t)
+    return p.ū .+ p.regulation * 2 / p.N * t / 1000 * p.μ_value
+end
+
+function γ_development(x, p, t)
+    return p.w̃ .+ p.regulation * t / 1000 * p.γ_value
+end
+

@@ -4,6 +4,7 @@ module SED
 # Core then visualizations
 include("SED_core.jl")
 include("SED_visualizations.jl")
+include("src/SED/Policies/Policies.jl")
 
 # Exports (core)
 export Dist, dist, sample!, astext
