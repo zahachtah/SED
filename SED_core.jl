@@ -74,7 +74,7 @@ Returns a NamedTuple with arrays for resource revenues (RR), wages (WR), trade (
 total revenues (ToR), inequality (GI), ecological status (EH), a simple governance score (Gov),
 and the index of the optimum per metric (oRR, oWR, oTR, oToR, oGI, oEH, oGov).
 """
-function regulation_scan(p; m=100)
+function regulation_scan(p; m=100, kR=0.5, kT=1.0, kG=-0.2, kE=0.0, kI=0.0)
     r = range(0.0, stop=1.0 - 1.0 / m, length=m)
     RR = zeros(m)
     WR = zeros(m)
@@ -82,33 +82,44 @@ function regulation_scan(p; m=100)
     ToR = zeros(m)
     GI = zeros(m)
     EH = zeros(m)
+    RI = zeros(m)
     Gov = zeros(m)
-    # baseline for behaviour change (optional)
     oau = zeros(p.N)
-    for (j, reg) in enumerate(r)
-        sol = sim(p, regulation=reg, t_end=1000.0)
-        inc = incomes(sol)
+    x0 = zeros(p.N + 2)
+    x0[p.N+1] = 1.0
+    sols = zeros(m, p.N)
+    incdist = zeros(m, p.N)
+    for (j, i) in enumerate(r)
+        sol = sim(p, regulation=i, t_end=1000) # u0=x0[1:p.N], y0=x0[p.N+1], ϕ0=x0[p.N+1]
+
+        if j == 1
+            oau = sol[1:p.N, end-1]
+        end
+
+        inc = incomes(sol.u[end-1], sol.prob.p)
         RR[j] = sum(inc.resource)
         WR[j] = sum(inc.wages)
         TR[j] = sum(inc.trade)
         ToR[j] = sum(inc.total)
         GI[j] = inc.gini
         EH[j] = inc.ecological
-        # a simple governance score (tunable): higher R and T, lower inequality
-        Gov[j] = (RR[j])^0.5 * (ToR[j])^1.0 * (1 .- GI[j])^0.2 * (EH[j])^0.0
-        # store OA baseline on first iteration (approximate)
-        if j == 1
-            oau .= sol[1:p.N, end-1]
-        end
+        regimpact = abs.(oau .- sol[1:p.N, end-1])
+        RI[j] = sum(regimpact)
+        Gov[j] = sum(inc.resource .^ kR .+ inc.total .^ kT .+ inc.gini .^ kG .+ inc.ecological .^ kE .+ regimpact .^ kI)
+        sols[j, :] = sol.u[end-1][1:p.N] ./ p.ū
+        incdist[j, :] = inc.total
     end
+
     oRR = argmax(RR)
     oWR = argmax(WR)
     oTR = argmax(TR)
     oToR = argmax(ToR)
     oGI = argmin(GI)
     oEH = argmax(EH)
+    oRI = argmax(EH)
     oGov = argmax(Gov)
-    (; r, RR, WR, TR, ToR, GI, EH, Gov, oRR, oWR, oTR, oToR, oGI, oEH, oGov)
+
+    return (; RR, WR, TR, ToR, GI, EH, RI, Gov=Gov ./ 100.0, r, oRR, oWR, oTR, oToR, oGI, oEH, oRI, oGov, sols, incdist)
 end
 
 # Γ Φ incomes and gini definitions
@@ -679,7 +690,7 @@ begin
         if sed.min === nothing && sed.max === nothing && sed.mean === nothing &&
            sed.median === nothing && sed.sigma === nothing && sed.sum === nothing &&
            sed.alpha === nothing && sed.beta === nothing &&
-           ( (!isempty(sed.dependent)) || (sed.dependency_function isa AbstractString) )
+           ((!isempty(sed.dependent)) || (sed.dependency_function isa AbstractString))
             sed.data = zeros(eltype(sed.data), N)
             return sed
         end
@@ -1137,10 +1148,10 @@ begin
         # compact 1‑line summary
         distname = d.distribution isa Type ? string(d.distribution) :
                    try
-                       nameof(typeof(d.distribution))
-                   catch
-                       string(typeof(d.distribution))
-                   end
+            nameof(typeof(d.distribution))
+        catch
+            string(typeof(d.distribution))
+        end
         ndata = (d.data isa AbstractArray) ? length(d.data) : 0
         print(io, "Dist($distname, length=$ndata)")
     end
@@ -1148,10 +1159,10 @@ begin
     function Base.show(io::IO, ::MIME"text/plain", d::Dist)
         distname = d.distribution isa Type ? string(d.distribution) :
                    try
-                       nameof(typeof(d.distribution))
-                   catch
-                       string(typeof(d.distribution))
-                   end
+            nameof(typeof(d.distribution))
+        catch
+            string(typeof(d.distribution))
+        end
         println(io, "Dist(")
         println(io, "  distribution : ", distname)
         println(io, "  params       : ", "min=", d.min, ", max=", d.max, ", mean=", d.mean,

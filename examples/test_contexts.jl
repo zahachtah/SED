@@ -1,5 +1,5 @@
 T = (
-    N=100,
+    N=200,
     health=dist(mean=0, sigma=2.0, distribution=Normal, dependency_fun="1/(1+exp(-2-independent))"),#1-max(0.0,independent)
     gender=dist(mean=0.5, distribution=Bernoulli, random=true),
     parental=dist(min=0.1, max=1.0, distribution=LogNormal),
@@ -698,15 +698,24 @@ function pairgrid_blank_upper_redblue_with_dep(
         ax.xgridvisible = true
         ax.ygridvisible = true
 
+        # Check if this panel has gender-specific custom ticks
+        is_gender_violin = has_gender && ((i != j && vars[j] == :gender) || (i == j && vars[i] == :gender))
+
         # show x ticks only on bottom row, hide elsewhere (preserve grids)
         if i == p
-            ax.xticks = LinearTicks(3)
+            # Don't override custom gender ticks
+            if !is_gender_violin
+                ax.xticks = LinearTicks(3)
+            end
         else
             hidexdecorations!(ax; label=false, ticks=false, grid=false)
         end
         # show y ticks only on left column, hide elsewhere (preserve grids)
         if j == 1
-            ax.yticks = LinearTicks(3)
+            # Don't override custom gender ticks
+            if !is_gender_violin
+                ax.yticks = LinearTicks(3)
+            end
         else
             hideydecorations!(ax; label=false, ticks=false, grid=false)
         end
