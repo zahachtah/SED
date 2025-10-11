@@ -106,4 +106,4 @@ function main()
     println("  max ToR@reg=", round(R.r[R.oToR], digits=2), "  ToR=", round(R.ToR[R.oToR], digits=3))
 end
 
-abspath(PROGRAM_FILE) == @__FILE__ && main()
+main()
