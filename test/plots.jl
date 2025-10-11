@@ -28,11 +28,11 @@ let makie_loaded = false
 
             ctx = (
                 N = 50,
-                q = sed(min=1/50, max=1/50, normalize=true),
-                w = sed(min=0.2, max=0.4),
+                q = dist(min=1/50, max=1/50, normalize=true),
+                w = dist(min=0.2, max=0.4),
                 K = 2.0,
-                w̃ = sed(min=0.1, max=1.0, dependency_fun="q .* w ./ K .+ sed"),
-                ū  = sed(dependency_fun="q ./ w̃"),
+                w̃ = dist(min=0.1, max=1.0, dependency_fun="q .* w ./ K .+ independent"),
+                ū  = dist(dependency_fun="q ./ w̃"),
             )
             dist!(ctx)
             gfig = dependency_graph_plot(ctx)

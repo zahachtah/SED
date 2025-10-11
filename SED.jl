@@ -1,8 +1,15 @@
 module SED
 
 
-# Core then visualizations
+# Core split: Dist (sampling/deps), Sim (dxdt/sim), Metrics (Γ, Φ, incomes)
+include("src/SED/Core/Dist.jl")
+include("src/SED/Sim/Model.jl")
+include("src/SED/Sim/Metrics.jl")
+
+# Policy defaults and scenario builders
 include("SED_core.jl")
+
+# Visualizations (optional; depends on Makie)
 include("SED_visualizations.jl")
 include("src/SED/Policies/Policies.jl")
 
@@ -22,5 +29,8 @@ export getmedian, getsigma
 
 # Exports (visualizations)
 export phase_plot!, incomes_plot!, dependency_graph, dependency_graph_plot, dependency_graph_plot!, Φ_plot!, Γ_plot!, attractor_plot!, arrow_arc_deg!
+
+# Adapted policy instruments (EURL/TUR/PA/etc.)
+include("src/SED/Policies/Policies.jl")
 
 end
