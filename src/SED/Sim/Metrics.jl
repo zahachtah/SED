@@ -1,14 +1,38 @@
 using Statistics
 
-function regulation_scan(p; m=100, kR=0.5, kT=1.0, kG=-0.2, kE=0.0, kI=0.0)
+function regulation_scan(p; m=100, kR=0.5, kT=1.0, kG=-0.2, kE=0.0, kI=0.0, warmstart::Symbol=:chain)
     r = range(0.0, stop=1.0 - 1.0 / m, length=m)
     RR = zeros(m); WR = zeros(m); TR = zeros(m); ToR = zeros(m)
     GI = zeros(m); EH = zeros(m); RI = zeros(m); Gov = zeros(m)
     oau = zeros(p.N)
     x0 = zeros(p.N + 2); x0[p.N+1] = 1.0
     sols = zeros(m, p.N); incdist = zeros(m, p.N)
+    prev_sol = nothing
+    if warmstart == :oa_once
+        u0, y0_extra... = sim_init(p; from=:oa)
+        x0 = vcat(u0, y0_extra...)
+    end
     for (j, i) in enumerate(r)
-        sol = sim(p, regulation=i, t_end=1000)
+        if warmstart == :chain && prev_sol !== nothing
+            if get(p, :policy, "") == "Tradable Use Rights"
+                sol = sim(p, regulation=i, t_end=1000, u0=prev_sol[1:p.N, end-2], y0=prev_sol[p.N+1, end-2], ϕ0=prev_sol[p.N+2, end-2])
+            elseif get(p, :policy, "") == "Protected Area Two Pop"
+                sol = sim(p, regulation=i, t_end=1000, u0=prev_sol[1:p.N, end-2], y0=prev_sol[p.N+1, end-2], ϕ0=prev_sol[p.N+2, end-2])
+            else
+                sol = sim(p, regulation=i, t_end=1000, u0=prev_sol[1:p.N, end-2], y0=prev_sol[p.N+1, end-2])
+            end
+        elseif warmstart == :oa_once
+            if get(p, :policy, "") == "Tradable Use Rights"
+                sol = sim(p, regulation=i, t_end=1000, u0=x0[1:p.N], y0=x0[p.N+1], ϕ0=0.0)
+            elseif get(p, :policy, "") == "Protected Area Two Pop"
+                sol = sim(p, regulation=i, t_end=1000, u0=x0[1:p.N], y0=x0[p.N+1], ϕ0=x0[p.N+1])
+            else
+                sol = sim(p, regulation=i, t_end=1000, u0=x0[1:p.N], y0=x0[p.N+1])
+            end
+        else
+            sol = sim(p, regulation=i, t_end=1000)
+        end
+        prev_sol = sol
         if j == 1; oau = sol[1:p.N, end-1]; end
         inc = incomes(sol.u[end-1], sol.prob.p)
         RR[j] = sum(inc.resource); WR[j] = sum(inc.wages); TR[j] = sum(inc.trade)
