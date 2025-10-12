@@ -74,7 +74,7 @@ function policy_outcomes_figure(; s=S.base(N=100), order=false, goal=:Gov)
 
     # Optimize regulation per policy for selected goal
     function optimize_goal(p)
-        R = S.regulation_scan(p)
+        R = S.regulation_scan(p; warmstart=:chain)
         g = R.RR .^ 0.5 .* R.ToR .^ 1.0 .* (1 .- R.GI) .^ 0.0 .* R.EH .^ 0.0
         opt = argmax(goal == :Gov ? g : R[goal])
         (reg=R.r[opt], idx=opt)
@@ -122,7 +122,7 @@ function regscan_figure(; s=base(N=100), outcomes=[:RR, :ToR, :GI, :EH, :RI, :Go
         S.scenario(S.base(N=N); w̃, ū, policy="Protected Area", m=0.5, name="PA_05"),
     ]
 
-    scans = [S.regulation_scan(p) for p in policies]
+    scans = [S.regulation_scan(p; warmstart=:chain) for p in policies]
     f = Figure(size=(1100, 900))
     for (i, rs) in enumerate(scans)
         for (j, o) in enumerate(outcomes)

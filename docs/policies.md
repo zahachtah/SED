@@ -97,3 +97,21 @@ Notes
 
 - This API avoids policy type hierarchies to keep custom extension simple: provide functions and optional hooks, compose freely.
 - Existing examples using `scenario(...; policy="…")` continue to work. Built-ins (e.g., TUR/PA) now add hooks internally where needed.
+
+Warm‑start scanning
+
+- What it is: When scanning regulation, “warm‑start” means starting each solve from a good initial condition instead of from scratch. This greatly reduces time‑to‑steady‑state.
+- Options in `regulation_scan(...; warmstart=...)`:
+  - `:chain` (default): reuse the steady state from the previous regulation value as the initial condition for the next. Best for monotone sweeps over `r`.
+  - `:oa_once`: solve Open Access once (`regulation=0.0`) to get `(u*, y*)`, then use that as the initial condition for all regulation values.
+  - `:none`: no warm‑start; each value starts from zeros (legacy behavior).
+- Helper: `sim_init(p; from=:zeros | :oa)` returns initial conditions matching the scenario shape; `from=:oa` performs one OA solve and returns its steady state.
+- Usage examples:
+```julia
+R = regulation_scan(s; m=50, warmstart=:chain)    # fastest over small steps
+R = regulation_scan(s; m=50, warmstart=:oa_once)  # single OA warm start, then scan
+```
+When to use which:
+- Use `:chain` for dense scans (small step size) where the steady state changes gradually.
+- Use `:oa_once` when you want a single, comparable baseline for all points.
+- Use `:none` for debugging or when you specifically want cold starts.
