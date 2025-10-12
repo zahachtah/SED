@@ -34,29 +34,29 @@ function policy_scans(; N=100, m=40)
 
     # --- Define policies ---
     pols = [
-        (name = "Open Access", p = base0),
-        (name = "Exclusive Rights (lo)", p = scenario(base0; policy="Exclusive Use Rights",
+        (name="Open Access", p=base0),
+        (name="Exclusive Rights (lo)", p=scenario(base0; policy="Exclusive Use Rights",
             γ=γ_exclusive_use_rights, regulate=regulate_exclusive_use_rights, reverse=false)),
-        (name = "Exclusive Rights (hi)", p = scenario(base0; policy="Exclusive Use Rights",
+        (name="Exclusive Rights (hi)", p=scenario(base0; policy="Exclusive Use Rights",
             γ=γ_exclusive_use_rights, regulate=regulate_exclusive_use_rights, reverse=true)),
-        (name = "Tradable (effort)", p = scenario(base0; policy="Tradable Use Rights",
+        (name="Tradable (effort)", p=scenario(base0; policy="Tradable Use Rights",
             γ=γ_tradable_use_rights, ϕ=ϕ_tradable_use_rights, regulate=regulate_tradable_use_rights,
             policy_target=:effort, market_rate=0.05)),
-        (name = "Tradable (yield)", p = scenario(base0; policy="Tradable Use Rights",
+        (name="Tradable (yield)", p=scenario(base0; policy="Tradable Use Rights",
             γ=γ_tradable_use_rights, ϕ=ϕ_tradable_use_rights, regulate=regulate_tradable_use_rights,
             policy_target=:yield, market_rate=0.05)),
-        (name = "Protected Area", p = scenario(base0; policy="Protected Area",
+        (name="Protected Area", p=scenario(base0; policy="Protected Area",
             γ=γ_protected_area, μ=μ_protected_area, regulate=regulate_protected_area, m=0.3)),
-        (name = "Economic Incentives", p = scenario(base0; policy="Economic Incentives",
+        (name="Economic Incentives", p=scenario(base0; policy="Economic Incentives",
             μ=μ_economic_incentive, γ=γ_economic_incentive, regulate=regulate_economic_incentive,
             policy_target=[:γ, :μ], policy_method=:multiplicative)),
-        (name = "Development", p = scenario(base0; policy="Development",
+        (name="Development", p=scenario(base0; policy="Development",
             μ=μ_development, γ=γ_development, regulate=regulate_development, μ_value=0.5, γ_value=0.5)),
     ]
 
     # --- Run scans ---
     println(rpad("Policy", 24), " | ", rpad("reg(RR)", 8), rpad("reg(WR)", 9), rpad("reg(TR)", 9), rpad("reg(ToR)", 10), rpad("reg(EH)", 9), rpad("reg(GI)min", 12), rpad("reg(Gov)", 10))
-    println(repeat("-", 24+3+8+9+9+10+9+12+10))
+    println(repeat("-", 24 + 3 + 8 + 9 + 9 + 10 + 9 + 12 + 10))
     for pol in pols
         R = regulation_scan(pol.p; m)
         rr = round(R.r[R.oRR], digits=2)
@@ -86,23 +86,23 @@ function policy_phase_plots(T; goal=:Gov, m=40, figsize=(1100, 800))
     base0 = scenario(base(N=T.N); w̃=dist(data=T.w̃), ū=dist(data=T.ū))
 
     pols = [
-        (name = "Open Access", p = base0),
-        (name = "Exclusive Rights (lo)", p = scenario(base0; policy="Exclusive Use Rights",
+        (name="Open Access", p=base0),
+        (name="Exclusive Rights (lo)", p=scenario(base0; policy="Exclusive Use Rights",
             γ=γ_exclusive_use_rights, regulate=regulate_exclusive_use_rights, reverse=false)),
-        (name = "Exclusive Rights (hi)", p = scenario(base0; policy="Exclusive Use Rights",
+        (name="Exclusive Rights (hi)", p=scenario(base0; policy="Exclusive Use Rights",
             γ=γ_exclusive_use_rights, regulate=regulate_exclusive_use_rights, reverse=true)),
-        (name = "Tradable (effort)", p = scenario(base0; policy="Tradable Use Rights",
+        (name="Tradable (effort)", p=scenario(base0; policy="Tradable Use Rights",
             γ=γ_tradable_use_rights, ϕ=ϕ_tradable_use_rights, regulate=regulate_tradable_use_rights,
             policy_target=:effort, market_rate=0.05)),
-        (name = "Tradable (yield)", p = scenario(base0; policy="Tradable Use Rights",
+        (name="Tradable (yield)", p=scenario(base0; policy="Tradable Use Rights",
             γ=γ_tradable_use_rights, ϕ=ϕ_tradable_use_rights, regulate=regulate_tradable_use_rights,
             policy_target=:yield, market_rate=0.05)),
-        (name = "Protected Area", p = scenario(base0; policy="Protected Area",
+        (name="Protected Area", p=scenario(base0; policy="Protected Area",
             γ=γ_protected_area, μ=μ_protected_area, regulate=regulate_protected_area, m=0.3)),
-        (name = "Economic Incentives", p = scenario(base0; policy="Economic Incentives",
+        (name="Economic Incentives", p=scenario(base0; policy="Economic Incentives",
             μ=μ_economic_incentive, γ=γ_economic_incentive, regulate=regulate_economic_incentive,
             policy_target=[:γ, :μ], policy_method=:multiplicative)),
-        (name = "Development", p = scenario(base0; policy="Development",
+        (name="Development", p=scenario(base0; policy="Development",
             μ=μ_development, γ=γ_development, regulate=regulate_development, μ_value=0.5, γ_value=0.5)),
     ]
 
@@ -152,11 +152,23 @@ function policy_phase_plots(T; goal=:Gov, m=40, figsize=(1100, 800))
             string(round(100 * μf / μm, digits=1), "%")
         end
 
-        gini_val = round(inc.gini, digits=2)
+        # Gini overall and for females
+        g_all_str = begin
+            s = sum(total)
+            s <= 0 ? "n/a" : string(round(SED.gini(total), digits=2))
+        end
+        g_fem_str = begin
+            if isempty(fidx)
+                "n/a"
+            else
+                s = sum(total[fidx])
+                s <= 0 ? "n/a" : string(round(SED.gini(total[fidx]), digits=2))
+            end
+        end
         ax = Axis(f[rrow, ccol], title="$(pol.name) @ reg=$(round(r, digits=2))")
         SED.phase_plot!(ax, sol)
         # overlay metrics in upper-right corner
-        label = "F as % of M: $(pct_str)\nGini: $(gini_val)"
+        label = "♀ % of ♂: $(pct_str)\nGini: all $(g_all_str) (♀ $(g_fem_str))"
         text!(ax, 0.98, 0.98; text=label, align=(:right, :top), color=:black)
     end
     f
