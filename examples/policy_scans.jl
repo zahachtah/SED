@@ -168,8 +168,10 @@ function policy_phase_plots(T; goal=:Gov, m=40, figsize=(1100, 800))
         ax = Axis(f[rrow, ccol], title="$(pol.name) @ reg=$(round(r, digits=2))")
         SED.phase_plot!(ax, sol)
         # overlay metrics in upper-right corner
-        label = "♀ % of ♂: $(pct_str)\nGini: all $(g_all_str) (♀ $(g_fem_str))"
-        text!(ax, 0.98, 0.98; text=label, align=(:right, :top), color=:black)
+        tot_sum = round(sum(total), digits=2)
+        res_sum = round(sum(inc.resource), digits=2)
+        label = "♀ \$ as % of ♂: $(pct_str)\nGini: all $(g_all_str) (♀ $(g_fem_str))\nTotal: $(tot_sum)   Resource: $(res_sum)"
+        text!(ax, 0.25, 0.12; text=label, align=(:left, :top), color=:black)
     end
     f
 end
