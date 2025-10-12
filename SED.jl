@@ -26,6 +26,7 @@ export γ_economic_incentive, μ_economic_incentive, regulate_economic_incentive
 export regulate_protected_area, γ_protected_area, μ_protected_area
 export γ_protected_area_two_pop, μ_protected_area_two_pop, ϕ_protected_area_two_pop
 export regulate_development, μ_development, γ_development
+export with_policy
 export Uniform, LogNormal, LogitNormal, Normal, Exponential, Dirac, Bernoulli, Beta
 export incomes, regulation_scan, gini
 export getmedian, getsigma

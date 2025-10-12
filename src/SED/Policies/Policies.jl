@@ -162,6 +162,40 @@ function regulate_development(p, f)
     return change(p, regulation=f)
 end
 
+# ===== Policy composition helper (function-based, no types) =====
+
+"""
+    with_policy(s; γ=nothing, μ=nothing, ϕ=nothing, regulate=nothing,
+                   income_extra_fun=nothing,
+                   extra_state::Int=0, init_extra_state=nothing,
+                   label=nothing, policy_meta=NamedTuple())
+
+Return a new scenario based on `s` with any provided policy functions and optional
+hooks merged in. All parameters are optional; only non-`nothing` values are applied.
+
+Hooks (optional):
+- `income_extra_fun(x, p, t) -> Vector`: additional income component per agent.
+- `extra_state::Int`: number of extra ODE states introduced by the policy.
+- `init_extra_state(p) -> Vector`: initializer for extra states, length = `extra_state`.
+- `label::String` and `policy_meta::NamedTuple`: for display and downstream logic.
+"""
+function with_policy(s; γ=nothing, μ=nothing, ϕ=nothing, regulate=nothing,
+                        income_extra_fun=nothing,
+                        extra_state::Int=0, init_extra_state=nothing,
+                        label=nothing, policy_meta=NamedTuple())
+    out = (; s...)
+    γ !== nothing && (out = (; out..., γ))
+    μ !== nothing && (out = (; out..., μ))
+    ϕ !== nothing && (out = (; out..., ϕ))
+    regulate !== nothing && (out = (; out..., regulate))
+    income_extra_fun !== nothing && (out = (; out..., income_extra_fun))
+    extra_state > 0 && (out = (; out..., extra_state))
+    init_extra_state !== nothing && (out = (; out..., init_extra_state))
+    label !== nothing && (out = (; out..., label))
+    !isempty(propertynames(policy_meta)) && (out = (; out..., policy_meta))
+    return out
+end
+
 function μ_development(x, p, t)
     return p.ū .+ p.regulation * 2 / p.N * t / 1000 * p.μ_value
 end
@@ -169,4 +203,3 @@ end
 function γ_development(x, p, t)
     return p.w̃ .+ p.regulation * t / 1000 * p.γ_value
 end
-
