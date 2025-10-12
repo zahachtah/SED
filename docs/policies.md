@@ -89,9 +89,11 @@ sol_opt = sim(s_tur; regulation=opt)
 
 Figures
 
-- See `examples/policy_tests.jl` for a runnable script comparing policies and printing summary metrics.
-- See `examples/policy_scans.jl` for `policy_phase_plots(T)` which optimizes regulation per policy and returns a multi-panel figure.
-- Manuscript figures: run `manuscript/figures.jl` to regenerate publication figures.
+ - See `examples/policy_tests.jl` for a runnable script comparing policies and printing summary metrics.
+ - See `examples/policy_scans.jl` for `policy_phase_plots(T)` which optimizes regulation per policy and returns a multi-panel figure.
+ - Warm-start scan figure: `examples/warmstart_scan_figure.jl` saves `examples/figures/warmstart_scan.png`.
+ - Manuscript figures: run `manuscript/figures.jl` to regenerate publication figures.
+ - One-shot build: run `scripts/build_docs_figures.jl` to regenerate README and docs figures.
 
 Notes
 
