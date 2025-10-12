@@ -11,11 +11,11 @@ incentive function γ and running a short simulation.
 """
 function with_policy_demo()
     N = 80
-    base = scenario(base(N=N))
+    s0 = scenario(base(N=N))
     # Simple policy: add a small constant bonus to incentives
     bonus = 0.05
     γ_bonus(x, p, t) = p.w̃ .+ bonus
-    s2 = with_policy(base; γ=γ_bonus, label="γ + bonus")
+    s2 = with_policy(s0; γ=γ_bonus, label="γ + bonus")
     sol = sim(s2; regulation=0.2)
     inc = incomes(sol)
     println("label=", get(s2, :label, "(none)"),
@@ -23,4 +23,3 @@ function with_policy_demo()
             "  ToR=", round(sum(inc.total), digits=3))
     return sol
 end
-
