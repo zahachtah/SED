@@ -3,6 +3,7 @@ if !isdefined(Main, :SED)
 end
 using .SED
 using CairoMakie
+using Statistics
 
 """
     policy_scans(; N=100, m=40)
@@ -148,8 +149,11 @@ function policy_phase_plots(T; goal=:Gov, m=40, figsize=(1100, 800))
         pct = denom == 0 ? 0.0 : 200 * (μf - μm) / denom
 
         gini_val = round(inc.gini, digits=2)
-        ax = Axis(f[rrow, ccol], title="$(pol.name) @ reg=$(round(r, digits=2))  [Δ% F−M: $(round(pct, digits=1)) | Gini: $(gini_val)]")
+        ax = Axis(f[rrow, ccol], title="$(pol.name) @ reg=$(round(r, digits=2))")
         SED.phase_plot!(ax, sol)
+        # overlay metrics in upper-right corner
+        label = "Δ% F−M: $(round(pct, digits=1))\nGini: $(gini_val)"
+        text!(ax, 0.98, 0.98; text=label, align=(:right, :top), color=:black)
     end
     f
 end
