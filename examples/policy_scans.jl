@@ -2,6 +2,7 @@ if !isdefined(Main, :SED)
     error("Load SED first: include(\"SED.jl\"); using .SED")
 end
 using .SED
+using CairoMakie
 
 """
     policy_scans(; N=100, m=40)
@@ -69,3 +70,74 @@ function policy_scans(; N=100, m=40)
     nothing
 end
 
+"""
+    policy_phase_plots(T; goal=:Gov, m=40, figsize=(1100, 800)) -> Figure
+
+Given a T-like context (NamedTuple of Dists), sample it, build baseline
+scenarios for each policy, optimize regulation w.r.t. `goal` using `regulation_scan`,
+simulate at the chosen regulation, and return a multi-panel figure of phase plots.
+
+Valid goals: :Gov, :ToR, :RR, :WR, :TR, :GI (min), :EH
+"""
+function policy_phase_plots(T; goal=:Gov, m=40, figsize=(1100, 800))
+    # realize T and build baseline
+    sample!(T, random=true)
+    base0 = scenario(base(N=T.N); w̃=dist(data=T.w̃), ū=dist(data=T.ū))
+
+    pols = [
+        (name = "Open Access", p = base0),
+        (name = "Exclusive Rights (lo)", p = scenario(base0; policy="Exclusive Use Rights",
+            γ=γ_exclusive_use_rights, regulate=regulate_exclusive_use_rights, reverse=false)),
+        (name = "Exclusive Rights (hi)", p = scenario(base0; policy="Exclusive Use Rights",
+            γ=γ_exclusive_use_rights, regulate=regulate_exclusive_use_rights, reverse=true)),
+        (name = "Tradable (effort)", p = scenario(base0; policy="Tradable Use Rights",
+            γ=γ_tradable_use_rights, ϕ=ϕ_tradable_use_rights, regulate=regulate_tradable_use_rights,
+            policy_target=:effort, market_rate=0.05)),
+        (name = "Tradable (yield)", p = scenario(base0; policy="Tradable Use Rights",
+            γ=γ_tradable_use_rights, ϕ=ϕ_tradable_use_rights, regulate=regulate_tradable_use_rights,
+            policy_target=:yield, market_rate=0.05)),
+        (name = "Protected Area", p = scenario(base0; policy="Protected Area",
+            γ=γ_protected_area, μ=μ_protected_area, regulate=regulate_protected_area, m=0.3)),
+        (name = "Economic Incentives", p = scenario(base0; policy="Economic Incentives",
+            μ=μ_economic_incentive, γ=γ_economic_incentive, regulate=regulate_economic_incentive,
+            policy_target=[:γ, :μ], policy_method=:multiplicative)),
+        (name = "Development", p = scenario(base0; policy="Development",
+            μ=μ_development, γ=γ_development, regulate=regulate_development, μ_value=0.5, γ_value=0.5)),
+    ]
+
+    # helper to choose goal index
+    function pickidx(R)
+        if goal == :Gov
+            return R.oGov
+        elseif goal == :ToR
+            return R.oToR
+        elseif goal == :RR
+            return R.oRR
+        elseif goal == :WR
+            return R.oWR
+        elseif goal == :TR
+            return R.oTR
+        elseif goal == :GI
+            return R.oGI
+        elseif goal == :EH
+            return R.oEH
+        else
+            return R.oGov
+        end
+    end
+
+    # run scans and sims
+    scans = [regulation_scan(pol.p; m=m) for pol in pols]
+    regs = [s.r[pickidx(s)] for s in scans]
+    sols = [sim(pol.p; regulation=r) for (pol, r) in zip(pols, regs)]
+
+    # plot grid 2 rows x 4 cols
+    f = Figure(size=figsize)
+    for (i, (pol, r, sol)) in enumerate(zip(pols, regs, sols))
+        rrow = div(i - 1, 4) + 1
+        ccol = mod(i - 1, 4) + 1
+        ax = Axis(f[rrow, ccol], title="$(pol.name) @ reg=$(round(r, digits=2))")
+        phase_plot!(ax, sol)
+    end
+    f
+end
