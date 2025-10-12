@@ -74,6 +74,24 @@ end
     @test isapprox(sum(inc2.resource), 0.5 * sum(inc1.resource); atol=1e-6)
 end
 
+@testset "policy kits" begin
+    N = 30
+    s0 = scenario(base(N=N))
+
+    # EUR kit with top selector
+    sel = (w̃, n) -> sortperm(w̃, rev=true)[1:n]
+    eur = with_policy(s0; exclusive_use_rights_kit(; selector=sel)...)
+    @test !isnothing(sim(eur; regulation=0.25))
+
+    # TUR kit
+    tur = with_policy(s0; tradable_use_rights_kit(; target=:effort, market_rate=0.05)...)
+    @test !isnothing(sim(tur; regulation=0.25))
+
+    # PA kit
+    pa = with_policy(s0; protected_area_kit(; m=0.3)...)
+    @test !isnothing(sim(pa; regulation=0.25))
+end
+
 @testset "tuple dependent + string" begin
     N = 30
     s = (

@@ -207,6 +207,85 @@ function with_policy(s; γ=nothing, μ=nothing, ϕ=nothing, regulate=nothing,
     return out
 end
 
+# ===== Policy kit helpers (function-based bundles) =====
+
+"""
+    exclusive_use_rights_kit(; selector = (w̃, n) -> (1:n), label="Exclusive Use Rights")
+
+Return a NamedTuple of policy functions for Exclusive Use Rights using the given
+`selector` to choose which `n = round(Int, f*N)` agents get rights. The default
+selector picks the first n indices; pass a custom selector to choose top/bottom
+by some criterion (e.g., w̃).
+"""
+function exclusive_use_rights_kit(; selector = (w̃, n) -> (1:n), label="Exclusive Use Rights")
+    γf(x, p, t) = p.w̃ .+ p.R
+    function regulatef(s, f)
+        N = s.N
+        R = zeros(N)
+        n = max(0, min(N, round(Int, f * N)))
+        if n > 0
+            idx = selector(s.w̃, n)
+            R[idx] .= 1.0
+        end
+        return change(s, R=R, regulation=f)
+    end
+    (; γ=γf, regulate=regulatef, label)
+end
+
+"""
+    tradable_use_rights_kit(; target=:effort, market_rate=0.05, label="Tradable Use Rights")
+
+Return a NamedTuple policy bundle for tradable use rights. Attaches γ, ϕ,
+and regulate; `regulate` also attaches `income_extra_fun` for trade income.
+"""
+function tradable_use_rights_kit(; target=:effort, market_rate=0.05, label="Tradable Use Rights")
+    γf = γ_tradable_use_rights
+    ϕf = ϕ_tradable_use_rights
+    function regulatef(s, f)
+        s2 = change(s, policy_target=target, market_rate=market_rate)
+        regulate_tradable_use_rights(s2, f)
+    end
+    (; γ=γf, ϕ=ϕf, regulate=regulatef, label, policy_meta=(; target, market_rate))
+end
+
+"""
+    protected_area_kit(; m=0.3, label="Protected Area")
+
+Return a NamedTuple policy bundle for a Protected Area.
+"""
+function protected_area_kit(; m=0.3, label="Protected Area")
+    γf = γ_protected_area
+    μf = μ_protected_area
+    function regulatef(p, f)
+        regulate_protected_area(change(p, m=m), f)
+    end
+    (; γ=γf, μ=μf, regulate=regulatef, label, policy_meta=(; m))
+end
+
+"""
+    economic_incentives_kit(; policy_target=[:γ,:μ], policy_method=:multiplicative, label="Economic Incentives")
+"""
+function economic_incentives_kit(; policy_target=[:γ,:μ], policy_method=:multiplicative, label="Economic Incentives")
+    γf = γ_economic_incentive
+    μf = μ_economic_incentive
+    function regulatef(p, f)
+        change(p, regulation=f, policy_target=policy_target, policy_method=policy_method)
+    end
+    (; γ=γf, μ=μf, regulate=regulatef, label, policy_meta=(; policy_target, policy_method))
+end
+
+"""
+    development_kit(; μ_value=0.5, γ_value=0.5, label="Development")
+"""
+function development_kit(; μ_value=0.5, γ_value=0.5, label="Development")
+    γf = γ_development
+    μf = μ_development
+    function regulatef(p, f)
+        change(p, regulation=f, μ_value=μ_value, γ_value=γ_value)
+    end
+    (; γ=γf, μ=μf, regulate=regulatef, label, policy_meta=(; μ_value, γ_value))
+end
+
 function μ_development(x, p, t)
     return p.ū .+ p.regulation * 2 / p.N * t / 1000 * p.μ_value
 end

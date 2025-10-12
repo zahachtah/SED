@@ -47,6 +47,24 @@ sol = sim(s_tur; regulation=0.3)
 inc = incomes(sol)   # inc.extra (alias inc.trade) holds the trade income
 ```
 
+Policy kits (one-liners)
+
+Kits are tiny helpers that return a bundle of functions and hooks you can pass to `with_policy`:
+
+```julia
+# Exclusive Use Rights: top by w̃
+sel = (w̃, n) -> sortperm(w̃, rev=true)[1:n]
+eur = with_policy(s0; exclusive_use_rights_kit(; selector=sel)...)
+
+# Tradable Use Rights
+tur = with_policy(s0; tradable_use_rights_kit(; target=:effort, market_rate=0.05)...)
+
+# Protected Area
+pa = with_policy(s0; protected_area_kit(; m=0.3)...)
+```
+
+The kits produce the same outcomes as the “manual” function-based policies above but with fewer moving parts. Edit the returned fields or pass different keyword args to explore variants.
+
 Protected Area (function-based)
 
 The built-in `regulate_protected_area` also attaches `resource_factor_fun` so resource income scales by `(1 - f)`.
