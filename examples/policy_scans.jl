@@ -147,7 +147,8 @@ function policy_phase_plots(T; goal=:Gov, m=40, figsize=(1100, 800))
         denom = (μm + μf)
         pct = denom == 0 ? 0.0 : 200 * (μf - μm) / denom
 
-        ax = Axis(f[rrow, ccol], title="$(pol.name) @ reg=$(round(r, digits=2))  [Δ% F−M: $(round(pct, digits=1))]")
+        gini_val = round(inc.gini, digits=2)
+        ax = Axis(f[rrow, ccol], title="$(pol.name) @ reg=$(round(r, digits=2))  [Δ% F−M: $(round(pct, digits=1)) | Gini: $(gini_val)]")
         SED.phase_plot!(ax, sol)
     end
     f
