@@ -48,33 +48,40 @@ function Φ(y, p; t=0.0)
 end
 
 function incomes(x, p; summarize=false, dimensional::Bool=false)
+    # unpack state and parameters
     y = x[p.N+1]
     u = x[1:p.N]
-    f = occursin("Protected Area", p.policy) ? p.regulation : 0.0
-    resource_nd = u .* y .* (1 .- f)
+
+    # resource income with optional policy-provided factor
+    rf = hasproperty(p, :resource_factor_fun) ? p.resource_factor_fun(x, p, 0.0) : 1.0
+    resource_factor = rf isa Number ? fill(rf, p.N) : rf
+    resource_nd = u .* y .* resource_factor
+
+    # wages based on μ and γ
     μ = p.μ(x, p, 0.0)
-    γ = occursin("Protected Area", p.policy) || occursin("Exclusive Use Rights", p.policy) || occursin("Tradable Use Rights", p.policy) ? p.w̃ : p.γ(x, p, 0.0)
-    wages_nd = (μ .- u) .* γ
-    wages_0_nd = μ .* γ
-    trade_nd = if p.policy == "Tradable Use Rights"
-        if p.policy_target == :yield
-            (p.R .- (u .* y)) .* x[p.N+2]
-        else
-            (p.R .- u) .* x[p.N+2]
-        end
-    else
-        zeros(p.N)
-    end
-    total_nd = resource_nd .+ wages_nd .+ trade_nd
-    g = gini(total_nd); ecological = y
+    γw = p.γ(x, p, 0.0)
+    wages_nd = (μ .- u) .* γw
+    wages_0_nd = μ .* γw
+
+    # optional additional income component provided by policy
+    extra_nd = hasproperty(p, :income_extra_fun) ? p.income_extra_fun(x, p, 0.0) : zeros(p.N)
+
+    total_nd = resource_nd .+ wages_nd .+ extra_nd
+    g = gini(total_nd)
+    ecological = y
+
     if dimensional
         scale = p.rpk
-        resource = resource_nd .* scale; wages = wages_nd .* scale; wages_0 = wages_0_nd .* scale
-        trade = trade_nd .* scale; total = total_nd .* scale
+        resource = resource_nd .* scale
+        wages = wages_nd .* scale
+        wages_0 = wages_0_nd .* scale
+        extra = extra_nd .* scale
+        total = total_nd .* scale
     else
-        resource, wages, trade, total, wages_0 = resource_nd, wages_nd, trade_nd, total_nd, wages_0_nd
+        resource, wages, wages_0, extra, total = resource_nd, wages_nd, wages_0_nd, extra_nd, total_nd
     end
-    out = (; resource, wages, trade, total, gini=g, ecological, wages_0)
+
+    out = (; resource, wages, extra, trade=extra, total, gini=g, ecological, wages_0)
     return summarize ? merge(out, (; g=g, ecological=ecological)) : out
 end
 
@@ -83,4 +90,3 @@ incomes(sol::ODESolution) = incomes(sol.u[end], sol.prob.p)
 function gini(x)
     sum([abs(x[i] - x[j]) for i in 1:length(x), j in 1:length(x)]) / (2 * length(x) * sum(x))
 end
-

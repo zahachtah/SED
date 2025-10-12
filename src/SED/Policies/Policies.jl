@@ -51,7 +51,16 @@ function regulate_tradable_use_rights(s, f)
             end
         end
     end
-    return change(s, R=R, regulation=f)
+    # attach income_extra_fun to reflect trade revenues at incomes time
+    function _tur_income_extra(x, p, t)
+        u = x[1:p.N]; y = x[p.N+1]
+        if p.policy_target == :yield
+            (p.R .- (u .* y)) .* x[p.N+2]
+        else
+            (p.R .- u) .* x[p.N+2]
+        end
+    end
+    return change(s, R=R, regulation=f, income_extra_fun=_tur_income_extra)
 end
 
 function γ_tradable_use_rights(x, p, t)
@@ -103,7 +112,9 @@ end
 # ===== Protected Area =====
 
 function regulate_protected_area(p, f)
-    return change(p, regulation=f)
+    # Provide resource_factor_fun so incomes scale resource by (1 - f)
+    rff(x, pp, t) = (1 - pp.regulation)
+    return change(p, regulation=f, resource_factor_fun=rff)
 end
 
 function γ_protected_area(x, p, t)
