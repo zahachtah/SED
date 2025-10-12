@@ -137,7 +137,7 @@ function policy_phase_plots(T; goal=:Gov, m=40, figsize=(1100, 800))
         rrow = div(i - 1, 4) + 1
         ccol = mod(i - 1, 4) + 1
         ax = Axis(f[rrow, ccol], title="$(pol.name) @ reg=$(round(r, digits=2))")
-        phase_plot!(ax, sol)
+        SED.phase_plot!(ax, sol)
     end
     f
 end
