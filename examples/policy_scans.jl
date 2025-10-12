@@ -170,8 +170,8 @@ function policy_phase_plots(T; goal=:Gov, m=40, figsize=(1100, 800))
         # overlay metrics in upper-right corner
         tot_sum = round(sum(total), digits=2)
         res_sum = round(sum(inc.resource), digits=2)
-        label = "♀ \$ as % of ♂: $(pct_str)\nGini: all $(g_all_str) (♀ $(g_fem_str))\nTotal: $(tot_sum)   Resource: $(res_sum)"
-        text!(ax, 0.25, 0.12; text=label, align=(:left, :top), color=:black)
+        label = "♀ \$ as % of ♂: $(pct_str)\nGini: all $(g_all_str) (♀ $(g_fem_str))\nTotal \$: $(tot_sum)\nResource \$: $(res_sum)"
+        text!(ax, 0.25, 0.05; text=label, align=(:left, :bottom), color=:black)
     end
     f
 end
