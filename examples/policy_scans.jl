@@ -136,7 +136,18 @@ function policy_phase_plots(T; goal=:Gov, m=40, figsize=(1100, 800))
     for (i, (pol, r, sol)) in enumerate(zip(pols, regs, sols))
         rrow = div(i - 1, 4) + 1
         ccol = mod(i - 1, 4) + 1
-        ax = Axis(f[rrow, ccol], title="$(pol.name) @ reg=$(round(r, digits=2))")
+        # compute gender income % diff (symmetric percent difference)
+        inc = incomes(sol)
+        total = inc.total
+        g = hasproperty(T.gender, :data) ? T.gender.data : T.gender
+        midx = findall(g .== 0)
+        fidx = findall(g .== 1)
+        μm = isempty(midx) ? 0.0 : mean(total[midx])
+        μf = isempty(fidx) ? 0.0 : mean(total[fidx])
+        denom = (μm + μf)
+        pct = denom == 0 ? 0.0 : 200 * (μf - μm) / denom
+
+        ax = Axis(f[rrow, ccol], title="$(pol.name) @ reg=$(round(r, digits=2))  [Δ% F−M: $(round(pct, digits=1))]")
         SED.phase_plot!(ax, sol)
     end
     f
