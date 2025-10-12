@@ -145,14 +145,18 @@ function policy_phase_plots(T; goal=:Gov, m=40, figsize=(1100, 800))
         fidx = findall(g .== 1)
         μm = isempty(midx) ? 0.0 : mean(total[midx])
         μf = isempty(fidx) ? 0.0 : mean(total[fidx])
-        denom = (μm + μf)
-        pct = denom == 0 ? 0.0 : 200 * (μf - μm) / denom
+        # Women as a percent of men (μF / μM * 100)
+        pct_str = if μm == 0.0
+            (μf == 0.0 ? "n/a" : "∞")
+        else
+            string(round(100 * μf / μm, digits=1), "%")
+        end
 
         gini_val = round(inc.gini, digits=2)
         ax = Axis(f[rrow, ccol], title="$(pol.name) @ reg=$(round(r, digits=2))")
         SED.phase_plot!(ax, sol)
         # overlay metrics in upper-right corner
-        label = "Δ% F−M: $(round(pct, digits=1))\nGini: $(gini_val)"
+        label = "F as % of M: $(pct_str)\nGini: $(gini_val)"
         text!(ax, 0.98, 0.98; text=label, align=(:right, :top), color=:black)
     end
     f
