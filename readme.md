@@ -1,6 +1,6 @@
 # SED — Socio‑economic/Social‑ecological Distributions
 
-SED provides simple, composable distributions for agents and resources, plus simulation and plotting helpers for socio‑ecological models. It’s lightweight by default (core only), with plotting functions available when Makie is present.
+SED provides simple, composable distributions for agents and resources, plus simulation and plotting helpers for socio‑ecological models. It’s lightweight by default; plotting functions load when Makie is available.
 
 Quick Start
 
@@ -25,11 +25,10 @@ sol = sim(scenario(base(N=N); w̃=dist(data=s.w̃), ū=dist(data=s.ū)))
 Example output:
 
 ![Phase + incomes](examples/figures/readme_phase_incomes.png)
-```
 
-What’s Next
+Learn More
 
-- [Core](docs/core.md): concepts, context, simulation
+- [Core](docs/core.md): concepts, contexts, simulation
 - [Distributions](docs/distributions.md): independent/dependent, function vs string, sampling
 - [Visualizations](docs/visualizations.md): phase, incomes, Γ and Φ, dependency graph
 - [Policies](docs/policies.md): scenarios, regulation scan, evaluation
