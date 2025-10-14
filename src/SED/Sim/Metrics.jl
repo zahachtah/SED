@@ -60,7 +60,16 @@ function regulation_scan(p; m=100, kR=0.5, kT=1.0, kG=-0.2, kE=0.0, kI=0.0, warm
         ToR[j] = sum(inc.total); GI[j] = inc.gini; EH[j] = inc.ecological
         regimpact = abs.(oau .- sol[1:p.N, end-1])
         RI[j] = sum(regimpact)
-        Gov[j] = sum(inc.resource .^ kR .+ inc.total .^ kT .+ inc.gini .^ kG .+ inc.ecological .^ kE .+ regimpact .^ kI)
+        # Cobb–Douglas style governance on aggregate metrics with safe exponents
+        # Aggregates per r
+        Rsum = RR[j]
+        Tsum = ToR[j]
+        Gval = GI[j]
+        Eval = EH[j]
+        Isum = RI[j]
+        # Safe power for nonnegative inputs (avoid complex/NaN from negatives or zeros)
+        _sp(x, k) = (max(x, eps()) ^ k)
+        Gov[j] = _sp(Rsum, kR) * _sp(Tsum, kT) * _sp(Gval, kG) * _sp(Eval, kE) * _sp(Isum, kI)
         sols[j, :] = sol.u[end-1][1:p.N] ./ p.ū
         incdist[j, :] = inc.total
     end
