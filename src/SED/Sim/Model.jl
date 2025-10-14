@@ -11,9 +11,9 @@ returns its steady state as a warm start (u*, y*, extra set to defaults).
 function sim_init(p; from::Symbol = :zeros, t_end=1000.0)
     N = p.N
     if from == :zeros
-        if get(p, :policy, "") == "Tradable Use Rights"
+        if (hasproperty(p, :policy) ? p.policy : "") == "Tradable Use Rights"
             return (zeros(N), 1.0, 0.0)
-        elseif get(p, :policy, "") == "Protected Area Two Pop"
+        elseif (hasproperty(p, :policy) ? p.policy : "") == "Protected Area Two Pop"
             return (zeros(N), 1.0, 1.0)
         else
             return (zeros(N), 1.0)
@@ -26,9 +26,9 @@ function sim_init(p; from::Symbol = :zeros, t_end=1000.0)
         prob = ODEProblem(dxdt, initVals, (0.0, t_end), oa)
         sol = solve(prob, SSPRK432(; stage_limiter!), callback=TerminateSteadyState(1e-6, 1e-4))
         # Copy back u*, y* and keep extra states at defaults
-        if get(p, :policy, "") == "Tradable Use Rights"
+        if (hasproperty(p, :policy) ? p.policy : "") == "Tradable Use Rights"
             return (sol[1:N, end-2], sol[N+1, end-2], 0.0)
-        elseif get(p, :policy, "") == "Protected Area Two Pop"
+        elseif (hasproperty(p, :policy) ? p.policy : "") == "Protected Area Two Pop"
             return (sol[1:N, end-2], sol[N+1, end-2], sol[N+1, end-2])
         else
             return (sol[1:N, end-2], sol[N+1, end-2])
@@ -74,7 +74,22 @@ function sim(s; u0=zeros(s.N), y0=1.0, ϕ0=0.0, regulation=0.0, start_from_OA=fa
         initVals[1:oa.N+1] = oasol[1:oa.N+1, end-2]
     end
 
-    prob = ODEProblem(dxdt, initVals, tspan, p)
-    sol = solve(prob, SSPRK432(; stage_limiter!), callback=TerminateSteadyState(1e-6, 1e-4))
-    return sol
-end
+        prob = ODEProblem(dxdt, initVals, tspan, p)
+        # try primary algorithm with limiter; on failure, try fallbacks
+        function _try_solve(prob)
+            # 1) SSPRK with limiter
+            try
+                return solve(prob, SSPRK432(; stage_limiter!), callback=TerminateSteadyState(1e-6, 1e-4))
+            catch
+            end
+            # 2) Stiff fallback
+            try
+                return solve(prob, Rosenbrock23(), callback=TerminateSteadyState(1e-6, 1e-4))
+            catch
+            end
+            # 3) Non-stiff fallback
+            return solve(prob, Tsit5(), callback=TerminateSteadyState(1e-6, 1e-4))
+        end
+        sol = _try_solve(prob)
+        return sol
+    end

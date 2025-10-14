@@ -22,6 +22,23 @@ sample!(s)   # resolves dependencies topologically
 sol = sim(scenario(base(N=N); w̃=dist(data=s.w̃), ū=dist(data=s.ū)))
 ```
 
+Policies (simple first)
+
+```julia
+# Start from a baseline
+s = scenario(base(N=200))
+
+# Apply a policy with a kit (recommended)
+tur = with_policy(s; tradable_use_rights_kit(; target=:effort, market_rate=0.05)...)
+R = regulation_scan(tur; m=50, warmstart=:chain)
+
+# Or define it manually (set policy so extra state is added)
+tur2 = scenario(s; policy="Tradable Use Rights",
+  γ=γ_tradable_use_rights, ϕ=ϕ_tradable_use_rights, regulate=regulate_tradable_use_rights,
+  policy_target=:effort, market_rate=0.05)
+sol = sim(tur2; regulation=0.5)
+```
+
 Example output:
 
 ![Phase + incomes](examples/figures/readme_phase_incomes.png)
@@ -32,6 +49,7 @@ Learn More
 - [Distributions](docs/distributions.md): independent/dependent, function vs string, sampling
 - [Visualizations](docs/visualizations.md): phase, incomes, Γ and Φ, dependency graph
 - [Policies](docs/policies.md): scenarios, regulation scan, evaluation
+  - Why aggregate clamp for TUR supply and when to use warm‑starts
 
 Plotting (optional)
 

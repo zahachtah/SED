@@ -68,7 +68,13 @@ function policy_scans(; N=100, m=40)
         gv = round(R.r[R.oGov], digits=2)
         println(rpad(pol.name, 24), " | ", lpad(rr, 6), "  ", lpad(wr, 6), "  ", lpad(tr, 6), "   ", lpad(tor, 6), "   ", lpad(eh, 6), "    ", lpad(gi, 6), "     ", lpad(gv, 6))
     end
-    nothing
+    # Also return a figure so callers can save it directly
+    # Reuse the sampled T to keep the visual consistent with the printout
+    try
+        return policy_phase_plots(T; goal=:Gov, m=m)
+    catch
+        return Figure()  # never return nothing; avoid save(...) errors
+    end
 end
 
 """

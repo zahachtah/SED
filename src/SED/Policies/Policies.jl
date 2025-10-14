@@ -68,25 +68,43 @@ function γ_tradable_use_rights(x, p, t)
 end
 
 function ϕ_tradable_use_rights(dx, x, p, t)
+    # Supply definition note:
+    # We intentionally use aggregate clamping: clamp(sum(R - usage), 0, Inf).
+    # Rationale: in a pooled rights market, net slack (after offsetting
+    # overuse and underuse across agents) should determine market supply.
+    # Element-wise clamping (sum(clamp.(...))) counts any local underuse as
+    # supply even if other agents overuse more, which tends to misprice
+    # scarcity and destabilize the price dynamics.
+    # This aggregate form matches legacy behavior and improves stability.
     supply = if p.policy_target == :yield
-        sum(clamp.(p.R .- (x[1:p.N] .* x[p.N+1]), 0.0, Inf))
+        # supply in yield units
+        clamp(sum(p.R .- (x[1:p.N] .* x[p.N+1])), 0.0, Inf)
     elseif p.policy_target == :effort
-        sum(clamp.(p.R .- x[1:p.N], 0.0, Inf))
+        # supply in effort units
+        max(0.0, sum(p.R .- x[1:p.N]))
     else
         0.0
     end
     id = findall((dx[1:p.N] .> 0.0))
     ind_demand = if p.policy_target == :yield
+        # demand in yield units
         max_extra_yield = (p.ū[id] .- x[id]) .* x[p.N+1]
         desired_extra_yield = dx[id] .* x[p.N+1]
         min.(max_extra_yield, desired_extra_yield)
     else
+        # demand in effort units
         min.(p.ū[id] - x[id], dx[id])
     end
     demand = sum(ind_demand)
     dx[p.N+2] = p.market_rate * (demand - supply)
     if demand > supply && demand > 0
-        dx[id] .= supply .* ind_demand ./ demand
+        if p.policy_target == :yield
+            # rationed increment computed in yield units; convert back to effort
+            y = max(eps(), x[p.N+1])
+            dx[id] .= (supply .* ind_demand ./ demand) ./ y
+        else
+            dx[id] .= supply .* ind_demand ./ demand
+        end
     end
 end
 
@@ -193,7 +211,7 @@ Hooks (optional):
 function with_policy(s; γ=nothing, μ=nothing, ϕ=nothing, regulate=nothing,
                         income_extra_fun=nothing,
                         extra_state::Int=0, init_extra_state=nothing,
-                        label=nothing, policy_meta=NamedTuple())
+                        label=nothing, policy_meta=NamedTuple(), policy=nothing)
     out = (; s...)
     γ !== nothing && (out = (; out..., γ))
     μ !== nothing && (out = (; out..., μ))
@@ -204,6 +222,7 @@ function with_policy(s; γ=nothing, μ=nothing, ϕ=nothing, regulate=nothing,
     init_extra_state !== nothing && (out = (; out..., init_extra_state))
     label !== nothing && (out = (; out..., label))
     !isempty(propertynames(policy_meta)) && (out = (; out..., policy_meta))
+    policy !== nothing && (out = (; out..., policy))
     return out
 end
 
@@ -229,7 +248,7 @@ function exclusive_use_rights_kit(; selector = (w̃, n) -> (1:n), label="Exclusi
         end
         return change(s, R=R, regulation=f)
     end
-    (; γ=γf, regulate=regulatef, label)
+    (; γ=γf, regulate=regulatef, label, policy="Exclusive Use Rights")
 end
 
 """
@@ -245,7 +264,7 @@ function tradable_use_rights_kit(; target=:effort, market_rate=0.05, label="Trad
         s2 = change(s, policy_target=target, market_rate=market_rate)
         regulate_tradable_use_rights(s2, f)
     end
-    (; γ=γf, ϕ=ϕf, regulate=regulatef, label, policy_meta=(; target, market_rate))
+    (; γ=γf, ϕ=ϕf, regulate=regulatef, label, policy_meta=(; target, market_rate), policy="Tradable Use Rights")
 end
 
 """
@@ -259,7 +278,7 @@ function protected_area_kit(; m=0.3, label="Protected Area")
     function regulatef(p, f)
         regulate_protected_area(change(p, m=m), f)
     end
-    (; γ=γf, μ=μf, regulate=regulatef, label, policy_meta=(; m))
+    (; γ=γf, μ=μf, regulate=regulatef, label, policy_meta=(; m), policy="Protected Area")
 end
 
 """

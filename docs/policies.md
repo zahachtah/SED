@@ -1,6 +1,12 @@
 # Policies
 
-This page describes how to define and use policies in SED. Policies are simple functions that specify how incentives (γ), impacts (μ), and optional dynamics (ϕ) and regulation behavior interact with the simulation. The design is function-first and unopinionated so users can bring their own rules without subclassing or type boilerplate.
+Idea first
+
+Policies answer a simple question: how do rules change incentives, impacts, and possibly add extra dynamics? In SED a policy is just a small bundle of functions that plug into the same ODE model. No type hierarchies—only functions and a few optional hooks—so modeling stays intuitive and composable.
+
+Details
+
+This page describes how to define and use policies in SED. Policies are simple functions that specify how incentives (γ), impacts (μ), optional dynamics (ϕ), and regulation behavior interact with the simulation. The design is function‑first so you can bring your own rules without boilerplate.
 
 Core ideas
 
@@ -33,6 +39,11 @@ inc = incomes(sol)
 println("y*=", round(sol.u[end][end], digits=3), "  ToR=", round(sum(inc.total), digits=3))
 ```
 
+When to use with_policy vs scenario(...; policy="…")
+
+- Use `with_policy(s; ...)` to layer a policy onto an existing scenario `s` (and when using kits). It returns a new scenario without modifying `s`.
+- Use `scenario(...; policy="…")` when you define a policy “in one shot” and need to set the policy string so `sim` adds any extra ODE state (e.g., TUR price).
+
 Tradable Use Rights (function-based)
 
 The built-in functions for TUR attach an `income_extra_fun` during `regulate(...)`, so trade revenues appear in `incomes` without name checks.
@@ -64,6 +75,24 @@ pa = with_policy(s0; protected_area_kit(; m=0.3)...)
 ```
 
 The kits produce the same outcomes as the “manual” function-based policies above but with fewer moving parts. Edit the returned fields or pass different keyword args to explore variants.
+
+TUR supply choice (why aggregate clamp)
+
+Idea: rights are pooled; price should respond to net slack across all agents.
+
+- Aggregate clamp (default): `clamp(sum(R - usage), 0, Inf)`
+  - Overuse cancels underuse; supply is zero until there is net slack.
+  - Fewer kinks → smoother price; intuitive scarcity pricing; better stability.
+- Element‑wise clamp: `sum(clamp.(R - usage, 0, Inf))`
+  - Counts local underuse even if others overuse more → misprices scarcity.
+  - Many kinks; choppy price; can destabilize solves.
+
+Heuristics and tips
+
+- Effort target: MSY ≈ 0.5 → expect optimal regulation near f ≈ 0.5.
+- Yield target: MSY ≈ 0.25 → expect optimal regulation near f ≈ 0.75.
+- If price collapses quickly, try `high_impact` baselines, moderate `market_rate`, and warm‑starts.
+- See `examples/tur_supply_compare.jl` to visualize price traces and phase plots for both supply definitions.
 
 Protected Area (function-based)
 
@@ -112,6 +141,7 @@ Warm‑start scanning
 ```julia
 R = regulation_scan(s; m=50, warmstart=:chain)    # fastest over small steps
 R = regulation_scan(s; m=50, warmstart=:oa_once)  # single OA warm start, then scan
+R = regulation_scan(s; m=50, warmstart=:none)     # cold starts only
 ```
 When to use which:
 - Use `:chain` for dense scans (small step size) where the steady state changes gradually.
