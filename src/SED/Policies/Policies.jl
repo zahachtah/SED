@@ -252,6 +252,36 @@ function exclusive_use_rights_kit(; selector = (w̃, n) -> (1:n), label="Exclusi
 end
 
 """
+    exclusive_use_rights_by_opportunities_kit(; selector = (opportunities, n) -> (1:n),
+                                               label = "Exclusive Use Rights (opportunities)")
+
+Variant of Exclusive Use Rights where the selection of beneficiaries is based on
+`opportunities` rather than `w̃`. The `selector` function is called with the
+opportunities vector and the number of slots `n`, and should return the indices
+to receive rights.
+
+If `opportunities` is not present in the scenario, this falls back to `w̃`.
+"""
+function exclusive_use_rights_by_opportunities_kit(; selector = (opportunities, n) -> (1:n),
+                                                     label = "Exclusive Use Rights (opportunities)")
+    γf(x, p, t) = p.w̃ .+ p.R
+    getdata(v) = hasproperty(v, :data) ? v.data : v
+    function regulatef(s, f)
+        N = s.N
+        R = zeros(N)
+        n = max(0, min(N, round(Int, f * N)))
+        if n > 0
+            opp = hasproperty(s, :opportunities) ? getdata(getfield(s, :opportunities)) :
+                  (hasproperty(s, :w̃) ? getdata(getfield(s, :w̃)) : zeros(N))
+            idx = selector(opp, n)
+            R[idx] .= 1.0
+        end
+        return change(s, R=R, regulation=f)
+    end
+    (; γ=γf, regulate=regulatef, label, policy="Exclusive Use Rights")
+end
+
+"""
     tradable_use_rights_kit(; target=:effort, market_rate=0.05, label="Tradable Use Rights")
 
 Return a NamedTuple policy bundle for tradable use rights. Attaches γ, ϕ,

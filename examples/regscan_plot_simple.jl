@@ -30,10 +30,14 @@ function regscan_simple(; s=SED.high_impact(), warmstart::Symbol=:chain, Tcontex
     getdata(v) = hasproperty(v, :data) ? v.data : v
     sel_top = (w̃, n) -> sortperm(getdata(w̃), rev=true)[1:n]
     sel_bot = (w̃, n) -> sortperm(getdata(w̃))[1:n]
+    # Selection by opportunities instead of incentives
+    sel_top_opp = (opportunities, n) -> sortperm(getdata(opportunities), rev=true)[1:n]
+    sel_bot_opp = (opportunities, n) -> sortperm(getdata(opportunities))[1:n]
 
     policies = [
-        SED.with_policy(s; SED.exclusive_use_rights_kit(; selector=sel_top)...),                  # HIGH w̃ excluded
-        SED.with_policy(s; SED.exclusive_use_rights_kit(; selector=sel_bot)...),                  # LOW w̃ excluded
+        # Exclusive Use Rights — select by opportunities (high vs low)
+        SED.with_policy(s; SED.exclusive_use_rights_by_opportunities_kit(; selector=sel_top_opp)...),  # HIGH opp excluded
+        SED.with_policy(s; SED.exclusive_use_rights_by_opportunities_kit(; selector=sel_bot_opp)...),  # LOW opp excluded
         SED.with_policy(s; SED.tradable_use_rights_kit(; target=:effort, market_rate=0.05)...),  # TUR — effort
         SED.with_policy(s; SED.tradable_use_rights_kit(; target=:yield,  market_rate=0.05)...),  # TUR — yield
         SED.with_policy(s; SED.protected_area_kit(; m=0.3)...),                                   # PA m=0.3
@@ -45,8 +49,8 @@ function regscan_simple(; s=SED.high_impact(), warmstart::Symbol=:chain, Tcontex
     ]
 
     policylabels = [
-        "Use Rights\nHIGH w̃\nexcluded",
-        "Use Rights\nLOW w̃\nexcluded",
+        "Use Rights\nHIGH opp\nexcluded",
+        "Use Rights\nLOW opp\nexcluded",
         "Tradable \nUse Rights\nEFFORT",
         "Tradable \nUse Rights\nYIELD",
         "Protected Area\n\nmobility=0.3",

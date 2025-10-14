@@ -27,7 +27,8 @@ export regulate_protected_area, γ_protected_area, μ_protected_area
 export γ_protected_area_two_pop, μ_protected_area_two_pop, ϕ_protected_area_two_pop
 export regulate_development, μ_development, γ_development
 export with_policy
-export exclusive_use_rights_kit, tradable_use_rights_kit, protected_area_kit, economic_incentives_kit, development_kit
+export exclusive_use_rights_kit, exclusive_use_rights_by_opportunities_kit,
+       tradable_use_rights_kit, protected_area_kit, economic_incentives_kit, development_kit
 export Uniform, LogNormal, LogitNormal, Normal, Exponential, Dirac, Bernoulli, Beta
 export incomes, regulation_scan, gini
 export getmedian, getsigma

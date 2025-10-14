@@ -76,6 +76,34 @@ pa = with_policy(s0; protected_area_kit(; m=0.3)...)
 
 The kits produce the same outcomes as the “manual” function-based policies above but with fewer moving parts. Edit the returned fields or pass different keyword args to explore variants.
 
+Selecting Exclusive Use Rights by opportunities (custom)
+
+Idea: sometimes “who gets rights” should depend on opportunities rather than incentives (w̃). You can use the built-in kit that selects by `opportunities` and pass any selector you like.
+
+```julia
+include("SED.jl"); using .SED
+
+s = scenario(base(N=200))
+
+# Select top by opportunities (or bottom), falling back to w̃ if not present
+getdata(v) = hasproperty(v, :data) ? v.data : v
+sel_top_opp = (opp, n) -> sortperm(getdata(opp), rev=true)[1:n]
+sel_bot_opp = (opp, n) -> sortperm(getdata(opp))[1:n]
+
+# High opportunities excluded
+eur_hi_opp = with_policy(s; exclusive_use_rights_by_opportunities_kit(; selector=sel_top_opp)...)
+# Low opportunities excluded
+eur_lo_opp = with_policy(s; exclusive_use_rights_by_opportunities_kit(; selector=sel_bot_opp)...)
+
+sol = sim(eur_hi_opp; regulation=0.3)
+```
+
+Notes
+
+- The selector receives the raw vector (or its `.data`) and the number `n = round(Int, f*N)` to pick.
+- The kit keeps the same γ update (w̃ + R); only the selection basis changes.
+- If `opportunities` is absent in the scenario, it falls back to using `w̃` to avoid errors.
+
 TUR supply choice (why aggregate clamp)
 
 Idea: rights are pooled; price should respond to net slack across all agents.
