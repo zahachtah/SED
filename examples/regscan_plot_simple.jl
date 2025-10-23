@@ -38,9 +38,14 @@ function regscan_simple(; s=SED.high_impact(), warmstart::Symbol=:chain, Tcontex
         # Exclusive Use Rights — select by opportunities (high vs low)
         SED.with_policy(s; SED.exclusive_use_rights_by_opportunities_kit(; selector=sel_top_opp)...),  # HIGH opp excluded
         SED.with_policy(s; SED.exclusive_use_rights_by_opportunities_kit(; selector=sel_bot_opp)...),  # LOW opp excluded
-        SED.with_policy(s; SED.tradable_use_rights_kit(; target=:effort, market_rate=0.05)...),  # TUR — effort
-        SED.with_policy(s; SED.tradable_use_rights_kit(; target=:yield,  market_rate=0.05)...),  # TUR — yield
-        SED.with_policy(s; SED.protected_area_kit(; m=0.3)...),                                   # PA m=0.3
+        # TUR — effort (neutral), plus regressive/progressive bias variants
+        SED.with_policy(s; SED.tradable_use_rights_kit(; target=:effort, market_rate=0.05, buyer_bias=0.0)...),
+        SED.with_policy(s; SED.tradable_use_rights_kit(; target=:effort, market_rate=0.05, buyer_bias=+0.6)...),
+        SED.with_policy(s; SED.tradable_use_rights_kit(; target=:effort, market_rate=0.05, buyer_bias=-0.6)...),
+        # TUR — yield (neutral)
+        SED.with_policy(s; SED.tradable_use_rights_kit(; target=:yield,  market_rate=0.05, buyer_bias=0.0)...),
+        # PA m=0.3 (neutral)
+        SED.with_policy(s; SED.protected_area_kit(; m=0.3)...),
         # PA m=0.3 + additional alternative incomes proportional to regulation (tourism)
         begin
             base_pa = SED.with_policy(s; SED.protected_area_kit(; m=0.3)...)
@@ -52,6 +57,8 @@ function regscan_simple(; s=SED.high_impact(), warmstart::Symbol=:chain, Tcontex
         "Use Rights\nHIGH opp\nexcluded",
         "Use Rights\nLOW opp\nexcluded",
         "Tradable \nUse Rights\nEFFORT",
+        "TUR Effort\n(regressive)",
+        "TUR Effort\n(progressive)",
         "Tradable \nUse Rights\nYIELD",
         "Protected Area\n\nmobility=0.3",
         "Protected Area\n\nmobility=0.3\n(+ tourism)",
@@ -100,7 +107,11 @@ function regscan_simple(; s=SED.high_impact(), warmstart::Symbol=:chain, Tcontex
         )
     end
 sc=0.9
-    f = Figure(size=(1050*sc, 935*sc))
+    # Scale figure width with number of policy columns
+    ncols = length(policies)
+    base_w = 1050.0
+    width = Int(round(base_w * (ncols/6) * sc))
+    f = Figure(size=(width, Int(round(935*sc))))
 
     # First column: outcome titles
     for (j, o) in enumerate(outcomes)
@@ -170,6 +181,8 @@ sc=0.9
     policyxlabels = [
         "fraction excluded",
         "fraction excluded",
+        "1 - effort quota",
+        "1 - effort quota",
         "1 - effort quota",
         "1 - yield quota",
         "fraction protected",
