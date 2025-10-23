@@ -69,6 +69,7 @@ function regscan_simple(; s=SED.high_impact(), warmstart::Symbol=:chain, Tcontex
     oa_sol = SED.sim(s; regulation=0.0)
     oa_inc = SED.incomes(oa_sol)
     female_baseline_pct = nothing
+    fem_idx = Int[]
     # Only use gender context if it exists and matches scenario length
     if gvec !== nothing && length(gvec) == s.N
         fem_idx = findall(gvec .== 1)
