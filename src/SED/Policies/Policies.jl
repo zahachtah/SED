@@ -95,6 +95,21 @@ function ϕ_tradable_use_rights(dx, x, p, t)
         # demand in effort units
         min.(p.ū[id] - x[id], dx[id])
     end
+    # Socioeconomic buying power weighting based on opportunities (AIO)
+    bias = hasproperty(p, :buyer_bias) ? Float64(getfield(p, :buyer_bias)) : 0.0
+    if bias != 0.0 && hasproperty(p, :opportunities)
+        opp = getfield(p, :opportunities)
+        oppv = hasproperty(opp, :data) ? opp.data : opp
+        if length(oppv) == p.N
+            omin = minimum(oppv); omax = maximum(oppv); rng = omax - omin
+            if rng > 0
+                norm = (oppv .- omin) ./ rng             # [0,1]
+                s = 2 .* (norm .- 0.5)                   # [-1,1]
+                wfull = clamp.(1 .+ bias .* s, 0.001, Inf)
+                ind_demand = ind_demand .* wfull[id]
+            end
+        end
+    end
     demand = sum(ind_demand)
     dx[p.N+2] = p.market_rate * (demand - supply)
     if demand > supply && demand > 0
@@ -287,14 +302,14 @@ end
 Return a NamedTuple policy bundle for tradable use rights. Attaches γ, ϕ,
 and regulate; `regulate` also attaches `income_extra_fun` for trade income.
 """
-function tradable_use_rights_kit(; target=:effort, market_rate=0.05, label="Tradable Use Rights")
+function tradable_use_rights_kit(; target=:effort, market_rate=0.05, buyer_bias::Float64=0.0, label="Tradable Use Rights")
     γf = γ_tradable_use_rights
     ϕf = ϕ_tradable_use_rights
     function regulatef(s, f)
-        s2 = change(s, policy_target=target, market_rate=market_rate)
+        s2 = change(s, policy_target=target, market_rate=market_rate, buyer_bias=buyer_bias)
         regulate_tradable_use_rights(s2, f)
     end
-    (; γ=γf, ϕ=ϕf, regulate=regulatef, label, policy_meta=(; target, market_rate), policy="Tradable Use Rights")
+    (; γ=γf, ϕ=ϕf, regulate=regulatef, label, policy_meta=(; target, market_rate, buyer_bias), policy="Tradable Use Rights")
 end
 
 """
