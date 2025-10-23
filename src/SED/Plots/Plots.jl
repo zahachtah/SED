@@ -139,7 +139,7 @@ function dependency_graph_plot!(
     pretty_label(sym::Symbol) = begin
         s = String(sym)
         if sym == Symbol("w̃") || occursin(r"^w(\\tilde|tilde)", s) || occursin(Char(0x0303), s)
-            return "Incentives"
+            return "Incentive"
         elseif sym == Symbol("ū") || occursin(r"^u(\\bar|bar)", s) || occursin(Char(0x0304), s)
             return "Impact"
         else
@@ -152,7 +152,8 @@ function dependency_graph_plot!(
             text=pretty_label(k),
             align=(:center, :center),
             color=get_lab_color(k),
-            fontsize=fontsize)
+            fontsize=fontsize,
+            style=:bold)
     end
     return ax
 end
@@ -278,4 +279,3 @@ function arrow_arc_deg!(ax, origin, radius, start_angle_deg, stop_angle_deg;
         shaftwidth=linewidth
     )
 end
-

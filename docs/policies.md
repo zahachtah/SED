@@ -104,6 +104,56 @@ Notes
 - The kit keeps the same γ update (w̃ + R); only the selection basis changes.
 - If `opportunities` is absent in the scenario, it falls back to using `w̃` to avoid errors.
 
+Governance objective (Cobb–Douglas)
+
+Idea first
+
+When scanning regulation, we sometimes want a single scalar objective that trades off several outcomes (e.g., resource revenue, total revenue, inequality, ecological state). We use a Cobb–Douglas product of aggregate metrics because it’s simple, multiplicative, and interpretable: exponents behave like elasticities of the objective with respect to each metric.
+
+Definition used in `regulation_scan`
+
+For each regulation value r we compute aggregate metrics
+
+- `R(r)` = ∑ resource incomes (resource revenues)
+- `T(r)` = ∑ total incomes (total revenues)
+- `G(r)` = Gini of total incomes (inequality)
+- `E(r)` = ecological state (e.g., resource level y)
+- `I(r)` = ∑ |uᵒᵃ − u(r)| (impact on behaviour)
+
+and combine them as
+
+    Gov(r) = R(r)^kR · T(r)^kT · G(r)^kG · E(r)^kE · I(r)^kI
+
+with “safe” powers (we clamp inputs to a tiny positive floor) so the expression is always well‑defined:
+
+    x^k is implemented as max(x, eps())^k.
+
+Reading the exponents (why “0.5” is not “halfway”)
+
+Take logs:
+
+    log Gov(r) = kR·log R(r) + kT·log T(r) + kG·log G(r) + kE·log E(r) + kI·log I(r).
+
+The coefficient k for a metric is the (local) log‑elasticity: a +1% change in that metric (holding others fixed) changes Gov by ≈ k %. Thus k values are not “positions” on an x‑axis; they weight the instantaneous percentage changes of each metric at that r. The r* that maximizes Gov solves the balance of marginal log‑returns:
+
+    kR·∂log R/∂r + kT·∂log T/∂r + kG·∂log G/∂r + kE·∂log E/∂r + kI·∂log I/∂r = 0 (interior optimum).
+
+Consequences:
+
+- “kT = 0.5 and kG = 0.5” does NOT mean the optimal r will sit halfway between the T and G optima. It depends on the shapes R(r), T(r), G(r) and especially on their marginal responses (∂log M/∂r) where the product peaks.
+- If T varies a lot over r while G varies only a little, T’s term can dominate even with equal exponents. Conversely, a metric with small range needs a larger |k| to noticeably move the optimum.
+- Negative exponents model costs: kG < 0 penalizes large `G` (inequality) via a 1/G^{|kG|} factor. The strength of this penalty still depends on the relative variation of G across r.
+
+Tuning tips
+
+- Start with rough elasticities (e.g., kT ≈ 1.0 for total revenue, smaller values for others), then inspect how Gov(r) shifts relative to R(r) and T(r). Increase |k| on the metrics you want to matter more.
+- If a term’s variation is narrow (e.g., G moves from 0.10 to 0.20), its impact on the product can be small; consider a larger |k|, or a transformed metric like fairness F = 1 − G if that’s more intuitive for your use case.
+- If you want weights to behave like pure “preferences” independent of each metric’s scale, normalize aggregates across the scan (e.g., to [0,1]) before exponentiation; otherwise, large‑scale metrics naturally carry more influence.
+
+Display note
+
+The figure label renders weights using Unicode superscripts (e.g., `R⁰⋅³ · T¹⋅⁰ · G⁻⁰⋅¹`). This is a visual reminder of the multiplicative (Cobb–Douglas) form and that exponents are elasticities, not linear shares.
+
 TUR supply choice (why aggregate clamp)
 
 Idea: rights are pooled; price should respond to net slack across all agents.

@@ -11,6 +11,21 @@ using KernelDensity
 using Printf
 using Makie: LinearTicks  # for max tick count
 
+T = (
+    N=200,
+    health=dist(mean=0, sigma=2.0, distribution=Normal, dependency_fun="1/(1+exp(-2-independent))"),#1-max(0.0,independent)
+    gender=dist(mean=0.5, distribution=Bernoulli, random=true),
+    parental=dist(min=0.1, max=1.0, distribution=LogNormal),
+    time=dist(dependency_fun="health*(1-gender*0.5)*independent", min=0, max=1),
+    efficiency=dist(min=0.015, max=0.2, dependency_fun="1*parental*(1-gender*0.2)*independent", normalize=false),
+    opportunities=dist(min=0.1, max=1.6, distribution=LogNormal, dependency_fun="0.02*parental*(1-gender*0.3)*independent"),
+    K=2.0,
+    ū=dist(min=-0.1, max=0.1, dependency_fun="time*efficiency"),
+    w̃=dist(min=-0.1, max=0.1, dependency_fun="(opportunities ./ efficiency) .+ independent"),
+    α=dist(min=0.1, max=0.1, distribution=Uniform) #fill(0.1,100)#
+)
+sample!(T, random=true)
+
 # --- helpers ---------------------------------------------------------------
 function _ranks(v::AbstractVector)
     p = sortperm(v)
@@ -93,7 +108,17 @@ function pairgrid_blank_upper_redblue_with_dep(
     cmap=:coolwarm,
     reverse_cmap::Bool=false,
     dep_range=(1:4, 5:8),
-    phase_plot::Union{Nothing,Tuple{Any,Any}}=nothing
+    phase_plot::Union{Nothing,Tuple{Any,Any}}=nothing,
+    incentive_color=:darkorange,
+    impact_color=:darkorange,
+    incentive_label_color=:darkorange,
+    impact_label_color=:darkorange,
+    time_color=:forestgreen,
+    efficiency_color=:forestgreen,
+    aio_color=:forestgreen,
+    time_label_color=:forestgreen,
+    efficiency_label_color=:forestgreen,
+    aio_label_color=:forestgreen
 )
     @assert corr in (:pearson, :spearman)
 
@@ -124,15 +149,25 @@ function pairgrid_blank_upper_redblue_with_dep(
     fig = Figure(size=total_size, fontsize=10)
 
 
-    # Left row labels (0th col)
+    # Left row labels (0th col) with optional coloring for impact/incentive/time/efficiency/AIO
     for i in 1:p
+        lcol = vars[i] == :w̃ ? incentive_label_color :
+               vars[i] == :ū ? impact_label_color :
+               vars[i] == :time ? time_label_color :
+               vars[i] == :efficiency ? efficiency_label_color :
+               vars[i] == :opportunities ? aio_label_color : :black
         fig[i, 0] = Label(fig, lab[i]; halign=:right, valign=:center,
-            fontsize=12, font=:bold, rotation=pi / 2, tellheight=false)
+            fontsize=12, font=:bold, rotation=pi / 2, tellheight=false, color=lcol)
     end
-    # Bottom column labels (row p+1)
+    # Bottom column labels (row p+1) with optional coloring for impact/incentive/time/efficiency/AIO
     for j in 1:p
+        bcol = vars[j] == :w̃ ? incentive_label_color :
+               vars[j] == :ū ? impact_label_color :
+               vars[j] == :time ? time_label_color :
+               vars[j] == :efficiency ? efficiency_label_color :
+               vars[j] == :opportunities ? aio_label_color : :black
         fig[p+1, j] = Label(fig, lab[j]; halign=:center, valign=:top,
-            fontsize=12, font=:bold, tellwidth=false)
+            fontsize=12, font=:bold, tellwidth=false, color=bcol)
     end
 
     # Colormap for signed r
@@ -199,8 +234,14 @@ function pairgrid_blank_upper_redblue_with_dep(
                 xlims!(ax, lims[j]...)
                 kd = kde(xi)
                 ylims!(ax, 0, maximum(kd.density) * 1.05)
-                lines!(ax, kd.x, kd.density; color=:gray20)
-                band!(ax, kd.x, zero.(kd.density), kd.density; color=:gray35, transparency=true, alpha=0.5)
+                # Custom colors for :w̃ (incentive), :ū (impact), :time, :efficiency, :opportunities (AIO)
+                kcol = vars[i] == :w̃ ? incentive_color :
+                       vars[i] == :ū ? impact_color :
+                       vars[i] == :time ? time_color :
+                       vars[i] == :efficiency ? efficiency_color :
+                       vars[i] == :opportunities ? aio_color : :gray20
+                lines!(ax, kd.x, kd.density; color=kcol)
+                band!(ax, kd.x, zero.(kd.density), kd.density; color=kcol, transparency=true, alpha=0.5)
             end
         else
             # Lower triangle
@@ -242,7 +283,7 @@ function pairgrid_blank_upper_redblue_with_dep(
                 ax.xticks = LinearTicks(3)
             end
         else
-            hidexdecorations!(ax; label=false, ticks=false, grid=false)
+            hidexdecorations!(ax; label=false, ticks=true, grid=false)
         end
         # show y ticks only on left column, hide elsewhere (preserve grids)
         if j == 1
@@ -251,7 +292,7 @@ function pairgrid_blank_upper_redblue_with_dep(
                 ax.yticks = LinearTicks(3)
             end
         else
-            hideydecorations!(ax; label=false, ticks=false, grid=false)
+            hideydecorations!(ax; label=false, ticks=true, grid=false)
         end
     end
 
@@ -266,11 +307,22 @@ function pairgrid_blank_upper_redblue_with_dep(
     fig[dep_range[1], dep_range[2]] = depplot
     hidespines!(depplot)
     hidedecorations!(depplot)  # remove ticks, labels, grid, etc.
-    dependency_graph_plot!(depplot, data)
+    # Dependency graph with colored labels for impact/incentive
+    dep_label_colors = Dict{Symbol,Any}()
+    dep_label_colors[:w̃] = incentive_label_color
+    dep_label_colors[:ū] = impact_label_color
+    dep_label_colors[:time] = time_label_color
+    dep_label_colors[:efficiency] = efficiency_label_color
+    dep_label_colors[:opportunities] = aio_label_color
+    dependency_graph_plot!(depplot, data; label_colors=dep_label_colors)
 
     # Optional phase plot region
     if phase_plot !== nothing
-        pax = Axis(fig[phase_plot[1], phase_plot[2]]; title="Open Access")
+        pax = Axis(fig[phase_plot[1], phase_plot[2]];
+            #title="Open Access",
+            xlabel="Resource level-Incentive threshold",
+            ylabel="Participation",
+            yaxisposition=:right)
         hidespines!(pax)
         hidedecorations!(pax)
         phase_plot!(pax, sim(scenario(data)))
@@ -284,15 +336,23 @@ end
 
 function build_pairgrid_figure(; data=T,
     vars=[:gender, :health, :parental, :time, :efficiency, :opportunities, :ū, :w̃],
-    labels=["Gender", "Health", "Parental", "Time", "Efficiency", "Opport.", "Impact", "Incentive"],
+    labels=["Gender", "Health", "Parental", "Time", "Efficiency", "AIO", "Impact", "Incentive"],
     corr=:spearman,
     cellsize=(90, 90), markersize=3,
     cmap=:coolwarm, reverse_cmap=false,
-    dep_range=(1:4, 5:8), phase_plot=nothing)
+    dep_range=(1:4, 5:8), phase_plot=nothing,
+    incentive_color=:darkorange, impact_color=:darkorange,
+    incentive_label_color=:darkorange, impact_label_color=:darkorange,
+    time_color=:forestgreen, efficiency_color=:forestgreen, aio_color=:forestgreen,
+    time_label_color=:forestgreen, efficiency_label_color=:forestgreen, aio_label_color=:forestgreen)
     return pairgrid_blank_upper_redblue_with_dep(
         data, vars; labels, corr,
         cellsize, markersize, cmap, reverse_cmap,
-        dep_range, phase_plot)
+        dep_range, phase_plot,
+        incentive_color=incentive_color, impact_color=impact_color,
+        incentive_label_color=incentive_label_color, impact_label_color=impact_label_color,
+        time_color=time_color, efficiency_color=efficiency_color, aio_color=aio_color,
+        time_label_color=time_label_color, efficiency_label_color=efficiency_label_color, aio_label_color=aio_label_color)
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__

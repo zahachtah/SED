@@ -78,32 +78,32 @@ function regscan_simple(; s=SED.high_impact(), warmstart::Symbol=:chain, Tcontex
     end
 
     outcomes = [:RR, :ToR, :GI, :Gov]
-    # Build dynamic governance weighting label using Unicode superscripts
-    function weight_label(weights)
-        sup = Dict('0'=>'⁰','1'=>'¹','2'=>'²','3'=>'³','4'=>'⁴','5'=>'⁵','6'=>'⁶','7'=>'⁷','8'=>'⁸','9'=>'⁹','-'=>'⁻','.'=>'⋅')
-        to_sup(s::AbstractString) = join((get(sup, c, string(c)) for c in s))
-        superscript(k::Real) = to_sup(@sprintf("%.2f", k))
-        parts = String[]
-        wmap = [("R", weights.kR), ("T", weights.kT), ("G", weights.kG), ("E", weights.kE), ("I", weights.kI)]
-        for (name, k) in wmap
-            if k != 0
-                push!(parts, string(name, superscript(k)))
-            end
-        end
-        return isempty(parts) ? "Governance\nweighted" : "Governance\nweighted\n" * join(parts, " · ")
+    # Governance row caption includes only nonzero weights, aligned right
+    let
+        pairs = [
+            ("Resource", weights.kR),
+            ("Total",    weights.kT),
+            ("Gini",     weights.kG),
+            ("Ecology",  weights.kE),
+            ("Impact",   weights.kI),
+        ]
+        nz = [(n,v) for (n,v) in pairs if v != 0]
+        maxlen = isempty(nz) ? 0 : maximum(length(n) for (n,_) in nz)
+        lines = [@sprintf("%s %6.2f", lpad(n*":", maxlen+1), v) for (n,v) in nz]
+        weight_caption = isempty(lines) ? "Weighted:" : ("Weighted:\n" * join(lines, "\n"))
+        global labels = Dict(
+            :RR => "Resource\nRevenues",
+            :ToR => "Total\nRevenues",
+            :GI => "Gini\n(↓ better)",
+            :Gov => weight_caption,
+        )
     end
-    labels = Dict(
-        :RR => "Resource\nRevenues",
-        :ToR => "Total\nRevenues",
-        :GI => "Gini\n(↓ better)",
-        :Gov => weight_label(weights),
-    )
-
-    f = Figure(size=(1050, 935))
+sc=0.9
+    f = Figure(size=(1050*sc, 935*sc))
 
     # First column: outcome titles
     for (j, o) in enumerate(outcomes)
-        Label(f[j, 0], text=labels[o], tellheight=false)
+        Label(f[j, 0], text=labels[o], tellheight=false, font=:bold, halign=:right)
     end
 
     # Panels: rows = outcomes, cols = policies
@@ -129,21 +129,25 @@ function regscan_simple(; s=SED.high_impact(), warmstart::Symbol=:chain, Tcontex
             # overlay governance-optimal regulation (common reference)
             vlines!(ax, [regs_go[i]]; color=:crimson, linewidth=2)
             # Optional: compute Δ female share at this policy and regulation
+            # Integer percent; keep compact (caption explains meaning)
             fem_delta_str = ""
             if !isempty(fem_idx) && female_baseline_pct !== nothing
                 sol_pol = SED.sim(policies[i]; regulation=rx)
                 inc_pol = SED.incomes(sol_pol)
                 fem_pct = 100 * mean(inc_pol.total[fem_idx]) / mean(inc_pol.total)
                 delta = fem_pct - female_baseline_pct
-                fem_delta_str = string("  ♀=", round(delta, digits=0), "%")
+                fem_delta_str = string("  ♀Δ:", round(Int, delta), "%")
             end
             valstr = valabbr[o]
             valdigits = (o == :GI) ? 2 : 3
-            ax.title[] = string("r=", round(rx, digits=2), "  ", valstr, "=", round(ry, digits=valdigits), fem_delta_str)
+            # Compact title: use ':' instead of '=' to save width
+            # Example: r:0.76  R:0.24  ♀:-23%
+            fem_str = replace(fem_delta_str, "=" => ":")
+            ax.title[] = string("r:", round(rx, digits=2), "  ", valstr, ":", round(ry, digits=valdigits), fem_str)
             ax.titlegap[] = 4
             ax.titlealign[] = :left
             ax.titlecolor[] = pol_color
-            ax.titlesize[] = 10
+            ax.titlesize[] = 11
             hidespines!(ax)
             if j < length(outcomes)
                 hidexdecorations!(ax; grid=false)
@@ -152,7 +156,7 @@ function regscan_simple(; s=SED.high_impact(), warmstart::Symbol=:chain, Tcontex
                 hideydecorations!(ax; grid=false)
             end
         end
-        Label(f[0, i], text=policylabels[i], color=pol_color, tellwidth=false)
+        Label(f[0, i], text=policylabels[i], color=pol_color, tellwidth=false, font=:bold)
     end
 
     # Link axes across panels for comparability
@@ -184,7 +188,8 @@ function regscan_simple(; s=SED.high_impact(), warmstart::Symbol=:chain, Tcontex
         SED.phase_plot!(pax, sol)
     end
     # Left label for phase row (narrow width)
-    Label(f[phase_row, 0], text="Phase\n(best Gov)", tellheight=false)
+    Label(f[phase_row, 0], text="Phase\n(best Gov)", tellheight=false, font=:bold)
+
 
     return f
 end
