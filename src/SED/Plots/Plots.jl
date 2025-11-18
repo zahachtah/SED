@@ -14,6 +14,8 @@ function Γ_plot!(axis, sol; color=:darkorange, linewidth=3, t=0.0)
     lines!(axis, y, _Γ.(y, Ref(sol.prob.p), x=sol.u[end-1]; t); color, linewidth)
 end
 
+include("RegulationScanPlot.jl")
+
 function Φ_plot!(axis, sol; color=:darkorange, linewidth=3, t=0.0)
     y = range(0.0, stop=1.0, length=100)
     lines!(axis, y, Φ.(y, Ref(sol.prob.p); t); color, linewidth)
@@ -153,7 +155,7 @@ function dependency_graph_plot!(
             align=(:center, :center),
             color=get_lab_color(k),
             fontsize=fontsize,
-            style=:bold)
+            font=:bold)
     end
     return ax
 end
@@ -221,6 +223,12 @@ function dist_plot!(ax, v; title="", kind=:line, bins=30, color=:steelblue)
         hist!(ax, data; bins, color)
     else
         lines!(ax, 1:length(data), sort(data); color)
+    end
+    if hasproperty(v, :unit)
+        unit_val = getfield(v, :unit)
+        if unit_val !== nothing && !(unit_val isa AbstractString && isempty(unit_val))
+            ax.xlabel = unit_val
+        end
     end
     if !isempty(title)
         ax.title[] = title

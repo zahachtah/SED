@@ -18,12 +18,61 @@ T = (
     parental=dist(min=0.1, max=1.0, distribution=LogNormal),
     time=dist(dependency_fun="health*(1-gender*0.5)*independent", min=0, max=1),
     efficiency=dist(min=0.015, max=0.2, dependency_fun="1*parental*(1-gender*0.2)*independent", normalize=false),
-    opportunities=dist(min=0.1, max=1.6, distribution=LogNormal, dependency_fun="0.02*parental*(1-gender*0.3)*independent"),
+    AIO=dist(min=0.1, max=1.6, distribution=LogNormal, dependency_fun="0.02*parental*(1-gender*0.3)*independent"),
     K=2.0,
     ū=dist(min=-0.1, max=0.1, dependency_fun="time*efficiency"),
-    w̃=dist(min=-0.1, max=0.1, dependency_fun="(opportunities ./ efficiency) .+ independent"),
+    w̃=dist(min=-0.1, max=0.1, dependency_fun="(AIO ./ efficiency) .+ independent"),
     α=dist(min=0.1, max=0.1, distribution=Uniform) #fill(0.1,100)#
 )
+
+# Zanzibar (ZNZ): calibrated to:
+#   time gap ≈ 60% (women vs men: 2–3h vs 6–8h),
+#   efficiency gap ≈ 65% (women ≈ 35% of men),
+#   parental status ~ low-income right-skew (use LogNormal w/ min/max, no meanlog/sdlog),
+#   r ≈ 0.08 yr⁻¹, K ≈ 0.8 t/ha (stored here as scalars for your model core),
+#   target fK ≈ 0.5.  (Σ Incentives = 1 - fK handled in your core.)
+
+T = (
+    N=200,
+
+    # Health moderates time availability (same pattern as yours)
+    health=dist(mean=0, sigma=2.0, distribution=Normal,
+        dependency_fun="1/(1+exp(-2-independent))"),
+
+    # gender: 0 = man, 1 = woman
+    gender=dist(mean=0.5, distribution=Bernoulli, random=true),
+
+    # Parental economic status ~ LogNormal (keep same style as your working code: min/max only)
+    # Interpreted in $/day scale in the analysis, but here we just need a right-skewed latent.
+    parental=dist(min=0.1, max=4.0, distribution=LogNormal),
+
+    # TIME: women ≈ 60% less active fishing time (scaled to [0,1])
+    time=dist(min=0.0, max=1.0,
+        dependency_fun="clamp( health * (1 - 0.60*gender) * independent , 0, 1)"),
+
+    # EFFICIENCY (CPUE proxy, unitless scaler on [min,max]):
+    # women ≈ 0.35 of men; scaled up with parental (capital/gear access)
+    efficiency=dist(min=0.015, max=0.20, normalize=false,
+        dependency_fun="( (1-gender) + 0.35*gender ) * parental * independent"),
+
+    # Alternative Income Opportunities (AIO) — keep LogNormal with min/max (no meanlog/sdlog)
+    # Slightly higher pull for women via dependency_fun; small scale 0.02*parental matches earlier logic.
+    AIO=dist(min=0.1, max=1.6, distribution=LogNormal,
+        dependency_fun="0.02 * parental * (1 + 0.30*gender) * independent"),
+
+    # Ecological scalars for the core (per ha); your engine can read these or you can keep them elsewhere
+    r=0.08,       # yr^-1 (within 0.05–0.12)
+    K=0.8,        # t/ha  (≈ 800 kg/ha)
+    fK=0.50,      # observed fraction of K (B/K)
+
+    # Drivers feeding your Incentive/Impact construction (Σ I = 1 - fK is enforced in core):
+    ū=dist(min=-0.1, max=0.1, dependency_fun="time * efficiency"),
+    w̃=dist(min=-0.1, max=0.1, dependency_fun="(AIO ./ (efficiency + 1e-6)) .+ independent"),
+
+    # Adjustment rate
+    α=dist(min=0.1, max=0.1, distribution=Uniform)
+)
+
 sample!(T, random=true)
 
 # --- helpers ---------------------------------------------------------------
@@ -71,6 +120,22 @@ end
 
 _coerce_labels(vars::Vector{Symbol}, labels) = labels === nothing ?
                                                string.(vars) : String.(map(identity, labels))
+
+_unit_string(v) = begin
+    hasproperty(v, :unit) ? getfield(v, :unit) : nothing
+end
+
+function _append_unit(label::AbstractString, value)
+    unit = _unit_string(value)
+    unit === nothing && return label
+    unit_str = unit isa AbstractString ? unit : try
+        string(unit)
+    catch
+        ""
+    end
+    isempty(unit_str) && return label
+    return string(label, " (", unit_str, ")")
+end
 
 # ----------------------------------------------------------------------------
 """
@@ -127,6 +192,7 @@ function pairgrid_blank_upper_redblue_with_dep(
     @assert all(length(c) == n for c in cols)
 
     lab = _coerce_labels(vars, labels)
+    lab = [_append_unit(lab[i], getproperty(data, vars[i])) for i in 1:length(vars)]
     @assert length(lab) == length(vars)
 
     has_gender = :gender in vars
@@ -155,7 +221,7 @@ function pairgrid_blank_upper_redblue_with_dep(
                vars[i] == :ū ? impact_label_color :
                vars[i] == :time ? time_label_color :
                vars[i] == :efficiency ? efficiency_label_color :
-               vars[i] == :opportunities ? aio_label_color : :black
+               vars[i] == :AIO ? aio_label_color : :black
         fig[i, 0] = Label(fig, lab[i]; halign=:right, valign=:center,
             fontsize=12, font=:bold, rotation=pi / 2, tellheight=false, color=lcol)
     end
@@ -165,7 +231,7 @@ function pairgrid_blank_upper_redblue_with_dep(
                vars[j] == :ū ? impact_label_color :
                vars[j] == :time ? time_label_color :
                vars[j] == :efficiency ? efficiency_label_color :
-               vars[j] == :opportunities ? aio_label_color : :black
+               vars[j] == :AIO ? aio_label_color : :black
         fig[p+1, j] = Label(fig, lab[j]; halign=:center, valign=:top,
             fontsize=12, font=:bold, tellwidth=false, color=bcol)
     end
@@ -234,12 +300,12 @@ function pairgrid_blank_upper_redblue_with_dep(
                 xlims!(ax, lims[j]...)
                 kd = kde(xi)
                 ylims!(ax, 0, maximum(kd.density) * 1.05)
-                # Custom colors for :w̃ (incentive), :ū (impact), :time, :efficiency, :opportunities (AIO)
+                # Custom colors for :w̃ (incentive), :ū (impact), :time, :efficiency, :AIO
                 kcol = vars[i] == :w̃ ? incentive_color :
                        vars[i] == :ū ? impact_color :
                        vars[i] == :time ? time_color :
                        vars[i] == :efficiency ? efficiency_color :
-                       vars[i] == :opportunities ? aio_color : :gray20
+                       vars[i] == :AIO ? aio_color : :gray20
                 lines!(ax, kd.x, kd.density; color=kcol)
                 band!(ax, kd.x, zero.(kd.density), kd.density; color=kcol, transparency=true, alpha=0.5)
             end
@@ -313,7 +379,7 @@ function pairgrid_blank_upper_redblue_with_dep(
     dep_label_colors[:ū] = impact_label_color
     dep_label_colors[:time] = time_label_color
     dep_label_colors[:efficiency] = efficiency_label_color
-    dep_label_colors[:opportunities] = aio_label_color
+    dep_label_colors[:AIO] = aio_label_color
     dependency_graph_plot!(depplot, data; label_colors=dep_label_colors)
 
     # Optional phase plot region
@@ -335,12 +401,12 @@ end
 
 
 function build_pairgrid_figure(; data=T,
-    vars=[:gender, :health, :parental, :time, :efficiency, :opportunities, :ū, :w̃],
+    vars=[:gender, :health, :parental, :time, :efficiency, :AIO, :ū, :w̃],
     labels=["Gender", "Health", "Parental", "Time", "Efficiency", "AIO", "Impact", "Incentive"],
     corr=:spearman,
     cellsize=(90, 90), markersize=3,
     cmap=:coolwarm, reverse_cmap=false,
-    dep_range=(1:4, 5:8), phase_plot=nothing,
+    dep_range=(1:4, 5:8), phase_plot=(5:6, 7:8),
     incentive_color=:darkorange, impact_color=:darkorange,
     incentive_label_color=:darkorange, impact_label_color=:darkorange,
     time_color=:forestgreen, efficiency_color=:forestgreen, aio_color=:forestgreen,
@@ -352,7 +418,8 @@ function build_pairgrid_figure(; data=T,
         incentive_color=incentive_color, impact_color=impact_color,
         incentive_label_color=incentive_label_color, impact_label_color=impact_label_color,
         time_color=time_color, efficiency_color=efficiency_color, aio_color=aio_color,
-        time_label_color=time_label_color, efficiency_label_color=efficiency_label_color, aio_label_color=aio_label_color)
+        time_label_color=time_label_color, efficiency_label_color=efficiency_label_color, aio_label_color=aio_label_color,
+    )
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
