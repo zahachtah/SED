@@ -26,11 +26,14 @@ var(d::Union{Derived,Data}) = Statistics.var(d.data)
     sum::Union{Nothing,Float64} = nothing
     alpha::Union{Nothing,Float64} = nothing
     beta::Union{Nothing,Float64} = nothing
+    log_mean::Union{Nothing,Float64} = nothing
+    log_sigma::Union{Nothing,Float64} = nothing
     random::Bool = false
     normalize::Bool = false
     dependent::NamedTuple = NamedTuple()
     distribution::Any = Uniform
     dependency_function::Union{Function,AbstractString,Nothing} = (indep, dep) -> indep .+ dep
+    unit::Union{Nothing,AbstractString} = ""
     bounds_quantiles::Tuple{Float64,Float64} = (0.01, 0.99)
     determ_bounds::Symbol = :within
     random_bounds::Symbol = :none
@@ -52,7 +55,8 @@ function _infer_dep_keys(expr_str::AbstractString, context::NamedTuple)
         end
     end
     walk(ex)
-    delete!(syms, :sed); delete!(syms, :independent)
+    delete!(syms, :sed)
+    delete!(syms, :independent)
     return [s for s in syms if haskey(context, s)]
 end
 
@@ -69,7 +73,8 @@ function _unknown_idents(expr_str::AbstractString, context::NamedTuple)
         end
     end
     walk(ex)
-    delete!(syms, :sed); delete!(syms, :independent)
+    delete!(syms, :sed)
+    delete!(syms, :independent)
     allowed_funcs = Set([:min, :max, :clamp, :abs, :sqrt, :exp, :log])
     syms = setdiff(syms, allowed_funcs)
     unknown = Symbol[]
@@ -128,12 +133,24 @@ function apply_dependencies!(sed::Dist, N::Int, context::NamedTuple)
             unknown = _unknown_idents(String(df), context)
             isempty(unknown) || error("Unknown identifiers in dependency_fun: $(unknown)")
             deps_keys = isempty(keys_list) ? _infer_dep_keys(String(df), context) : keys_list
-            deps_nt = NamedTuple{Tuple(deps_keys)}(map(k -> depvals[k], deps_keys))
-            independent = indep
-            sed.data = let independent=independent, deps=deps_nt
-                (; (Symbol(k)=>getfield(deps, k) for k in fieldnames(typeof(deps)))...)
-                eval(Meta.parse(String(df)))
+            dep_values = map(deps_keys) do k
+                if haskey(depvals, k)
+                    return depvals[k]
+                elseif haskey(context, k)
+                    v = context[k]
+                    return hasproperty(v, :data) ? v.data : v
+                else
+                    error("Context does not contain dependency variable $(k)")
+                end
             end
+            deps_nt = NamedTuple{Tuple(deps_keys)}(dep_values)
+            expr = Meta.parse("@. " * String(df))
+            dep_fields = fieldnames(typeof(deps_nt))
+            arg_syms = Symbol.(dep_fields)
+            lambda_expr = Expr(:->, Expr(:tuple, :independent, arg_syms...), expr)
+            fn = Core.eval(@__MODULE__, lambda_expr)
+            call_args = (indep, (getfield(deps_nt, k) for k in dep_fields)...)
+            sed.data = Base.invokelatest(fn, call_args...)
             if sed.enforce_after_deps != :none && sed.min !== nothing && sed.max !== nothing && sed.max > sed.min
                 sed.data = clamp.(sed.data, sed.min, sed.max)
             end
@@ -153,6 +170,84 @@ function is_distribution_type(sed, dist)
     return sed.distribution == dist || sed.distribution isa dist
 end
 has_dependencies(sed::Dist) = !isempty(sed.dependent)
+
+function _configure_lognormal!(sed::Dist)
+    is_distribution_type(sed, LogNormal) || return sed
+
+    μ = nothing
+    σ = nothing
+    derived_from_linear = false
+
+    if sed.min !== nothing && sed.max !== nothing && sed.max != sed.min
+        xlo = min(sed.min, sed.max)
+        xhi = max(sed.min, sed.max)
+        xlo = xlo <= 0 ? 1e-6 : xlo
+        qlo, qhi = sed.bounds_quantiles
+        z1 = quantile(Normal(), qlo)
+        z2 = quantile(Normal(), qhi)
+        σ = (log(xhi) - log(xlo)) / (z2 - z1)
+        μ = log(xlo) - σ * z1
+    elseif sed.log_mean !== nothing && sed.log_sigma !== nothing
+        μ = sed.log_mean
+        σ = sed.log_sigma
+    elseif sed.mean !== nothing && sed.mean > 0 && sed.sigma !== nothing && sed.sigma >= 0
+        m = sed.mean
+        s_lin = sed.sigma
+        if s_lin == 0.0
+            μ = log(m)
+            σ = 0.0
+        else
+            σ2 = log(1 + (s_lin^2 / (m^2)))
+            σ = sqrt(σ2)
+            μ = log(m) - σ2 / 2
+        end
+        derived_from_linear = true
+    elseif sed.median !== nothing && sed.sigma !== nothing && sed.mean === nothing && sed.log_sigma === nothing
+        μ = log(sed.median)
+        σ = abs(sed.sigma)
+    elseif sed.median !== nothing && sed.mean !== nothing && sed.log_sigma === nothing
+        μ = log(sed.median)
+        σ2 = 2 * (log(sed.mean) - log(sed.median))
+        σ = sqrt(max(σ2, 0.0))
+    elseif sed.log_mean !== nothing && sed.sigma !== nothing
+        μ = sed.log_mean
+        σ = abs(sed.sigma)
+    elseif sed.mean !== nothing && sed.log_sigma !== nothing
+        σ = abs(sed.log_sigma)
+        μ = log(sed.mean) - σ^2 / 2
+    elseif sed.distribution isa LogNormal
+        params = Distributions.params(sed.distribution)
+        μ, σ = params[1], params[2]
+    end
+
+    if μ === nothing || σ === nothing
+        return sed
+    end
+
+    σ = abs(σ)
+    sed.log_mean = μ
+    sed.log_sigma = σ
+
+    if derived_from_linear
+        sed.median = sed.median === nothing ? exp(μ) : sed.median
+    else
+        sed.mean = sed.mean === nothing ? exp(μ + σ^2 / 2) : sed.mean
+        sed.median = sed.median === nothing ? exp(μ) : sed.median
+        if sed.sigma === nothing
+            sed.sigma = sqrt((exp(σ^2) - 1) * exp(2μ + σ^2))
+        end
+    end
+
+    if σ == 0.0
+        value = sed.mean !== nothing ? sed.mean : exp(μ)
+        sed.distribution = Constant(value)
+        sed.sigma = sed.sigma === nothing ? 0.0 : sed.sigma
+    else
+        sed.distribution = LogNormal(μ, σ)
+    end
+
+    return sed
+end
 
 function is_property_name(s::Symbol, property_name::Symbol)
     return s == property_name || (s == :w && property_name == :w̃) || (s == :u && property_name == :ū)
@@ -177,21 +272,7 @@ function generate_distribution!(sed::Dist, N::Int)
         return sed
     end
     if is_distribution_type(sed, LogNormal)
-        if sed.min !== nothing && sed.max !== nothing && sed.max != sed.min
-            xlo = min(sed.min, sed.max)
-            xhi = max(sed.min, sed.max)
-            xlo = xlo <= 0 ? 1e-6 : xlo
-            qlo, qhi = sed.bounds_quantiles
-            z1 = quantile(Normal(), qlo)
-            z2 = quantile(Normal(), qhi)
-            σ = (log(xhi) - log(xlo)) / (z2 - z1)
-            μ = log(xlo) - σ * z1
-            sed.distribution = LogNormal(μ, abs(σ))
-        elseif sed.mean !== nothing && sed.sigma !== nothing
-            sed.distribution = (sed.sigma != 0.0) ? LogNormal(log(sed.mean) - abs(sed.sigma)^2 / 2, abs(sed.sigma)) : Constant(sed.mean)
-        elseif sed.median !== nothing && sed.sigma !== nothing
-            sed.distribution = (sed.sigma != 0.0) ? LogNormal(log(sed.median), abs(sed.sigma)) : Constant(sed.median)
-        end
+        _configure_lognormal!(sed)
         if sed.random
             if sed.random_bounds == :none || sed.min === nothing || sed.max === nothing || sed.min >= sed.max
                 sed.data = rand(sed.distribution, N)
@@ -249,16 +330,20 @@ function generate_distribution!(sed::Dist, N::Int)
             (sed.alpha <= 0 || sed.beta <= 0) && error("For Beta, alpha and beta must be > 0")
             sed.distribution = Beta(sed.alpha, sed.beta)
         elseif sed.mean !== nothing && sed.sigma !== nothing
-            m = sed.mean; s = abs(sed.sigma)
+            m = sed.mean
+            s = abs(sed.sigma)
             if s == 0.0
                 sed.distribution = Dirac(m)
             else
                 (m <= 0 || m >= 1) && error("For Beta mean+sigma, mean must be in (0,1)")
-                v = s^2; vmax = m * (1 - m)
+                v = s^2
+                vmax = m * (1 - m)
                 (v <= 0 || v >= vmax) && error("For Beta mean+sigma, sigma too large for mean (requires sigma^2 < mean*(1-mean))")
                 κ = m * (1 - m) / v - 1
-                α = m * κ; β = (1 - m) * κ
-                sed.alpha = α; sed.beta = β
+                α = m * κ
+                β = (1 - m) * κ
+                sed.alpha = α
+                sed.beta = β
                 sed.distribution = Beta(α, β)
             end
         else
@@ -269,16 +354,19 @@ function generate_distribution!(sed::Dist, N::Int)
         if sed.distribution isa Normal
             nothing
         elseif sed.mean !== nothing && sed.sigma !== nothing
-            s = abs(sed.sigma); sed.distribution = (s == 0.0) ? Dirac(sed.mean) : Normal(sed.mean, s)
+            s = abs(sed.sigma)
+            sed.distribution = (s == 0.0) ? Dirac(sed.mean) : Normal(sed.mean, s)
         elseif sed.median !== nothing && sed.sigma !== nothing
-            s = abs(sed.sigma); sed.distribution = (s == 0.0) ? Dirac(sed.median) : Normal(sed.median, s)
+            s = abs(sed.sigma)
+            sed.distribution = (s == 0.0) ? Dirac(sed.median) : Normal(sed.median, s)
         else
             error("For Normal, specify mean & sigma (or median & sigma), or pass a Normal instance")
         end
         sed.data = sed.random ? rand(sed.distribution, N) : quantile.(Ref(sed.distribution), range(1 / N, stop=1 - 1 / N, length=N))
     elseif is_distribution_type(sed, LogitNormal)
         if sed.median !== nothing && sed.sigma !== nothing
-            m = sed.median; s = abs(sed.sigma)
+            m = sed.median
+            s = abs(sed.sigma)
             (m <= 0 || m >= 1) && error("For LogitNormal median+sigma, median must be in (0,1)")
             sed.distribution = s == 0.0 ? Dirac(m) : LogitNormal(log(m / (1 - m)), s)
         elseif sed.distribution isa LogitNormal
@@ -355,7 +443,11 @@ function dependency_graph(s)
         end
     end
     indeg = Dict(k => 0 for k in sedkeys)
-    for k in sedkeys; for d in deps[k]; indeg[k] += 1; end; end
+    for k in sedkeys
+        for d in deps[k]
+            indeg[k] += 1
+        end
+    end
     ready = [k for k in sedkeys if indeg[k] == 0]
     order = Symbol[]
     while !isempty(ready)
@@ -415,11 +507,14 @@ function Base.similar(sed::Dist{T,N,A}, ::Type{T}, dims::Dims) where {T,N,A<:Abs
         sum=sed.sum,
         alpha=sed.alpha,
         beta=sed.beta,
+        log_mean=sed.log_mean,
+        log_sigma=sed.log_sigma,
         random=sed.random,
         normalize=sed.normalize,
         dependent=sed.dependent,
         distribution=sed.distribution,
-        dependency_function=sed.dependency_function
+        dependency_function=sed.dependency_function,
+        unit=sed.unit
     )
 end
 
@@ -444,37 +539,59 @@ function dist(; data=nothing, min=nothing, max=nothing, kwargs...)
             kw = change(kw; dependent=nt)
         end
     end
-    allowed = Set([:min, :max, :mean, :median, :sigma, :sum, :alpha, :beta, :random, :normalize, :dependent, :distribution, :dependency_function,
-        :bounds_quantiles, :determ_bounds, :random_bounds, :enforce_after_deps])
+    allowed = Set([:min, :max, :mean, :median, :sigma, :sum, :alpha, :beta, :log_mean, :log_sigma,
+        :random, :normalize, :dependent, :distribution, :dependency_function,
+        :unit, :bounds_quantiles, :determ_bounds, :random_bounds, :enforce_after_deps])
     filtered_pairs = [(k => getproperty(kw, k)) for k in keys(kw) if k in allowed]
     filtered_kw = (; filtered_pairs...)
-    T = Float64; ND = 1; A = Array{T,ND}
+    T = Float64
+    ND = 1
+    A = Array{T,ND}
     if data !== nothing
-        T = eltype(data); ND = ndims(data); A = typeof(data)
+        T = eltype(data)
+        ND = ndims(data)
+        A = typeof(data)
     else
         data = Array{T,ND}(undef, 0)
     end
-    return Dist{T,ND,A}(; data, min, max, filtered_kw...)
+    d = Dist{T,ND,A}(; data, min, max, filtered_kw...)
+    _configure_lognormal!(d)
+    return d
 end
 
 function astext(d::Dist)
-    b = IOBuffer(); show(b, MIME"text/plain"(), d); String(take!(b))
+    b = IOBuffer()
+    show(b, MIME"text/plain"(), d)
+    String(take!(b))
 end
 
 function Base.show(io::IO, d::Dist)
     distname = d.distribution isa Type ? string(d.distribution) :
-               try nameof(typeof(d.distribution)) catch; string(typeof(d.distribution)) end
+               try
+        nameof(typeof(d.distribution))
+    catch
+        string(typeof(d.distribution))
+    end
     ndata = (d.data isa AbstractArray) ? length(d.data) : 0
-    print(io, "Dist($distname, length=$ndata)")
+    unit_str = ""
+    if d.unit !== nothing && !(d.unit isa AbstractString && isempty(d.unit))
+        unit_str = ", unit=$(d.unit)"
+    end
+    print(io, "Dist($distname, length=$ndata$(unit_str))")
 end
 
 function Base.show(io::IO, ::MIME"text/plain", d::Dist)
     distname = d.distribution isa Type ? string(d.distribution) :
-               try nameof(typeof(d.distribution)) catch; string(typeof(d.distribution)) end
+               try
+        nameof(typeof(d.distribution))
+    catch
+        string(typeof(d.distribution))
+    end
     println(io, "Dist(")
     println(io, "  distribution : ", distname)
     println(io, "  params       : ", "min=", d.min, ", max=", d.max, ", mean=", d.mean,
         ", median=", d.median, ", sigma=", d.sigma, ", sum=", d.sum, ", alpha=", d.alpha, ", beta=", d.beta)
+    println(io, "  log_params   : ", "log_mean=", d.log_mean, ", log_sigma=", d.log_sigma)
     println(io, "  options      : ", "random=", d.random, ", normalize=", d.normalize)
     if !isempty(d.dependent)
         println(io, "  dependent    : ", join(Symbol.(keys(d.dependent)), ", "))
@@ -489,9 +606,22 @@ function Base.show(io::IO, ::MIME"text/plain", d::Dist)
     else
         println(io, "  dep_fun      : Function")
     end
+    if d.unit === nothing || (d.unit isa AbstractString && isempty(d.unit))
+        println(io, "  unit         : ∅")
+    else
+        println(io, "  unit         : ", d.unit)
+    end
     if d.data isa AbstractArray && !isempty(d.data)
-        dmin = try minimum(d.data) catch; "?" end
-        dmax = try maximum(d.data) catch; "?" end
+        dmin = try
+            minimum(d.data)
+        catch
+            "?"
+        end
+        dmax = try
+            maximum(d.data)
+        catch
+            "?"
+        end
         println(io, "  data         : length=", length(d.data), ", eltype=", eltype(d.data), ", min=", dmin, ", max=", dmax)
     else
         println(io, "  data         : ∅ (not sampled)")
@@ -505,11 +635,15 @@ function getmedian(d::Dist; sampled::Bool=false)
     end
     try
         return quantile(d.distribution, 0.5)
-    catch end
+    catch
+    end
     if d.distribution === LogNormal && d.min !== nothing && d.max !== nothing && d.max != d.min
-        xlo = min(d.min, d.max); xhi = max(d.min, d.max); xlo = xlo <= 0 ? 1e-6 : xlo
+        xlo = min(d.min, d.max)
+        xhi = max(d.min, d.max)
+        xlo = xlo <= 0 ? 1e-6 : xlo
         qlo, qhi = d.bounds_quantiles
-        z1 = quantile(Normal(), qlo); z2 = quantile(Normal(), qhi)
+        z1 = quantile(Normal(), qlo)
+        z2 = quantile(Normal(), qhi)
         σ = (log(xhi) - log(xlo)) / (z2 - z1)
         μ = log(xlo) - σ * z1
         return exp(μ)
@@ -535,13 +669,16 @@ function getsigma(d::Dist; sampled::Bool=false)
         elseif d.distribution isa Normal
             return (d.distribution::Normal).σ
         end
-    catch end
+    catch
+    end
     if d.distribution === LogNormal && d.min !== nothing && d.max !== nothing && d.max != d.min
-        xlo = min(d.min, d.max); xhi = max(d.min, d.max); xlo = xlo <= 0 ? 1e-6 : xlo
+        xlo = min(d.min, d.max)
+        xhi = max(d.min, d.max)
+        xlo = xlo <= 0 ? 1e-6 : xlo
         qlo, qhi = d.bounds_quantiles
-        z1 = quantile(Normal(), qlo); z2 = quantile(Normal(), qhi)
+        z1 = quantile(Normal(), qlo)
+        z2 = quantile(Normal(), qhi)
         return (log(xhi) - log(xlo)) / (z2 - z1)
     end
     return d.sigma === nothing ? missing : d.sigma
 end
-

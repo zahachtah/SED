@@ -14,6 +14,8 @@ function Γ_plot!(axis, sol; color=:darkorange, linewidth=3, t=0.0)
     lines!(axis, y, _Γ.(y, Ref(sol.prob.p), x=sol.u[end-1]; t); color, linewidth)
 end
 
+include("RegulationScanPlot.jl")
+
 function Φ_plot!(axis, sol; color=:darkorange, linewidth=3, t=0.0)
     y = range(0.0, stop=1.0, length=100)
     lines!(axis, y, Φ.(y, Ref(sol.prob.p); t); color, linewidth)
@@ -139,7 +141,7 @@ function dependency_graph_plot!(
     pretty_label(sym::Symbol) = begin
         s = String(sym)
         if sym == Symbol("w̃") || occursin(r"^w(\\tilde|tilde)", s) || occursin(Char(0x0303), s)
-            return "Incentives"
+            return "Incentive"
         elseif sym == Symbol("ū") || occursin(r"^u(\\bar|bar)", s) || occursin(Char(0x0304), s)
             return "Impact"
         else
@@ -152,7 +154,8 @@ function dependency_graph_plot!(
             text=pretty_label(k),
             align=(:center, :center),
             color=get_lab_color(k),
-            fontsize=fontsize)
+            fontsize=fontsize,
+            font=:bold)
     end
     return ax
 end
@@ -221,6 +224,12 @@ function dist_plot!(ax, v; title="", kind=:line, bins=30, color=:steelblue)
     else
         lines!(ax, 1:length(data), sort(data); color)
     end
+    if hasproperty(v, :unit)
+        unit_val = getfield(v, :unit)
+        if unit_val !== nothing && !(unit_val isa AbstractString && isempty(unit_val))
+            ax.xlabel = unit_val
+        end
+    end
     if !isempty(title)
         ax.title[] = title
     end
@@ -278,4 +287,3 @@ function arrow_arc_deg!(ax, origin, radius, start_angle_deg, stop_angle_deg;
         shaftwidth=linewidth
     )
 end
-

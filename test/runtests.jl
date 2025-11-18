@@ -56,6 +56,42 @@ end
     @test !isnothing(sim(dev; regulation=0.4))
 end
 
+@testset "policy hooks" begin
+    N = 20
+    s0 = scenario(base(N=N))
+    # attach a constant extra income per agent
+    extra_val = 0.1
+    extra_fun(x,p,t) = fill(extra_val, p.N)
+    s1 = with_policy(s0; income_extra_fun=extra_fun)
+    sol = sim(s1)
+    inc = incomes(sol)
+    @test isapprox(sum(inc.total) - sum(inc.resource) - sum(inc.wages), N * extra_val; atol=1e-6)
+
+    # resource factor halves resource income when applied
+    s2 = with_policy(s1; resource_factor_fun=(x,p,t)->0.5)
+    inc1 = incomes(sol) # baseline with no factor
+    inc2 = incomes(sol.u[end], s2) # use same terminal state but different p
+    @test isapprox(sum(inc2.resource), 0.5 * sum(inc1.resource); atol=1e-6)
+end
+
+@testset "policy kits" begin
+    N = 30
+    s0 = scenario(base(N=N))
+
+    # EUR kit with top selector
+    sel = (w̃, n) -> sortperm(w̃, rev=true)[1:n]
+    eur = with_policy(s0; exclusive_use_rights_kit(; selector=sel)...)
+    @test !isnothing(sim(eur; regulation=0.25))
+
+    # TUR kit
+    tur = with_policy(s0; tradable_use_rights_kit(; target=:effort, market_rate=0.05)...)
+    @test !isnothing(sim(tur; regulation=0.25))
+
+    # PA kit
+    pa = with_policy(s0; protected_area_kit(; m=0.3)...)
+    @test !isnothing(sim(pa; regulation=0.25))
+end
+
 @testset "tuple dependent + string" begin
     N = 30
     s = (

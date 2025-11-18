@@ -4,6 +4,11 @@
 using Random
 Random.seed!(42)
 
+if !isdefined(Main, :SED)
+    include(joinpath(@__DIR__, "..", "SED.jl"))
+end
+const S = Main.SED
+using .SED
 
 # Choose a Makie backend (uncomment your preference)
 using CairoMakie
@@ -15,27 +20,27 @@ isdir(outdir) || mkpath(outdir)
 
 # Example 1: Phase + incomes for a baseline scenario
 N = 100
-s = scenario(S.base(N=N))
-sol = sim(s)
+s = S.scenario(S.base(N=N))
+sol = S.sim(s)
 
 fig1 = Figure(size=(900, 420))
 ax1 = Axis(fig1[1, 1])
 ax2 = Axis(fig1[1, 2])
-phase_plot!(ax1, sol)
-incomes_plot!(ax2, sol)
+S.phase_plot!(ax1, sol)
+S.incomes_plot!(ax2, sol)
 save(joinpath(outdir, "baseline_phase_incomes.png"), fig1)
 
 # Example 2: Dependency graph for a simple dependent context
 ctx = (
     N=N,
-    q=dist(min=1 / N, max=1 / N, normalize=true),
-    w=dist(min=0.2, max=0.4),
+    q=S.dist(min=1 / N, max=1 / N, normalize=true),
+    w=S.dist(min=0.2, max=0.4),
     K=2.0,
-    w̃=dist(min=0.1, max=1.0, dependency_fun="q .* w ./ K .+ sed"),
-    ū=dist(dependency_fun="q ./ w̃"),
+    w̃=S.dist(min=0.1, max=1.0, dependency_fun="q .* w ./ K .+ independent"),
+    ū=S.dist(dependency_fun="q ./ w̃"),
 )
-sample!(ctx)
-fig2 = dependency_graph_plot(ctx)
+S.sample!(ctx)
+fig2 = S.dependency_graph_plot(ctx)
 save(joinpath(outdir, "dependency_graph.png"), fig2)
 
 println("Figures written to: ", outdir)
@@ -74,7 +79,7 @@ function policy_outcomes_figure(; s=S.base(N=100), order=false, goal=:Gov)
 
     # Optimize regulation per policy for selected goal
     function optimize_goal(p)
-        R = S.regulation_scan(p)
+        R = S.regulation_scan(p; warmstart=:chain)
         g = R.RR .^ 0.5 .* R.ToR .^ 1.0 .* (1 .- R.GI) .^ 0.0 .* R.EH .^ 0.0
         opt = argmax(goal == :Gov ? g : R[goal])
         (reg=R.r[opt], idx=opt)
@@ -122,7 +127,7 @@ function regscan_figure(; s=base(N=100), outcomes=[:RR, :ToR, :GI, :EH, :RI, :Go
         S.scenario(S.base(N=N); w̃, ū, policy="Protected Area", m=0.5, name="PA_05"),
     ]
 
-    scans = [S.regulation_scan(p) for p in policies]
+    scans = [S.regulation_scan(p; warmstart=:chain) for p in policies]
     f = Figure(size=(1100, 900))
     for (i, rs) in enumerate(scans)
         for (j, o) in enumerate(outcomes)

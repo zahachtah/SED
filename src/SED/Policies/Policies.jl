@@ -51,7 +51,16 @@ function regulate_tradable_use_rights(s, f)
             end
         end
     end
-    return change(s, R=R, regulation=f)
+    # attach income_extra_fun to reflect trade revenues at incomes time
+    function _tur_income_extra(x, p, t)
+        u = x[1:p.N]; y = x[p.N+1]
+        if p.policy_target == :yield
+            (p.R .- (u .* y)) .* x[p.N+2]
+        else
+            (p.R .- u) .* x[p.N+2]
+        end
+    end
+    return change(s, R=R, regulation=f, income_extra_fun=_tur_income_extra)
 end
 
 function γ_tradable_use_rights(x, p, t)
@@ -59,25 +68,58 @@ function γ_tradable_use_rights(x, p, t)
 end
 
 function ϕ_tradable_use_rights(dx, x, p, t)
+    # Supply definition note:
+    # We intentionally use aggregate clamping: clamp(sum(R - usage), 0, Inf).
+    # Rationale: in a pooled rights market, net slack (after offsetting
+    # overuse and underuse across agents) should determine market supply.
+    # Element-wise clamping (sum(clamp.(...))) counts any local underuse as
+    # supply even if other agents overuse more, which tends to misprice
+    # scarcity and destabilize the price dynamics.
+    # This aggregate form matches legacy behavior and improves stability.
     supply = if p.policy_target == :yield
-        sum(clamp.(p.R .- (x[1:p.N] .* x[p.N+1]), 0.0, Inf))
+        # supply in yield units
+        clamp(sum(p.R .- (x[1:p.N] .* x[p.N+1])), 0.0, Inf)
     elseif p.policy_target == :effort
-        sum(clamp.(p.R .- x[1:p.N], 0.0, Inf))
+        # supply in effort units
+        max(0.0, sum(p.R .- x[1:p.N]))
     else
         0.0
     end
     id = findall((dx[1:p.N] .> 0.0))
     ind_demand = if p.policy_target == :yield
+        # demand in yield units
         max_extra_yield = (p.ū[id] .- x[id]) .* x[p.N+1]
         desired_extra_yield = dx[id] .* x[p.N+1]
         min.(max_extra_yield, desired_extra_yield)
     else
+        # demand in effort units
         min.(p.ū[id] - x[id], dx[id])
+    end
+    # Socioeconomic buying power weighting based on opportunities (AIO)
+    bias = hasproperty(p, :buyer_bias) ? Float64(getfield(p, :buyer_bias)) : 0.0
+    if bias != 0.0 && hasproperty(p, :opportunities)
+        opp = getfield(p, :opportunities)
+        oppv = hasproperty(opp, :data) ? opp.data : opp
+        if length(oppv) == p.N
+            omin = minimum(oppv); omax = maximum(oppv); rng = omax - omin
+            if rng > 0
+                norm = (oppv .- omin) ./ rng             # [0,1]
+                s = 2 .* (norm .- 0.5)                   # [-1,1]
+                wfull = clamp.(1 .+ bias .* s, 0.001, Inf)
+                ind_demand = ind_demand .* wfull[id]
+            end
+        end
     end
     demand = sum(ind_demand)
     dx[p.N+2] = p.market_rate * (demand - supply)
     if demand > supply && demand > 0
-        dx[id] .= supply .* ind_demand ./ demand
+        if p.policy_target == :yield
+            # rationed increment computed in yield units; convert back to effort
+            y = max(eps(), x[p.N+1])
+            dx[id] .= (supply .* ind_demand ./ demand) ./ y
+        else
+            dx[id] .= supply .* ind_demand ./ demand
+        end
     end
 end
 
@@ -103,7 +145,9 @@ end
 # ===== Protected Area =====
 
 function regulate_protected_area(p, f)
-    return change(p, regulation=f)
+    # Provide resource_factor_fun so incomes scale resource by (1 - f)
+    rff(x, pp, t) = (1 - pp.regulation)
+    return change(p, regulation=f, resource_factor_fun=rff)
 end
 
 function γ_protected_area(x, p, t)
@@ -162,6 +206,150 @@ function regulate_development(p, f)
     return change(p, regulation=f)
 end
 
+# ===== Policy composition helper (function-based, no types) =====
+
+"""
+    with_policy(s; γ=nothing, μ=nothing, ϕ=nothing, regulate=nothing,
+                   income_extra_fun=nothing,
+                   extra_state::Int=0, init_extra_state=nothing,
+                   label=nothing, policy_meta=NamedTuple())
+
+Return a new scenario based on `s` with any provided policy functions and optional
+hooks merged in. All parameters are optional; only non-`nothing` values are applied.
+
+Hooks (optional):
+- `income_extra_fun(x, p, t) -> Vector`: additional income component per agent.
+- `extra_state::Int`: number of extra ODE states introduced by the policy.
+- `init_extra_state(p) -> Vector`: initializer for extra states, length = `extra_state`.
+- `label::String` and `policy_meta::NamedTuple`: for display and downstream logic.
+"""
+function with_policy(s; γ=nothing, μ=nothing, ϕ=nothing, regulate=nothing,
+                        income_extra_fun=nothing,
+                        extra_state::Int=0, init_extra_state=nothing,
+                        label=nothing, policy_meta=NamedTuple(), policy=nothing)
+    out = (; s...)
+    γ !== nothing && (out = (; out..., γ))
+    μ !== nothing && (out = (; out..., μ))
+    ϕ !== nothing && (out = (; out..., ϕ))
+    regulate !== nothing && (out = (; out..., regulate))
+    income_extra_fun !== nothing && (out = (; out..., income_extra_fun))
+    extra_state > 0 && (out = (; out..., extra_state))
+    init_extra_state !== nothing && (out = (; out..., init_extra_state))
+    label !== nothing && (out = (; out..., label))
+    !isempty(propertynames(policy_meta)) && (out = (; out..., policy_meta))
+    policy !== nothing && (out = (; out..., policy))
+    return out
+end
+
+# ===== Policy kit helpers (function-based bundles) =====
+
+"""
+    exclusive_use_rights_kit(; selector = (w̃, n) -> (1:n), label="Exclusive Use Rights")
+
+Return a NamedTuple of policy functions for Exclusive Use Rights using the given
+`selector` to choose which `n = round(Int, f*N)` agents get rights. The default
+selector picks the first n indices; pass a custom selector to choose top/bottom
+by some criterion (e.g., w̃).
+"""
+function exclusive_use_rights_kit(; selector = (w̃, n) -> (1:n), label="Exclusive Use Rights")
+    γf(x, p, t) = p.w̃ .+ p.R
+    function regulatef(s, f)
+        N = s.N
+        R = zeros(N)
+        n = max(0, min(N, round(Int, f * N)))
+        if n > 0
+            idx = selector(s.w̃, n)
+            R[idx] .= 1.0
+        end
+        return change(s, R=R, regulation=f)
+    end
+    (; γ=γf, regulate=regulatef, label, policy="Exclusive Use Rights")
+end
+
+"""
+    exclusive_use_rights_by_opportunities_kit(; selector = (opportunities, n) -> (1:n),
+                                               label = "Exclusive Use Rights (opportunities)")
+
+Variant of Exclusive Use Rights where the selection of beneficiaries is based on
+`opportunities` rather than `w̃`. The `selector` function is called with the
+opportunities vector and the number of slots `n`, and should return the indices
+to receive rights.
+
+If `opportunities` is not present in the scenario, this falls back to `w̃`.
+"""
+function exclusive_use_rights_by_opportunities_kit(; selector = (opportunities, n) -> (1:n),
+                                                     label = "Exclusive Use Rights (opportunities)")
+    γf(x, p, t) = p.w̃ .+ p.R
+    getdata(v) = hasproperty(v, :data) ? v.data : v
+    function regulatef(s, f)
+        N = s.N
+        R = zeros(N)
+        n = max(0, min(N, round(Int, f * N)))
+        if n > 0
+            opp = hasproperty(s, :opportunities) ? getdata(getfield(s, :opportunities)) :
+                  (hasproperty(s, :w̃) ? getdata(getfield(s, :w̃)) : zeros(N))
+            idx = selector(opp, n)
+            R[idx] .= 1.0
+        end
+        return change(s, R=R, regulation=f)
+    end
+    (; γ=γf, regulate=regulatef, label, policy="Exclusive Use Rights")
+end
+
+"""
+    tradable_use_rights_kit(; target=:effort, market_rate=0.05, label="Tradable Use Rights")
+
+Return a NamedTuple policy bundle for tradable use rights. Attaches γ, ϕ,
+and regulate; `regulate` also attaches `income_extra_fun` for trade income.
+"""
+function tradable_use_rights_kit(; target=:effort, market_rate=0.05, buyer_bias::Float64=0.0, label="Tradable Use Rights")
+    γf = γ_tradable_use_rights
+    ϕf = ϕ_tradable_use_rights
+    function regulatef(s, f)
+        s2 = change(s, policy_target=target, market_rate=market_rate, buyer_bias=buyer_bias)
+        regulate_tradable_use_rights(s2, f)
+    end
+    (; γ=γf, ϕ=ϕf, regulate=regulatef, label, policy_meta=(; target, market_rate, buyer_bias), policy="Tradable Use Rights")
+end
+
+"""
+    protected_area_kit(; m=0.3, label="Protected Area")
+
+Return a NamedTuple policy bundle for a Protected Area.
+"""
+function protected_area_kit(; m=0.3, label="Protected Area")
+    γf = γ_protected_area
+    μf = μ_protected_area
+    function regulatef(p, f)
+        regulate_protected_area(change(p, m=m), f)
+    end
+    (; γ=γf, μ=μf, regulate=regulatef, label, policy_meta=(; m), policy="Protected Area")
+end
+
+"""
+    economic_incentives_kit(; policy_target=[:γ,:μ], policy_method=:multiplicative, label="Economic Incentives")
+"""
+function economic_incentives_kit(; policy_target=[:γ,:μ], policy_method=:multiplicative, label="Economic Incentives")
+    γf = γ_economic_incentive
+    μf = μ_economic_incentive
+    function regulatef(p, f)
+        change(p, regulation=f, policy_target=policy_target, policy_method=policy_method)
+    end
+    (; γ=γf, μ=μf, regulate=regulatef, label, policy_meta=(; policy_target, policy_method))
+end
+
+"""
+    development_kit(; μ_value=0.5, γ_value=0.5, label="Development")
+"""
+function development_kit(; μ_value=0.5, γ_value=0.5, label="Development")
+    γf = γ_development
+    μf = μ_development
+    function regulatef(p, f)
+        change(p, regulation=f, μ_value=μ_value, γ_value=γ_value)
+    end
+    (; γ=γf, μ=μf, regulate=regulatef, label, policy_meta=(; μ_value, γ_value))
+end
+
 function μ_development(x, p, t)
     return p.ū .+ p.regulation * 2 / p.N * t / 1000 * p.μ_value
 end
@@ -169,4 +357,3 @@ end
 function γ_development(x, p, t)
     return p.w̃ .+ p.regulation * t / 1000 * p.γ_value
 end
-
