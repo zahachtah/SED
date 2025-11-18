@@ -35,7 +35,7 @@ export regulate_development, μ_development, γ_development
 export with_policy
 
 # Plotting exports
-export phase_plot!, incomes_plot!, dependency_graph, dependency_graph_plot, dependency_graph_plot!, Φ_plot!, Γ_plot!, attractor_plot!, arrow_arc_deg!
-
+export phase_plot!,phase_plot, incomes_plot!, dependency_graph, dependency_graph_plot, dependency_graph_plot!, Φ_plot!, Γ_plot!, attractor_plot!, arrow_arc_deg!
+export distribution_plot
 end
 
