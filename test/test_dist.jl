@@ -89,4 +89,36 @@ using .SED
         @test all(ctx.c .≈ 3.0)
     end
 
+    @testset "Dependent Macro" begin
+        # Basic
+        ctx = (
+            N=10,
+            q=SED.dist(min=1, max=1, distribution=Uniform),
+            w=SED.dist(min=2, max=2, distribution=Uniform),
+            res=SED.dist(dependency=SED.@dependent (q, w) -> q .+ w)
+        )
+        SED.sample!(ctx)
+        @test all(ctx.res .≈ 3.0)
+
+        # With independent
+        ctx2 = (
+            N=100,
+            q=SED.dist(min=1, max=1, distribution=Uniform),
+            res=SED.dist(dependency=SED.@dependent (q) -> q .+ independent)
+        )
+        SED.sample!(ctx2)
+        @test minimum(ctx2.res) >= 1.0
+        @test maximum(ctx2.res) <= 2.0
+
+        # With sed alias
+        ctx3 = (
+            N=100,
+            q=SED.dist(min=1, max=1, distribution=Uniform),
+            res=SED.dist(dependency=SED.@dependent (q) -> q .+ sed)
+        )
+        SED.sample!(ctx3)
+        @test minimum(ctx3.res) >= 1.0
+        @test maximum(ctx3.res) <= 2.0
+    end
+
 end

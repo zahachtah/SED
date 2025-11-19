@@ -218,11 +218,71 @@ function parse_dependency(dep_str::String)
     return FunctionalDependency(fn, inputs, dep_str)
 end
 
+"""
+    @dependent (args...) -> body
+
+Macro to define a dependency function.
+Automatically handles `independent` (or `sed`) variable.
+Example:
+    @dependent (q, w) -> q .* w .+ independent
+"""
+macro dependent(expr)
+    if expr.head != :-> && expr.head != :function
+        error("@dependent expects a function definition (e.g., (x, y) -> x + y)")
+    end
+
+    # Extract arguments
+    args = expr.args[1]
+    body = expr.args[2]
+
+    arg_syms = Symbol[]
+    if args isa Symbol
+        push!(arg_syms, args)
+    elseif args isa Expr && args.head == :tuple
+        for a in args.args
+            if a isa Symbol
+                push!(arg_syms, a)
+            elseif a isa Expr && a.head == :(::)
+                push!(arg_syms, a.args[1])
+            else
+                error("Unsupported argument type in @dependent")
+            end
+        end
+    end
+
+    # Check if independent is already an argument
+    if :independent in arg_syms
+        error("'independent' should not be an explicit argument in @dependent. It is injected automatically.")
+    end
+
+    # Construct new arguments: (independent, args...)
+    new_args = Expr(:tuple, :independent, arg_syms...)
+
+    # Construct new body: let sed = independent; body end
+    new_body = Expr(:block, Expr(:(=), :sed, :independent), body)
+
+    # Construct new function
+    new_fn = Expr(:->, new_args, new_body)
+
+    # Quote the result
+    # We return a FunctionalDependency constructor call
+    # We need to escape the function so it's defined in the caller's scope?
+    # Actually, we want the function object.
+
+    inputs_quoted = Expr(:vect, QuoteNode.(arg_syms)...)
+    expr_str = string(expr)
+
+    return quote
+        FunctionalDependency($(esc(new_fn)), $inputs_quoted, $expr_str)
+    end
+end
+
 
 function dist(;
     distribution=nothing,
     data=nothing,
     dependency_fun=nothing,
+    dependency=nothing,
     random=false,
     normalize=false,
     unit=nothing,
@@ -243,36 +303,36 @@ function dist(;
             d_obj = distribution
         end
         source = RandomSource(d_obj, random)
-    elseif !isnothing(dependency_fun)
+    elseif !isnothing(dependency_fun) || !isnothing(dependency)
         # Implicit source?
         # If dependency_fun uses 'independent', we need a source.
-        # If no distribution specified, default to Uniform(0,1) if min/max present?
-        # Or ZeroSource if purely dependent?
-        # Current behavior: if no distribution, it defaults to Uniform or Zero depending on context?
-        # Actually, old code defaulted to Uniform.
-        # But if dependency_fun is "q*w" (no independent), then source doesn't matter (multiplied by 0? No).
-        # If "independent" is NOT used, source value is ignored.
-        # So we can default to ZeroSource if "independent" is missing from string?
-        # But parsing string is complex.
-        # Safe bet: Default to Uniform(0,1) or ZeroSource.
-        # Let's stick to Uniform(0,1) as default "independent" noise if not specified.
-        # UNLESS min/max/etc are missing, then maybe ZeroSource?
 
-        # Let's check if "independent" or "sed" is in the string.
-        uses_indep = occursin("independent", dependency_fun) || occursin("sed", dependency_fun)
+        uses_indep = false
+        if !isnothing(dependency_fun)
+            uses_indep = occursin("independent", dependency_fun) || occursin("sed", dependency_fun)
+        end
+        # For @dependent, we assume it might use independent (it's always passed).
+        # But if we want to optimize, we could check the expression? 
+        # Hard to check compiled function.
+        # Let's assume YES for @dependent unless we want to force ZeroSource?
+        # Actually, if no distribution is given, we default to Uniform(0,1) usually.
+        # But if it's purely functional (e.g. q*w), we might want ZeroSource.
+        # However, passing 0.0 as independent is fine for q*w.
+        # Passing random noise is NOT fine if q*w doesn't use it? 
+        # Actually it is fine, just unused.
+        # BUT performance! Generating random numbers for nothing.
 
-        if uses_indep
-            # We need a source. Default to Uniform?
-            # Check if min/max provided
-            if haskey(kw, :min) || haskey(kw, :max)
-                d_obj = build_distribution(Uniform, kw)
-                source = RandomSource(d_obj, random)
-            else
-                # Default
-                source = RandomSource(Uniform(0, 1), random)
-            end
+        # For now, let's stick to the logic: if no distribution, default to Uniform(0,1).
+        # Unless we can prove independent is unused.
+
+        # If dependency is provided, we don't know if it uses independent.
+        # Let's default to Uniform(0,1) to be safe/consistent with legacy.
+
+        if haskey(kw, :min) || haskey(kw, :max)
+            d_obj = build_distribution(Uniform, kw)
+            source = RandomSource(d_obj, random)
         else
-            source = ZeroSource()
+            source = RandomSource(Uniform(0, 1), random)
         end
     else
         # Default default
@@ -280,11 +340,13 @@ function dist(;
     end
 
     # 2. Build Dependency
-    dependency = nothing
-    if !isnothing(dependency_fun)
-        dependency = parse_dependency(dependency_fun)
+    dep_obj = nothing
+    if !isnothing(dependency)
+        dep_obj = dependency
+    elseif !isnothing(dependency_fun)
+        dep_obj = parse_dependency(dependency_fun)
     else
-        dependency = NoDependency()
+        dep_obj = NoDependency()
     end
 
     # 3. Options
@@ -299,7 +361,7 @@ function dist(;
     end
 
     # 4. Create Struct
-    return SEDist(source, dependency, min_val, max_val, normalize, Float64[], unit)
+    return SEDist(source, dep_obj, min_val, max_val, normalize, Float64[], unit)
 end
 
 
