@@ -14,7 +14,7 @@ function Γ_plot!(axis, sol; color=:darkorange, linewidth=3, t=0.0)
     lines!(axis, y, _Γ.(y, Ref(sol.prob.p), x=sol.u[end-1]; t); color, linewidth)
 end
 
-include("RegulationScanPlot.jl")
+include("regulation_scan_plot.jl")
 
 function Φ_plot!(axis, sol; color=:darkorange, linewidth=3, t=0.0)
     y = range(0.0, stop=1.0, length=100)

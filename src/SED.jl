@@ -1,18 +1,19 @@
 module SED
 
 # Core split: Dist (sampling/deps), Sim (dxdt/sim), Metrics (Γ, Φ, incomes)
-include("SED/Core/Dist.jl")
-include("SED/Sim/Model.jl")
-include("SED/Sim/Metrics.jl")
+# Core split: Dist (sampling/deps), Sim (dxdt/sim), Metrics (Γ, Φ, incomes)
+include("core.jl")
+include("model.jl")
+include("metrics.jl")
 
-# Policy defaults and scenario builders (kept in root for now)
-include(joinpath(@__DIR__, "..", "SED_core.jl"))
+# Policy defaults and scenario builders
+include("scenarios.jl")
 
 # Visualizations (Makie-based)
-include("SED/Plots/Plots.jl")
+include("plots.jl")
 
 # Policy instruments and helpers
-include("SED/Policies/Policies.jl")
+include("policies.jl")
 
 # Re-exports (core)
 export Dist, dist, sample!, astext
