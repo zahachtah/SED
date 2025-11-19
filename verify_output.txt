@@ -1,0 +1,81 @@
+Precompiling SED...
+Info Given SED was explicitly requested, output will be shown live [0K
+[0KERROR: LoadError: ArgumentError: Package SED does not have Random in its dependencies:
+[0K- You may have a partially installed environment. Try `Pkg.instantiate()`
+[0K  to ensure all packages in the environment are installed.
+[0K- Or, if you have SED checked out for development and have
+[0K  added Random as a dependency but haven't updated your primary
+[0K  environment's manifest file, try `Pkg.resolve()`.
+[0K- Otherwise you may need to report an issue with SED
+[0KStacktrace:
+[0K  [1] macro expansion
+[0K    @ ./loading.jl:2299 [inlined]
+[0K  [2] macro expansion
+[0K    @ ./lock.jl:273 [inlined]
+[0K  [3] __require(into::Module, mod::Symbol)
+[0K    @ Base ./loading.jl:2271
+[0K  [4] #invoke_in_world#3
+[0K    @ ./essentials.jl:1089 [inlined]
+[0K  [5] invoke_in_world
+[0K    @ ./essentials.jl:1086 [inlined]
+[0K  [6] require(into::Module, mod::Symbol)
+[0K    @ Base ./loading.jl:2260
+[0K  [7] include(mod::Module, _path::String)
+[0K    @ Base ./Base.jl:562
+[0K  [8] include(x::String)
+[0K    @ SED ~/SED/src/SED.jl:1
+[0K  [9] top-level scope
+[0K    @ ~/SED/src/SED.jl:5
+[0K [10] include
+[0K    @ ./Base.jl:562 [inlined]
+[0K [11] include_package_for_output(pkg::Base.PkgId, input::String, depot_path::Vector{String}, dl_load_path::Vector{String}, load_path::Vector{String}, concrete_deps::Vector{Pair{Base.PkgId, UInt128}}, source::Nothing)
+[0K    @ Base ./loading.jl:2881
+[0K [12] top-level scope
+[0K    @ stdin:6
+[0Kin expression starting at /Users/jonnorberg/SED/src/core.jl:1
+[0Kin expression starting at /Users/jonnorberg/SED/src/SED.jl:1
+[0Kin expression starting at stdin:6
+           ✗ SED
+  0 dependencies successfully precompiled in 3 seconds. 451 already precompiled.
+
+ERROR: LoadError: The following 1 direct dependency failed to precompile:
+
+SED 
+
+Failed to precompile SED [8a6c7107-4e38-4a1b-8a87-1d0b1a7f9c55] to "/Users/jonnorberg/.julia/compiled/v1.11/SED/jl_hMFa3E".
+ERROR: LoadError: ArgumentError: Package SED does not have Random in its dependencies:
+- You may have a partially installed environment. Try `Pkg.instantiate()`
+  to ensure all packages in the environment are installed.
+- Or, if you have SED checked out for development and have
+  added Random as a dependency but haven't updated your primary
+  environment's manifest file, try `Pkg.resolve()`.
+- Otherwise you may need to report an issue with SED
+Stacktrace:
+  [1] macro expansion
+    @ ./loading.jl:2299 [inlined]
+  [2] macro expansion
+    @ ./lock.jl:273 [inlined]
+  [3] __require(into::Module, mod::Symbol)
+    @ Base ./loading.jl:2271
+  [4] #invoke_in_world#3
+    @ ./essentials.jl:1089 [inlined]
+  [5] invoke_in_world
+    @ ./essentials.jl:1086 [inlined]
+  [6] require(into::Module, mod::Symbol)
+    @ Base ./loading.jl:2260
+  [7] include(mod::Module, _path::String)
+    @ Base ./Base.jl:562
+  [8] include(x::String)
+    @ SED ~/SED/src/SED.jl:1
+  [9] top-level scope
+    @ ~/SED/src/SED.jl:5
+ [10] include
+    @ ./Base.jl:562 [inlined]
+ [11] include_package_for_output(pkg::Base.PkgId, input::String, depot_path::Vector{String}, dl_load_path::Vector{String}, load_path::Vector{String}, concrete_deps::Vector{Pair{Base.PkgId, UInt128}}, source::Nothing)
+    @ Base ./loading.jl:2881
+ [12] top-level scope
+    @ stdin:6
+in expression starting at /Users/jonnorberg/SED/src/core.jl:1
+in expression starting at /Users/jonnorberg/SED/src/SED.jl:1
+in expression starting at stdin:
+in expression starting at /Users/jonnorberg/SED/examples/simple_verification.jl:1

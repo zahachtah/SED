@@ -455,30 +455,25 @@ function sample!(d::SEDist, N::Int; context=nothing, random=nothing)
 end
 
 # Helper for context sampling
-function sample!(context::NamedTuple, N::Int; random=nothing)
-    # We need to sample in order of dependencies.
-    # But wait, the dependency graph logic was in core.jl too.
-    # We need to preserve that.
-
-    # For now, naive iteration (assuming order is correct or handled externally)
-    # BUT, the old code had `dependency_graph` and topological sort.
-    # We MUST reimplement that.
-
-    # ... (Dependency Graph Logic) ...
+function sample!(context::NamedTuple, N::Int; random=nothing, force=true)
+    # Topological sort
+    # We need to sample in order so dependencies are ready.
     # Reusing the logic from old core.jl but adapted to new struct
 
     order = get_dependency_order(context)
     for k in order
         v = context[k]
         if v isa SEDist
-            sample!(v, N; context=context, random=random)
+            if force || isempty(v.data)
+                sample!(v, N; context=context, random=random)
+            end
         end
     end
 
     return context
 end
 
-function sample!(context::NamedTuple; N::Union{Nothing,Int}=nothing, random::Union{Nothing,Bool}=nothing)
+function sample!(context::NamedTuple; N::Union{Nothing,Int}=nothing, random::Union{Nothing,Bool}=nothing, force=true)
     if isnothing(N)
         if haskey(context, :N)
             N = context.N
@@ -486,7 +481,7 @@ function sample!(context::NamedTuple; N::Union{Nothing,Int}=nothing, random::Uni
             error("Provide N=... or include :N in the context NamedTuple")
         end
     end
-    return sample!(context, N; random=random)
+    return sample!(context, N; random=random, force=force)
 end
 
 # Dependency Graph Implementation

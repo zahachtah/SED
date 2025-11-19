@@ -2,17 +2,53 @@ using Statistics
 
 # Open Access policy primitives and scenario builders moved here to keep SED_core.jl focused
 
-function γ(x, p, t)
-    return hasproperty(p, :w̃) && hasproperty(p.w̃, :data) ? p.w̃.data : p.w̃
+# Base primitives
+base_γ(x, p, t) = hasproperty(p, :w̃) && hasproperty(p.w̃, :data) ? p.w̃.data : p.w̃
+base_μ(x, p, t) = hasproperty(p, :ū) && hasproperty(p.ū, :data) ? p.ū.data : p.ū
+base_ϕ(dx, x, p, t) = nothing
+
+# Master functions that iterate over policies
+function master_γ(x, p, t)
+    val = base_γ(x, p, t)
+    if hasproperty(p, :policies)
+        for pol in p.policies
+            if hasproperty(pol, :γ)
+                val = pol.γ(val, x, p, t)
+            end
+        end
+    end
+    return val
 end
-function μ(x, p, t)
-    return hasproperty(p, :ū) && hasproperty(p.ū, :data) ? p.ū.data : p.ū
+
+function master_μ(x, p, t)
+    val = base_μ(x, p, t)
+    if hasproperty(p, :policies)
+        for pol in p.policies
+            if hasproperty(pol, :μ)
+                val = pol.μ(val, x, p, t)
+            end
+        end
+    end
+    return val
 end
-ϕ(dx, x, p, t) = nothing
+
+function master_ϕ(dx, x, p, t)
+    base_ϕ(dx, x, p, t)
+    if hasproperty(p, :policies)
+        for pol in p.policies
+            if hasproperty(pol, :ϕ)
+                pol.ϕ(dx, x, p, t)
+            end
+        end
+    end
+end
+
 regulate(p, f) = p
 
 function scenario(p; kwargs...)
-    temp = (; p..., policy="Open Access", γ=γ, μ=μ, ϕ=ϕ, regulate=regulate, kwargs...)
+    # Initialize with empty policies list and master functions
+    temp = (; p..., policy="Open Access", policies=Any[],
+        γ=master_γ, μ=master_μ, ϕ=master_ϕ, regulate=regulate, kwargs...)
     return (; temp...)
 end
 
