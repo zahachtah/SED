@@ -290,7 +290,7 @@ If `opportunities` is not present in the scenario, this falls back to `w̃`.
 """
 function exclusive_use_rights_by_opportunities_kit(; selector=(opportunities, n) -> (1:n),
     label="Exclusive Use Rights (opportunities)")
-    γf(x, p, t) = p.w̃ .+ p.R
+    γf(val, x, p, t) = val .+ p.R
     getdata(v) = hasproperty(v, :data) ? v.data : v
     function regulatef(s, f)
         N = s.N

@@ -53,32 +53,36 @@ function scenario(p; kwargs...)
 end
 
 function base(; N=100, sigma=0.0, random=false)
-    (; N,
+    p = (; N,
         α=0.1,
         w̃=dist(min=0.1, max=1.0, distribution=LogNormal, random=random),
         ū=dist(mean=1.0, sigma=sigma, normalize=true, random=random),
-        R=ones(N), γ, μ, ϕ, regulate, policy="Open Access")
+        R=ones(N))
+    return scenario(p)
 end
 
 function high_impact(; N=100, sigma=0.0)
-    (; N, α=0.1,
+    p = (; N, α=0.1,
         w̃=dist(min=0.01, max=1.0, distribution=LogNormal),
         ū=dist(mean=2.0, sigma=sigma, normalize=true),
-        R=ones(N), γ, μ, ϕ, regulate, policy="Open Access")
+        R=ones(N))
+    return scenario(p)
 end
 
 function low_impact(; N=100, sigma=0.0)
-    (; N, α=0.1,
+    p = (; N, α=0.1,
         w̃=dist(min=0.01, max=0.6, distribution=LogNormal),
         ū=dist(mean=0.5, sigma=sigma, normalize=true),
-        R=ones(N), γ, μ, ϕ, regulate, policy="Open Access")
+        R=ones(N))
+    return scenario(p)
 end
 
 function high_incentives(; N=100, sigma=0.0)
-    (; N, α=0.1,
+    p = (; N, α=0.1,
         w̃=dist(min=0.3, max=0.7, distribution=LogNormal),
         ū=dist(mean=1.0, sigma=sigma, normalize=true),
-        R=ones(N), γ, μ, ϕ, regulate, policy="Open Access")
+        R=ones(N))
+    return scenario(p)
 end
 
 # Minimal policy functions retained for reference; legacy implementation archived in archive/legacy_dist_block.jl
