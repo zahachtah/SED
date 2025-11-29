@@ -1,4 +1,6 @@
 using Statistics: mean
+using CairoMakie
+using ColorSchemes
 using Printf: @sprintf
 
 getdata_or_values(v) = hasproperty(v, :data) ? v.data : v

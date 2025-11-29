@@ -1,0 +1,9 @@
+┌ Warning: Using arrays or dicts to store parameters of different types can hurt performance.
+│ Consider using tuples instead.
+└ @ SciMLBase ~/.julia/packages/SciMLBase/YE7xF/src/performance_warnings.jl:33
+┌ Warning: At t=0.008030900643331942, dt was forced below floating point epsilon 1.734723475976807e-18, and step error estimate = 1.3385202227889905. Aborting. There is either an error in your model specification or the true solution is unstable (or the true solution can not be represented in the precision of Float64).
+└ @ SciMLBase ~/.julia/packages/SciMLBase/YE7xF/src/integrator_interface.jl:657
+Running simulation...
+Simulation successful. Retcode: Success
+Test Summary:                   | Total   Time
+Solver Instability Reproduction |     0  37.4s

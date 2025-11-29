@@ -1,0 +1,8 @@
+┌ Warning: Using arrays or dicts to store parameters of different types can hurt performance.
+│ Consider using tuples instead.
+└ @ SciMLBase ~/.julia/packages/SciMLBase/YE7xF/src/performance_warnings.jl:33
+Default R std: 8.717313461872983e-19
+Historical R std: 0.0021110016546037453
+Historical Use Rights verification passed.
+Test Summary:                      | Pass  Total  Time
+Historical Use Rights Verification |    2      2  4.0s

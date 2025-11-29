@@ -43,6 +43,11 @@ function master_ϕ(dx, x, p, t)
     end
 end
 
+# Aliases for backward compatibility and exports
+const γ = master_γ
+const μ = master_μ
+const ϕ = master_ϕ
+
 regulate(p, f) = p
 
 function scenario(p; kwargs...)

@@ -30,32 +30,52 @@ end
 # ===== Tradable Use Rights =====
 
 function regulate_tradable_use_rights(s, f)
-    # Default allocation: equal shares of allowed effort or yield
-    R = fill(f == 0 ? 1.0 : (1 - Float64(f)) / s.N, s.N)
+    # Always solve OA to get baseline for relative reduction
+    # This ensures f acts as "% reduction from baseline", making regulation binding immediately
+    # and producing the expected hump-shaped revenue curve.
+    # Create OA scenario by clearing policies to avoid accessing missing R or applying regulation
+    # Explicitly reset functions to OA defaults to avoid using TUR dynamics
+    s_oa = change(s, policy="Open Access", policies=Any[],
+        γ=γ, μ=μ, ϕ=ϕ, regulate=regulate)
 
-    if haskey(s, :historical_use_rights)
-        # Solve OA once to estimate historical baselines
-        u0 = zeros(s.N)
-        y0 = 1.0
-        ϕ0 = 0.0
-        oaprob = ODEProblem(dxdt, [u0; y0; ϕ0], (0.0, 1000.0), s)
-        oasol = solve(oaprob, SSPRK432(; stage_limiter!), callback=TerminateSteadyState(1e-6, 1e-4))
-        if s.policy_target == :yield
-            hist_u = oasol[1:s.N, end-1]
-            hist_y = oasol[s.N+1, end-1]
-            hist_yield = hist_u .* hist_y
-            total_hist_yield = sum(hist_yield)
-            if total_hist_yield > 0
-                R = hist_yield .* (1 - f) ./ total_hist_yield
-            end
-        else
-            hur = oasol[1:s.N, end-1] .> 0.0
-            denom = sum(hur)
-            if denom > 0
-                R = hur .* (1 - f) ./ denom
-            end
+    # Robust OA solver (duplicating sim logic to avoid scope issues)
+    u0_oa = zeros(s.N)
+    y0_oa = 1.0
+    # OA only needs N+1 states
+    oaprob = ODEProblem(dxdt, [u0_oa; y0_oa], (0.0, 1000.0), s_oa)
+
+    function _solve_oa_robust(prob)
+        try
+            return solve(prob, SSPRK432(; stage_limiter!), callback=TerminateSteadyState(1e-6, 1e-4))
+        catch
         end
+        try
+            return solve(prob, Rosenbrock23(), callback=TerminateSteadyState(1e-6, 1e-4))
+        catch
+        end
+        return solve(prob, Tsit5(), callback=TerminateSteadyState(1e-6, 1e-4))
     end
+
+    oasol = _solve_oa_robust(oaprob)
+
+    println("TUR Regulate Debug:")
+    println("  OA Retcode: ", oasol.retcode)
+    println("  OA Total Effort: ", sum(oasol[1:s.N, end-1]))
+    println("  OA Total Yield: ", sum(oasol[1:s.N, end-1] .* oasol[s.N+1, end-1]))
+
+    if s.policy_target == :yield
+        hist_u = oasol[1:s.N, end-1]
+        hist_y = oasol[s.N+1, end-1]
+        hist_yield = hist_u .* hist_y
+        # Relative Quota: Reduce yield by f% from baseline
+        R = hist_yield .* (1.0 - Float64(f))
+    else
+        # Effort target
+        hur = oasol[1:s.N, end-1]
+        # Relative Quota: Reduce effort by f% from baseline
+        R = hur .* (1.0 - Float64(f))
+    end
+
     # attach income_extra_fun to reflect trade revenues at incomes time
     function _tur_income_extra(x, p, t)
         u = x[1:p.N]
@@ -74,20 +94,12 @@ function γ_tradable_use_rights(val, x, p, t)
 end
 
 function ϕ_tradable_use_rights(dx, x, p, t)
-    # Supply definition note:
-    # We intentionally use aggregate clamping: clamp(sum(R - usage), 0, Inf).
-    # Rationale: in a pooled rights market, net slack (after offsetting
-    # overuse and underuse across agents) should determine market supply.
-    # Element-wise clamping (sum(clamp.(...))) counts any local underuse as
-    # supply even if other agents overuse more, which tends to misprice
-    # scarcity and destabilize the price dynamics.
-    # This aggregate form matches legacy behavior and improves stability.
     supply = if p.policy_target == :yield
         # supply in yield units
-        clamp(sum(p.R .- (x[1:p.N] .* x[p.N+1])), 0.0, Inf)
+        sum(clamp.(p.R .- (x[1:p.N] .* x[p.N+1]), 0.0, Inf))
     elseif p.policy_target == :effort
         # supply in effort units
-        max(0.0, sum(p.R .- x[1:p.N]))
+        sum(clamp.(p.R .- x[1:p.N], 0.0, Inf))
     else
         0.0
     end
@@ -103,18 +115,31 @@ function ϕ_tradable_use_rights(dx, x, p, t)
     end
     # Socioeconomic buying power weighting based on opportunities (AIO)
     bias = hasproperty(p, :buyer_bias) ? Float64(getfield(p, :buyer_bias)) : 0.0
-    if bias != 0.0 && hasproperty(p, :opportunities)
-        opp = getfield(p, :opportunities)
-        oppv = hasproperty(opp, :data) ? opp.data : opp
-        if length(oppv) == p.N
-            omin = minimum(oppv)
-            omax = maximum(oppv)
-            rng = omax - omin
-            if rng > 0
-                norm = (oppv .- omin) ./ rng             # [0,1]
-                s = 2 .* (norm .- 0.5)                   # [-1,1]
-                wfull = clamp.(1 .+ bias .* s, 0.001, Inf)
-                ind_demand = ind_demand .* wfull[id]
+    if bias != 0.0
+        # Determine which field to use for opportunities
+        opp_key = hasproperty(p, :opportunity_key) ? getfield(p, :opportunity_key) : :opportunities
+
+        # Try to get the data
+        opp = nothing
+        if hasproperty(p, opp_key)
+            opp = getfield(p, opp_key)
+        elseif opp_key == :opportunities && hasproperty(p, :w̃)
+            # Fallback: if looking for default :opportunities but missing, use :w̃ (incentives) as proxy
+            opp = getfield(p, :w̃)
+        end
+
+        if opp !== nothing
+            oppv = hasproperty(opp, :data) ? opp.data : opp
+            if length(oppv) == p.N
+                omin = minimum(oppv)
+                omax = maximum(oppv)
+                rng = omax - omin
+                if rng > 0
+                    norm = (oppv .- omin) ./ rng             # [0,1]
+                    s = 2 .* (norm .- 0.5)                   # [-1,1]
+                    wfull = clamp.(1 .+ bias .* s, 0.001, Inf)
+                    ind_demand = ind_demand .* wfull[id]
+                end
             end
         end
     end
@@ -146,7 +171,7 @@ end
 function μ_protected_area_two_pop(val, x, p, t)
     y_u = x[p.N+1]
     y_p = x[p.N+2]
-    r_s_local = ((1.0 - p.regulation) / p.regulation) * p.m * (y_p - y_u) / y_u
+    r_s_local = ((1.0 - p.regulation) / p.regulation) * p.m * (y_p - y_u) / max(y_u, 1e-6)
     return val .* (1 .+ r_s_local) .^ (-1)
 end
 
@@ -175,7 +200,7 @@ function yₚ(y::Float64, f_p::Float64, m::Float64; K::Float64=1.0, r::Float64=1
 end
 
 function rₛ(y, fₚ, m; K::Float64=1.0, r::Float64=1.0, xK::Float64=0.0, xr::Float64=0.0)
-    (fₚ / (1 - fₚ) * m * (yₚ(y, fₚ, m; r, K, xK, xr) .- y)) ./ y
+    (fₚ / (1 - fₚ) * m * (yₚ(y, fₚ, m; r, K, xK, xr) .- y)) ./ max.(y, 1e-6)
 end
 
 function μ_protected_area(val, x, p, t)
@@ -249,6 +274,12 @@ function with_policy(s; γ=nothing, μ=nothing, ϕ=nothing, regulate=nothing,
     !isempty(propertynames(policy_meta)) && (out = (; out..., policy_meta))
     policy !== nothing && (out = (; out..., policy))
 
+    # Ensure master functions are present if missing (e.g. if s is a raw NamedTuple)
+    !hasproperty(out, :γ) && (out = (; out..., γ=master_γ))
+    !hasproperty(out, :μ) && (out = (; out..., μ=master_μ))
+    !hasproperty(out, :ϕ) && (out = (; out..., ϕ=master_ϕ))
+
+
     return out
 end
 
@@ -313,14 +344,14 @@ end
 Return a NamedTuple policy bundle for tradable use rights. Attaches γ, ϕ,
 and regulate; `regulate` also attaches `income_extra_fun` for trade income.
 """
-function tradable_use_rights_kit(; target=:effort, market_rate=0.05, buyer_bias::Float64=0.0, label="Tradable Use Rights")
+function tradable_use_rights_kit(; target=:effort, market_rate=0.05, buyer_bias::Float64=0.0, opportunity_key=:opportunities, historical_use_rights::Bool=false, label="Tradable Use Rights")
     γf = γ_tradable_use_rights
     ϕf = ϕ_tradable_use_rights
     function regulatef(s, f)
-        s2 = change(s, policy_target=target, market_rate=market_rate, buyer_bias=buyer_bias)
+        s2 = change(s, policy_target=target, market_rate=market_rate, buyer_bias=buyer_bias, opportunity_key=opportunity_key, historical_use_rights=historical_use_rights)
         regulate_tradable_use_rights(s2, f)
     end
-    (; γ=γf, ϕ=ϕf, regulate=regulatef, label, policy_meta=(; target, market_rate, buyer_bias), policy="Tradable Use Rights")
+    (; γ=γf, ϕ=ϕf, regulate=regulatef, label, policy_meta=(; target, market_rate, buyer_bias, opportunity_key, historical_use_rights), policy="Tradable Use Rights")
 end
 
 """

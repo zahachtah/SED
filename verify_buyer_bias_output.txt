@@ -1,0 +1,34 @@
+Precompiling SED...
+  81178.8 ms  ✓ SED
+  1 dependency successfully precompiled in 91 seconds. 451 already precompiled.
+┌ Warning: Using arrays or dicts to store parameters of different types can hurt performance.
+│ Consider using tuples instead.
+└ @ SciMLBase ~/.julia/packages/SciMLBase/YE7xF/src/performance_warnings.jl:33
+ERROR: LoadError: Some tests did not pass: 0 passed, 1 failed, 1 errored, 0 broken.
+in expression starting at /Users/jonnorberg/SED/examples/verify_buyer_bias.jl:4
+Buyer Bias Verification: Test Failed at /Users/jonnorberg/SED/examples/verify_buyer_bias.jl:20
+  Expression: sol1.retcode == :Success
+   Evaluated: SciMLBase.ReturnCode.Success == Success
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.6+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:680 [inlined]
+ [2] macro expansion
+   @ ~/SED/examples/verify_buyer_bias.jl:20 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.6+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1709 [inlined]
+ [4] top-level scope
+   @ ~/SED/examples/verify_buyer_bias.jl:6
+Buyer Bias Verification: Error During Test at /Users/jonnorberg/SED/examples/verify_buyer_bias.jl:4
+  Got exception outside of a @test
+  UndefVarError: `change` not defined in `Main`
+  Suggestion: check for spelling errors or missing imports.
+  Stacktrace:
+   [1] macro expansion
+     @ ~/SED/examples/verify_buyer_bias.jl:26 [inlined]
+   [2] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.6+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1709 [inlined]
+   [3] top-level scope
+     @ ~/SED/examples/verify_buyer_bias.jl:6
+Test Summary:           | Fail  Error  Total   Time
+Buyer Bias Verification |    1      1      2  10.5s

@@ -3,15 +3,11 @@ using Colors
 using ColorSchemes
 using LinearAlgebra
 
-const _Γ = Γ
-const _Φ = Φ
-const _sim = sim
-const _dependency_graph = dependency_graph
-const _incomes = incomes
+
 
 function Γ_plot!(axis, sol; color=:darkorange, linewidth=3, t=0.0)
     y = range(0.0, stop=1.0, length=100)
-    lines!(axis, y, _Γ.(y, Ref(sol.prob.p), x=sol.u[end-1]; t); color, linewidth)
+    lines!(axis, y, Γ.(y, Ref(sol.prob.p), x=sol.u[end-1]; t); color, linewidth)
 end
 
 include("regulation_scan_plot.jl")
@@ -49,7 +45,7 @@ function target_plot!(axis, sol; color=:darkorange, linestyle=:dash, linewidth=3
     y = range(0.0, stop=1.0, length=100)
     if haskey(scenario, :policy_target)
         Y = scenario.policy_target == :effort ? ones(length(y)) : y
-        lines!(axis, y, _Φ.(1 .- (1 - scenario.regulation) ./ Y, Ref(scenario)); color, linewidth, linestyle)
+        lines!(axis, y, Φ.(1 .- (1 - scenario.regulation) ./ Y, Ref(scenario)); color, linewidth, linestyle)
     end
 end
 
@@ -66,7 +62,7 @@ function dependency_graph_plot!(
     markersize=28, fontsize=12, figsize=(700, 450),
     label_colors::Union{Nothing,Dict{Symbol,Any}}=nothing
 )
-    g = _dependency_graph(s)
+    g = dependency_graph(s)
     alpha_syms = Set{Symbol}((:α, :alpha))
     nodes = [k for k in g.nodes if !(k in alpha_syms)]
     edges_f = Dict{Symbol,Vector{Symbol}}()
@@ -169,16 +165,16 @@ function phase_plot!(axis, sol; show_trajectory=false, show_target=false, open_a
     limits!(axis, 0.0, 1.0, 0.0, 1.0)
     y = range(0.0, stop=1.0, length=100)
     if show_oa
-        oa = change(scenario, policy="Open Access", γ=γ, μ=μ, regulate=regulate, ϕ=ϕ)
-        oasol = _sim(oa)
-        lines!(axis, y, _Γ.(y, Ref(oa), x=sol.u[end-1]), color=open_access_color, linewidth=3)
-        lines!(axis, y, _Φ.(y, Ref(oa)), color=open_access_color, linewidth=1)
+        oa = change(scenario, policy="Open Access", γ=master_γ, μ=master_μ, regulate=regulate, ϕ=master_ϕ, policies=Any[])
+        oasol = sim(oa)
+        lines!(axis, y, Γ.(y, Ref(oa), x=sol.u[end-1]), color=open_access_color, linewidth=3)
+        lines!(axis, y, Φ.(y, Ref(oa)), color=open_access_color, linewidth=1)
     end
-    lines!(axis, y, _Γ.(y, Ref(scenario), x=sol.u[end-1]; t), color=incentive_line_color, linewidth=3)
-    lines!(axis, y, _Φ.(y, Ref(scenario); t), color=impact_line_color, linewidth=1)
+    lines!(axis, y, Γ.(y, Ref(scenario), x=sol.u[end-1]; t), color=incentive_line_color, linewidth=3)
+    lines!(axis, y, Φ.(y, Ref(scenario); t), color=impact_line_color, linewidth=1)
     if show_target && haskey(scenario, :policy_target)
         Y = scenario.policy_target == :effort ? ones(length(y)) : y
-        lines!(axis, y, _Φ.(1 .- (1 - scenario.regulation) ./ Y, Ref(scenario)), color=:darkorange, linestyle=:dot)
+        lines!(axis, y, Φ.(1 .- (1 - scenario.regulation) ./ Y, Ref(scenario)), color=:darkorange, linestyle=:dot)
     end
     if show_trajectory
         lines!(axis,
@@ -199,7 +195,7 @@ function phase_plot(sol)
 end
 
 function incomes_plot!(ax, sol; order=false, sort_by_incentives=false, color=:darkorange, dimensional::Bool=false, resource_incomes=true)
-    inc = _incomes(sol)
+    inc = incomes(sol)
     res = inc.resource
     wage = inc.wages
     trd = inc.trade

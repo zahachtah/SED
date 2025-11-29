@@ -78,12 +78,14 @@ function sim(s; u0=zeros(s.N), y0=1.0, ϕ0=0.0, regulation=0.0, start_from_OA=fa
     function _try_solve(prob)
         # 1) SSPRK with limiter
         try
-            return solve(prob, SSPRK432(; stage_limiter!), callback=TerminateSteadyState(1e-6, 1e-4))
+            sol = solve(prob, SSPRK432(; stage_limiter!), callback=TerminateSteadyState(1e-6, 1e-4))
+            return sol
         catch
         end
         # 2) Stiff fallback
         try
-            return solve(prob, Rosenbrock23(), callback=TerminateSteadyState(1e-6, 1e-4))
+            sol = solve(prob, Rosenbrock23(), callback=TerminateSteadyState(1e-6, 1e-4))
+            return sol
         catch
         end
         # 3) Non-stiff fallback

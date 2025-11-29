@@ -1,0 +1,9 @@
+Precompiling SED...
+  11175.7 ms  ✓ SED
+  1 dependency successfully precompiled in 14 seconds. 451 already precompiled.
+AIO Mean: 0.0035639368964070044
+AIO Min: 0.00013968907399390364
+AIO Max: 0.022449858892592146
+AIO verification passed.
+Test Summary:         | Pass  Total  Time
+AIO Constant Data Fix |    2      2  0.8s

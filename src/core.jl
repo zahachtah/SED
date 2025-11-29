@@ -56,6 +56,72 @@ end
 
 change(params::NamedTuple; kwargs...) = (; params..., kwargs...)
 
+# --- Property Access ---
+
+function Base.getproperty(d::SEDist, sym::Symbol)
+    if hasfield(SEDist, sym)
+        return getfield(d, sym)
+    elseif sym === :mean
+        return mean(d)
+    elseif sym === :sigma || sym === :std
+        return std(d)
+    else
+        # Forward to source? Or error?
+        # Let's error for now to avoid confusion, unless we want to forward everything.
+        error("type SEDist has no field $sym")
+    end
+end
+
+# --- Statistics Forwarding ---
+
+mean(s::RandomSource) = mean(s.dist)
+std(s::RandomSource) = std(s.dist)
+mean(s::DataSource) = mean(s.data)
+std(s::DataSource) = std(s.data)
+mean(s::ZeroSource) = 0.0
+std(s::ZeroSource) = 0.0
+
+mean(d::SEDist) = mean(d.source)
+std(d::SEDist) = std(d.source)
+
+# --- Display ---
+
+function Base.show(io::IO, s::RandomSource)
+    print(io, "RandomSource(", s.dist, ")")
+end
+
+function Base.show(io::IO, s::DataSource)
+    print(io, "DataSource(n=", length(s.data), ")")
+end
+
+function Base.show(io::IO, s::ZeroSource)
+    print(io, "ZeroSource")
+end
+
+function Base.show(io::IO, d::NoDependency)
+    print(io, "NoDependency")
+end
+
+function Base.show(io::IO, d::FunctionalDependency)
+    print(io, "FunctionalDependency(", d.expr_str, ")")
+end
+
+function Base.show(io::IO, d::SEDist)
+    print(io, "SEDist(", d.source, ", ", d.dependency, ")")
+end
+
+function Base.show(io::IO, ::MIME"text/plain", d::SEDist)
+    println(io, "SEDist:")
+    println(io, "  Source: ", d.source)
+    println(io, "  Dependency: ", d.dependency)
+    if !isempty(d.data)
+        println(io, "  Data: ", length(d.data), " elements")
+        # print(io, "    ", d.data) # Optional: show data preview
+    else
+        println(io, "  Data: (empty)")
+    end
+end
+
 # --- Constructors / Factory ---
 
 # Helper to build specific distributions
@@ -353,6 +419,22 @@ function dist(;
     min_val = get(kw, :min, nothing)
     max_val = get(kw, :max, nothing)
 
+    # Heuristic: If dependency is present AND distribution used min/max for construction,
+    # assume min/max were for source parameterization, not result clamping.
+    if !isnothing(dep_obj) && !(dep_obj isa NoDependency)
+        if !isnothing(distribution)
+            DType = distribution isa Type ? distribution : typeof(distribution)
+            if DType <: LogNormal || DType <: Uniform
+                min_val = nothing
+                max_val = nothing
+            end
+        elseif haskey(kw, :min) || haskey(kw, :max)
+            # Default was Uniform using min/max
+            min_val = nothing
+            max_val = nothing
+        end
+    end
+
     if !isnothing(min_val)
         min_val = Float64(min_val)
     end
@@ -558,16 +640,7 @@ Base.setindex!(d::SEDist, v, i...) = setindex!(d.data, v, i...)
 Base.similar(d::SEDist, T::Type, dims::Dims) = similar(d.data, T, dims) # Simplified
 Base.iterate(d::SEDist, state...) = iterate(d.data, state...)
 
-# --- Show ---
-function Base.show(io::IO, d::SEDist)
-    print(io, "SEDist(")
-    print(io, typeof(d.source))
-    if !(d.dependency isa NoDependency)
-        print(io, " -> ", d.dependency.expr_str)
-    end
-    print(io, ", N=", length(d.data))
-    print(io, ")")
-end
+
 
 # --- Legacy / Helpers ---
 # Re-export what's needed

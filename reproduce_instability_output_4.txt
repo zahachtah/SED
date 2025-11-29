@@ -1,0 +1,27 @@
+┌ Warning: Using arrays or dicts to store parameters of different types can hurt performance.
+│ Consider using tuples instead.
+└ @ SciMLBase ~/.julia/packages/SciMLBase/YE7xF/src/performance_warnings.jl:33
+┌ Warning: At t=0.007941588652985016, dt was forced below floating point epsilon 1.734723475976807e-18, and step error estimate = 1.1033732726113412. Aborting. There is either an error in your model specification or the true solution is unstable (or the true solution can not be represented in the precision of Float64).
+└ @ SciMLBase ~/.julia/packages/SciMLBase/YE7xF/src/integrator_interface.jl:657
+┌ Warning: At t=0.007941588652985016, dt was forced below floating point epsilon 1.734723475976807e-18, and step error estimate = 1.1033732726113412. Aborting. There is either an error in your model specification or the true solution is unstable (or the true solution can not be represented in the precision of Float64).
+└ @ SciMLBase ~/.julia/packages/SciMLBase/YE7xF/src/integrator_interface.jl:657
+┌ Warning: At t=0.007941588652985016, dt was forced below floating point epsilon 1.734723475976807e-18, and step error estimate = 1.1033732726113412. Aborting. There is either an error in your model specification or the true solution is unstable (or the true solution can not be represented in the precision of Float64).
+└ @ SciMLBase ~/.julia/packages/SciMLBase/YE7xF/src/integrator_interface.jl:657
+Min w: 0.005788598363206443
+Max w: 0.28570111842482004
+Negative w count: 0
+Running OA simulation...
+OA Retcode: Success
+Running simulation (Original)...
+Original Retcode: Success
+Original t_end: 1000.0
+
+Running simulation (Lower Market Rate)...
+Lower Rate Retcode: Success
+Lower Rate t_end: 1000.0
+
+Running simulation (No Bias)...
+No Bias Retcode: Success
+No Bias t_end: 1000.0
+Test Summary:                   | Total   Time
+Solver Instability Reproduction |     0  44.9s

@@ -2,17 +2,28 @@ using Statistics
 
 function regulation_scan(p; m=100, kR=0.5, kT=1.0, kG=-0.2, kE=0.0, kI=0.0, warmstart::Symbol=:chain)
     r = range(0.0, stop=1.0 - 1.0 / m, length=m)
-    RR = zeros(m); WR = zeros(m); TR = zeros(m); ToR = zeros(m)
-    GI = zeros(m); EH = zeros(m); RI = zeros(m); Gov = zeros(m)
+    RR = zeros(m)
+    WR = zeros(m)
+    TR = zeros(m)
+    ToR = zeros(m)
+    GI = zeros(m)
+    EH = zeros(m)
+    RI = zeros(m)
+    Gov = zeros(m)
     oau = zeros(p.N)
-    x0 = zeros(p.N + 2); x0[p.N+1] = 1.0
-    sols = zeros(m, p.N); incdist = zeros(m, p.N)
+    x0 = zeros(p.N + 2)
+    x0[p.N+1] = 1.0
+    sols = zeros(m, p.N)
+    incdist = zeros(m, p.N)
     prev_sol = nothing
     if warmstart == :oa_once
         u0, y0_extra... = sim_init(p; from=:oa)
         x0 = vcat(u0, y0_extra...)
     end
     for (j, i) in enumerate(r)
+        # Debug logging
+        pol_label = hasproperty(p, :label) ? p.label : (hasproperty(p, :policy) ? p.policy : "Unknown")
+
         if warmstart == :chain && prev_sol !== nothing
             policystr = hasproperty(p, :policy) ? p.policy : ""
             # pull previous steady state safely and clamp extra states nonnegative
@@ -42,22 +53,30 @@ function regulation_scan(p; m=100, kR=0.5, kT=1.0, kG=-0.2, kE=0.0, kI=0.0, warm
             sol = sim(p, regulation=i, t_end=1000)
         end
         # Fallback: if integration aborted (retcode not success), re-run cold
-        local success = true
+        local success = false
         try
             success = (getfield(sol, :retcode) == SciMLBase.ReturnCode.Success)
         catch
-            success = true
+            success = false
         end
-        if success
-            prev_sol = sol
-        else
+
+        if !success
+            println("WARNING: Simulation failed/unstable for policy '$pol_label' at f=$i. Retrying cold...")
             sol = sim(p, regulation=i, t_end=1000)
             prev_sol = nothing
+        else
+            prev_sol = sol
         end
-        if j == 1; oau = sol[1:p.N, end-1]; end
+        if j == 1
+            oau = sol[1:p.N, end-1]
+        end
         inc = incomes(sol.u[end-1], sol.prob.p)
-        RR[j] = sum(inc.resource); WR[j] = sum(inc.wages); TR[j] = sum(inc.trade)
-        ToR[j] = sum(inc.total); GI[j] = inc.gini; EH[j] = inc.ecological
+        RR[j] = sum(inc.resource)
+        WR[j] = sum(inc.wages)
+        TR[j] = sum(inc.trade)
+        ToR[j] = sum(inc.total)
+        GI[j] = inc.gini
+        EH[j] = inc.ecological
         regimpact = abs.(oau .- sol[1:p.N, end-1])
         RI[j] = sum(regimpact)
         # Cobb–Douglas style governance on aggregate metrics with safe exponents
@@ -68,13 +87,19 @@ function regulation_scan(p; m=100, kR=0.5, kT=1.0, kG=-0.2, kE=0.0, kI=0.0, warm
         Eval = EH[j]
         Isum = RI[j]
         # Safe power for nonnegative inputs (avoid complex/NaN from negatives or zeros)
-        _sp(x, k) = (max(x, eps()) ^ k)
+        _sp(x, k) = (max(x, eps())^k)
         Gov[j] = _sp(Rsum, kR) * _sp(Tsum, kT) * _sp(Gval, kG) * _sp(Eval, kE) * _sp(Isum, kI)
         sols[j, :] = sol.u[end-1][1:p.N] ./ p.ū
         incdist[j, :] = inc.total
     end
-    oRR = argmax(RR); oWR = argmax(WR); oTR = argmax(TR); oToR = argmax(ToR)
-    oGI = argmin(GI); oEH = argmax(EH); oRI = argmax(EH); oGov = argmax(Gov)
+    oRR = argmax(RR)
+    oWR = argmax(WR)
+    oTR = argmax(TR)
+    oToR = argmax(ToR)
+    oGI = argmin(GI)
+    oEH = argmax(EH)
+    oRI = argmax(EH)
+    oGov = argmax(Gov)
     return (; RR, WR, TR, ToR, GI, EH, RI, Gov=Gov ./ 100.0, r, oRR, oWR, oTR, oToR, oGI, oEH, oRI, oGov, sols, incdist)
 end
 

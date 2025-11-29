@@ -49,6 +49,7 @@ try
 
             # Basic check: check if results are finite
             @test all(isfinite.(sol))
+            SED.phase_plot(sol)
 
             # Check if policy hooks were called (hard to check directly, but if it ran without error it's good sign)
             # We can check if γ or μ changed compared to base if we want, but that's complex.
