@@ -1,153 +1,185 @@
-# Adapted policy instrument implementations compatible with current Dist/sim APIs.
+# Centralized Policy Implementation
+# Replaces the complex "Kit" system with straightforward dispatch.
 
 using OrdinaryDiffEq
 using DiffEqCallbacks: TerminateSteadyState
+using Random
 
-export with_policy, exclusive_use_rights_kit, exclusive_use_rights_by_opportunities_kit,
-    tradable_use_rights_kit, protected_area_kit, economic_incentives_kit, development_kit
+export cost, limit, dynamics, regulate
 
-# ===== Open Access defaults are defined in core (γ, μ, ϕ, regulate) =====
+# =========================================================================================
+# Dispatch Functions (Called by Master Functions in scenarios.jl)
+# =========================================================================================
 
-# ===== Assigned/Exclusive Use Rights =====
-
-function γ_exclusive_use_rights(val, x, p, t)
-    return val .+ p.R
+function cost(val, x, p, t)
+    pol = p.policy
+    if pol == "Tradable Use Rights"
+        return cost_tur(val, x, p, t)
+    elseif pol == "Exclusive Use Rights"
+        return cost_eur(val, x, p, t)
+    elseif pol == "Protected Area"
+        return cost_pa(val, x, p, t)
+    elseif pol == "Protected Area Two Pop"
+        return val # PA Two Pop only affects dynamics and limit
+    elseif pol == "Economic Incentives"
+        return cost_ei(val, x, p, t)
+    elseif pol == "Development"
+        return cost_dev(val, x, p, t)
+    end
+    return val
 end
 
-function regulate_exclusive_use_rights(scenario, f)
-    R = zeros(scenario.N)
-    n = Int64(round(f * scenario.N))
-    if n > 0
-        if haskey(scenario, :reverse) && scenario.reverse
-            R[max(1, length(R) - n + 1):end] .= 1.0
+function limit(val, x, p, t)
+    pol = p.policy
+    if pol == "Protected Area"
+        return limit_pa(val, x, p, t)
+    elseif pol == "Protected Area Two Pop"
+        return limit_pa_two_pop(val, x, p, t)
+    elseif pol == "Economic Incentives"
+        return limit_ei(val, x, p, t)
+    elseif pol == "Development"
+        return limit_dev(val, x, p, t)
+    end
+    return val
+end
+
+function dynamics(dx, x, p, t)
+    pol = p.policy
+    if pol == "Tradable Use Rights"
+        dynamics_tur(dx, x, p, t)
+    elseif pol == "Protected Area Two Pop"
+        dynamics_pa_two_pop(dx, x, p, t)
+    end
+end
+
+# =========================================================================================
+# Regulation Logic (Called by sim() to set up the scenario before solving)
+# =========================================================================================
+
+function regulate(s, f)
+    pol = s.policy
+    if pol == "Tradable Use Rights"
+        return regulate_tur(s, f)
+    elseif pol == "Exclusive Use Rights"
+        return regulate_eur(s, f)
+    elseif pol == "Protected Area"
+        return regulate_pa(s, f)
+    elseif pol == "Protected Area Two Pop"
+        return regulate_pa_two_pop(s, f)
+    elseif pol == "Economic Incentives"
+        return regulate_ei(s, f)
+    elseif pol == "Development"
+        return regulate_dev(s, f)
+    end
+    return change(s, regulation=f)
+end
+
+# =========================================================================================
+# Policy Implementations
+# =========================================================================================
+
+# ----- Tradable Use Rights (TUR) -----
+
+function regulate_tur(s, f)
+    # Defaults
+    target = hasproperty(s, :policy_target) ? s.policy_target : :effort
+
+    # Default allocation: equal shares of allowed effort or yield
+    R = fill(f == 0 ? 1.0 : (1 - Float64(f)) / s.N, s.N)
+
+    if haskey(s, :historical_use_rights) && s.historical_use_rights
+        # Solve OA once to estimate historical baselines
+        # Create a temporary OA scenario
+        s_oa = change(s, policy="Open Access")
+        u0 = zeros(s.N)
+        y0 = 1.0
+        oaprob = ODEProblem(dxdt, [u0; y0], (0.0, 1000.0), s_oa)
+        oasol = solve(oaprob, SSPRK432(; stage_limiter!), callback=TerminateSteadyState(1e-6, 1e-4))
+
+        if target == :yield
+            hist_u = oasol[1:s.N, end-1]
+            hist_y = oasol[s.N+1, end-1]
+            hist_yield = hist_u .* hist_y
+            total_hist_yield = sum(hist_yield)
+            if total_hist_yield > 0
+                R = hist_yield .* (1 - f) ./ total_hist_yield
+            end
         else
-            R[1:n] .= 1.0
+            hur = oasol[1:s.N, end-1]
+            denom = sum(hur)
+            if denom > 0
+                R = hur .* (1 - f) ./ denom
+            end
         end
     end
-    return change(scenario, R=R) # assign use rights
-end
 
-# ===== Tradable Use Rights =====
-
-function regulate_tradable_use_rights(s, f)
-    # Always solve OA to get baseline for relative reduction
-    # This ensures f acts as "% reduction from baseline", making regulation binding immediately
-    # and producing the expected hump-shaped revenue curve.
-    # Create OA scenario by clearing policies to avoid accessing missing R or applying regulation
-    # Explicitly reset functions to OA defaults to avoid using TUR dynamics
-    s_oa = change(s, policy="Open Access", policies=Any[],
-        γ=γ, μ=μ, ϕ=ϕ, regulate=regulate)
-
-    # Robust OA solver (duplicating sim logic to avoid scope issues)
-    u0_oa = zeros(s.N)
-    y0_oa = 1.0
-    # OA only needs N+1 states
-    oaprob = ODEProblem(dxdt, [u0_oa; y0_oa], (0.0, 1000.0), s_oa)
-
-    function _solve_oa_robust(prob)
-        try
-            return solve(prob, SSPRK432(; stage_limiter!), callback=TerminateSteadyState(1e-6, 1e-4))
-        catch
-        end
-        try
-            return solve(prob, Rosenbrock23(), callback=TerminateSteadyState(1e-6, 1e-4))
-        catch
-        end
-        return solve(prob, Tsit5(), callback=TerminateSteadyState(1e-6, 1e-4))
-    end
-
-    oasol = _solve_oa_robust(oaprob)
-
-    println("TUR Regulate Debug:")
-    println("  OA Retcode: ", oasol.retcode)
-    println("  OA Total Effort: ", sum(oasol[1:s.N, end-1]))
-    println("  OA Total Yield: ", sum(oasol[1:s.N, end-1] .* oasol[s.N+1, end-1]))
-
-    if s.policy_target == :yield
-        hist_u = oasol[1:s.N, end-1]
-        hist_y = oasol[s.N+1, end-1]
-        hist_yield = hist_u .* hist_y
-        # Relative Quota: Reduce yield by f% from baseline
-        R = hist_yield .* (1.0 - Float64(f))
-    else
-        # Effort target
-        hur = oasol[1:s.N, end-1]
-        # Relative Quota: Reduce effort by f% from baseline
-        R = hur .* (1.0 - Float64(f))
-    end
-
-    # attach income_extra_fun to reflect trade revenues at incomes time
+    # Attach income extra function for trade revenue
     function _tur_income_extra(x, p, t)
         u = x[1:p.N]
         y = x[p.N+1]
-        if p.policy_target == :yield
+        target = hasproperty(p, :policy_target) ? p.policy_target : :effort
+        if target == :yield
             (p.R .- (u .* y)) .* x[p.N+2]
         else
             (p.R .- u) .* x[p.N+2]
         end
     end
+
     return change(s, R=R, regulation=f, income_extra_fun=_tur_income_extra)
 end
 
-function γ_tradable_use_rights(val, x, p, t)
+function cost_tur(val, x, p, t)
+    # Cost = w + Price
     return val .+ x[end]
 end
 
-function ϕ_tradable_use_rights(dx, x, p, t)
-    supply = if p.policy_target == :yield
-        # supply in yield units
-        sum(clamp.(p.R .- (x[1:p.N] .* x[p.N+1]), 0.0, Inf))
-    elseif p.policy_target == :effort
-        # supply in effort units
-        sum(clamp.(p.R .- x[1:p.N], 0.0, Inf))
+function dynamics_tur(dx, x, p, t)
+    target = hasproperty(p, :policy_target) ? p.policy_target : :effort
+    market_rate = hasproperty(p, :market_rate) ? p.market_rate : 0.05
+
+    # Supply: Aggregate clamping (Legacy/Stable logic)
+    supply = if target == :yield
+        clamp(sum(p.R .- (x[1:p.N] .* x[p.N+1])), 0.0, Inf)
     else
-        0.0
+        max(0.0, sum(p.R .- x[1:p.N]))
     end
+
+    # Demand
     id = findall((dx[1:p.N] .> 0.0))
-    ind_demand = if p.policy_target == :yield
-        # demand in yield units
+    ind_demand = if target == :yield
         max_extra_yield = (p.ū[id] .- x[id]) .* x[p.N+1]
         desired_extra_yield = dx[id] .* x[p.N+1]
         min.(max_extra_yield, desired_extra_yield)
     else
-        # demand in effort units
         min.(p.ū[id] - x[id], dx[id])
     end
-    # Socioeconomic buying power weighting based on opportunities (AIO)
+
+    # Buyer Bias
     bias = hasproperty(p, :buyer_bias) ? Float64(getfield(p, :buyer_bias)) : 0.0
-    if bias != 0.0
-        # Determine which field to use for opportunities
-        opp_key = hasproperty(p, :opportunity_key) ? getfield(p, :opportunity_key) : :opportunities
-
-        # Try to get the data
-        opp = nothing
-        if hasproperty(p, opp_key)
-            opp = getfield(p, opp_key)
-        elseif opp_key == :opportunities && hasproperty(p, :w̃)
-            # Fallback: if looking for default :opportunities but missing, use :w̃ (incentives) as proxy
-            opp = getfield(p, :w̃)
-        end
-
-        if opp !== nothing
-            oppv = hasproperty(opp, :data) ? opp.data : opp
-            if length(oppv) == p.N
-                omin = minimum(oppv)
-                omax = maximum(oppv)
-                rng = omax - omin
-                if rng > 0
-                    norm = (oppv .- omin) ./ rng             # [0,1]
-                    s = 2 .* (norm .- 0.5)                   # [-1,1]
-                    wfull = clamp.(1 .+ bias .* s, 0.001, Inf)
-                    ind_demand = ind_demand .* wfull[id]
-                end
+    if bias != 0.0 && hasproperty(p, :opportunities)
+        opp = getfield(p, :opportunities)
+        oppv = hasproperty(opp, :data) ? opp.data : opp
+        if length(oppv) == p.N
+            omin = minimum(oppv)
+            omax = maximum(oppv)
+            rng = omax - omin
+            if rng > 0
+                norm = (oppv .- omin) ./ rng
+                s = 2 .* (norm .- 0.5)
+                wfull = clamp.(1 .+ bias .* s, 0.001, Inf)
+                ind_demand = ind_demand .* wfull[id]
             end
         end
     end
+
     demand = sum(ind_demand)
-    dx[p.N+2] = p.market_rate * (demand - supply)
+
+    # Price Dynamics
+    dx[p.N+2] = market_rate * (demand - supply)
+
+    # Rationing if demand exceeds supply
     if demand > supply && demand > 0
-        if p.policy_target == :yield
-            # rationed increment computed in yield units; convert back to effort
+        if target == :yield
             y = max(eps(), x[p.N+1])
             dx[id] .= (supply .* ind_demand ./ demand) ./ y
         else
@@ -156,34 +188,52 @@ function ϕ_tradable_use_rights(dx, x, p, t)
     end
 end
 
-# ===== Protected Area Two Populations =====
+# ----- Exclusive Use Rights (EUR) -----
 
-function ϕ_protected_area_two_pop(dx, x, p, t)
-    mx = x[p.N+2] - x[p.N+1]
-    dx[p.N+2] = (1.0 - x[p.N+2]) * dx[p.N+2] - (1.0 - p.regulation) / p.regulation * p.m * mx
-    dx[p.N+1] += p.regulation / (1.0 - p.regulation) * p.m * mx
+function regulate_eur(s, f)
+    N = s.N
+    R = zeros(N)
+    n = max(0, min(N, round(Int, f * N)))
+
+    if n > 0
+        # Determine selection strategy from policy_name or extra field
+        # Default to "top" if not specified
+        # We can use s.selector if provided, or infer from policy variant name
+
+        # Get data to sort by (opportunities or w̃)
+        data = hasproperty(s, :opportunities) ? (hasproperty(s.opportunities, :data) ? s.opportunities.data : s.opportunities) :
+               (hasproperty(s, :w̃) ? (hasproperty(s.w̃, :data) ? s.w̃.data : s.w̃) : zeros(N))
+
+        selector = hasproperty(s, :selector) ? s.selector : :top
+
+        idx = Int[]
+        if selector == :top
+            idx = sortperm(data, rev=true)[1:n]
+        elseif selector == :bottom
+            idx = sortperm(data)[1:n]
+        elseif selector == :random
+            idx = shuffle(1:N)[1:n]
+        end
+
+        R[idx] .= 1.0
+    end
+    return change(s, R=R, regulation=f)
 end
 
-function γ_protected_area_two_pop(val, x, p, t)
-    return val
+function cost_eur(val, x, p, t)
+    # Add R to cost (R=1 means excluded/high cost)
+    return val .+ p.R
 end
 
-function μ_protected_area_two_pop(val, x, p, t)
-    y_u = x[p.N+1]
-    y_p = x[p.N+2]
-    r_s_local = ((1.0 - p.regulation) / p.regulation) * p.m * (y_p - y_u) / max(y_u, 1e-6)
-    return val .* (1 .+ r_s_local) .^ (-1)
-end
+# ----- Protected Area (PA) -----
 
-# ===== Protected Area =====
-
-function regulate_protected_area(p, f)
+function regulate_pa(p, f)
     # Provide resource_factor_fun so incomes scale resource by (1 - f)
     rff(x, pp, t) = (1 - pp.regulation)
     return change(p, regulation=f, resource_factor_fun=rff)
 end
 
-function γ_protected_area(val, x, p, t)
+function cost_pa(val, x, p, t)
     return val .* (1 - p.regulation) .^ -1
 end
 
@@ -203,215 +253,74 @@ function rₛ(y, fₚ, m; K::Float64=1.0, r::Float64=1.0, xK::Float64=0.0, xr::F
     (fₚ / (1 - fₚ) * m * (yₚ(y, fₚ, m; r, K, xK, xr) .- y)) ./ max.(y, 1e-6)
 end
 
-function μ_protected_area(val, x, p, t)
-    return val .* (1 .+ rₛ(x[p.N+1], p.regulation, p.m)) .^ -1
+function limit_pa(val, x, p, t)
+    m = hasproperty(p, :m) ? p.m : 0.3
+    return val .* (1 .+ rₛ(x[p.N+1], p.regulation, m)) .^ -1
 end
 
-# ===== Economic Incentives =====
+# ----- Protected Area Two Populations -----
 
-function regulate_economic_incentive(p, f)
+function regulate_pa_two_pop(p, f)
+    m = hasproperty(p, :m) ? p.m : 0.3
+    return change(p, regulation=f, m=m)
+end
+
+function dynamics_pa_two_pop(dx, x, p, t)
+    mx = x[p.N+2] - x[p.N+1]
+    dx[p.N+2] = (1.0 - x[p.N+2]) * dx[p.N+2] - (1.0 - p.regulation) / p.regulation * p.m * mx
+    dx[p.N+1] += p.regulation / (1.0 - p.regulation) * p.m * mx
+end
+
+function limit_pa_two_pop(val, x, p, t)
+    y_u = x[p.N+1]
+    y_p = x[p.N+2]
+    # Regularized division by y_u
+    r_s_local = ((1.0 - p.regulation) / p.regulation) * p.m * (y_p - y_u) / max(y_u, 1e-6)
+    return val .* (1 .+ r_s_local) .^ (-1)
+end
+
+# ----- Economic Incentives -----
+
+function regulate_ei(p, f)
     return change(p, regulation=f)
 end
 
-function γ_economic_incentive(val, x, p, t)
-    # Placeholder: this function is now defined as a closure in the kit
+function cost_ei(val, x, p, t)
+    target = hasproperty(p, :policy_target) ? p.policy_target : [:cost, :limit]
+    method = hasproperty(p, :policy_method) ? p.policy_method : :multiplicative
+
+    if :cost in vcat(target) || :γ in vcat(target) # Support old symbol too
+        if method == :additive
+            return val .+ p.regulation
+        else
+            return val .* (1 - p.regulation * (method == :taxation ? -1.0 : 1.0))
+        end
+    end
     return val
 end
 
-# ===== Development =====
+function limit_ei(val, x, p, t)
+    target = hasproperty(p, :policy_target) ? p.policy_target : [:cost, :limit]
+    method = hasproperty(p, :policy_method) ? p.policy_method : :multiplicative
 
-function regulate_development(p, f)
-    return change(p, regulation=f)
+    if :limit in vcat(target) || :μ in vcat(target) # Support old symbol too
+        return val .* (1 - p.regulation * (method == :taxation ? -1.0 : 1.0))
+    end
+    return val
 end
 
-# ===== Policy composition helper (function-based, no types) =====
+# ----- Development -----
 
-"""
-    with_policy(s; γ=nothing, μ=nothing, ϕ=nothing, regulate=nothing,
-                   income_extra_fun=nothing,
-                   extra_state::Int=0, init_extra_state=nothing,
-                   label=nothing, policy_meta=NamedTuple())
-
-Return a new scenario based on `s` with any provided policy functions and optional
-hooks merged in. All parameters are optional; only non-`nothing` values are applied.
-
-Hooks (optional):
-- `income_extra_fun(x, p, t) -> Vector`: additional income component per agent.
-- `extra_state::Int`: number of extra ODE states introduced by the policy.
-- `init_extra_state(p) -> Vector`: initializer for extra states, length = `extra_state`.
-- `label::String` and `policy_meta::NamedTuple`: for display and downstream logic.
-"""
-function with_policy(s; γ=nothing, μ=nothing, ϕ=nothing, regulate=nothing,
-    income_extra_fun=nothing,
-    extra_state::Int=0, init_extra_state=nothing,
-    label=nothing, policy_meta=NamedTuple(), policy=nothing)
-
-    # Create new policy object
-    new_pol_dict = Dict{Symbol,Any}()
-    γ !== nothing && (new_pol_dict[:γ] = γ)
-    μ !== nothing && (new_pol_dict[:μ] = μ)
-    ϕ !== nothing && (new_pol_dict[:ϕ] = ϕ)
-
-    new_pol = (; new_pol_dict...)
-
-    # Append to policies list
-    current_policies = hasproperty(s, :policies) ? s.policies : Any[]
-    new_policies = vcat(current_policies, [new_pol])
-
-    # Update scenario
-    out = (; s..., policies=new_policies)
-
-    # Handle other parameters (merged into scenario for now, but ideally should be in policy struct?)
-    # regulate, income_extra_fun, etc. are still scenario-level for now.
-    # But if we want multiple policies, regulate needs to be handled carefully.
-    # For now, we overwrite regulate as before (last one wins).
-
-    regulate !== nothing && (out = (; out..., regulate))
-    income_extra_fun !== nothing && (out = (; out..., income_extra_fun))
-    extra_state > 0 && (out = (; out..., extra_state))
-    init_extra_state !== nothing && (out = (; out..., init_extra_state))
-    label !== nothing && (out = (; out..., label))
-    !isempty(propertynames(policy_meta)) && (out = (; out..., policy_meta))
-    policy !== nothing && (out = (; out..., policy))
-
-    # Ensure master functions are present if missing (e.g. if s is a raw NamedTuple)
-    !hasproperty(out, :γ) && (out = (; out..., γ=master_γ))
-    !hasproperty(out, :μ) && (out = (; out..., μ=master_μ))
-    !hasproperty(out, :ϕ) && (out = (; out..., ϕ=master_ϕ))
-
-
-    return out
+function regulate_dev(p, f)
+    μ_value = hasproperty(p, :μ_value) ? p.μ_value : 0.5
+    γ_value = hasproperty(p, :γ_value) ? p.γ_value : 0.5
+    return change(p, regulation=f, μ_value=μ_value, γ_value=γ_value)
 end
 
-# ===== Policy kit helpers (function-based bundles) =====
-
-"""
-    exclusive_use_rights_kit(; selector = (w̃, n) -> (1:n), label="Exclusive Use Rights")
-
-Return a NamedTuple of policy functions for Exclusive Use Rights using the given
-`selector` to choose which `n = round(Int, f*N)` agents get rights. The default
-selector picks the first n indices; pass a custom selector to choose top/bottom
-by some criterion (e.g., w̃).
-"""
-function exclusive_use_rights_kit(; selector=(w̃, n) -> (1:n), label="Exclusive Use Rights")
-    γf(val, x, p, t) = val .+ p.R
-    function regulatef(s, f)
-        N = s.N
-        R = zeros(N)
-        n = max(0, min(N, round(Int, f * N)))
-        if n > 0
-            idx = selector(s.w̃, n)
-            R[idx] .= 1.0
-        end
-        return change(s, R=R, regulation=f)
-    end
-    (; γ=γf, regulate=regulatef, label, policy="Exclusive Use Rights")
+function cost_dev(val, x, p, t)
+    return val .+ p.regulation * t / 1000 * p.γ_value
 end
 
-"""
-    exclusive_use_rights_by_opportunities_kit(; selector = (opportunities, n) -> (1:n),
-                                               label = "Exclusive Use Rights (opportunities)")
-
-Variant of Exclusive Use Rights where the selection of beneficiaries is based on
-`opportunities` rather than `w̃`. The `selector` function is called with the
-opportunities vector and the number of slots `n`, and should return the indices
-to receive rights.
-
-If `opportunities` is not present in the scenario, this falls back to `w̃`.
-"""
-function exclusive_use_rights_by_opportunities_kit(; selector=(opportunities, n) -> (1:n),
-    label="Exclusive Use Rights (opportunities)")
-    γf(val, x, p, t) = val .+ p.R
-    getdata(v) = hasproperty(v, :data) ? v.data : v
-    function regulatef(s, f)
-        N = s.N
-        R = zeros(N)
-        n = max(0, min(N, round(Int, f * N)))
-        if n > 0
-            opp = hasproperty(s, :opportunities) ? getdata(getfield(s, :opportunities)) :
-                  (hasproperty(s, :w̃) ? getdata(getfield(s, :w̃)) : zeros(N))
-            idx = selector(opp, n)
-            R[idx] .= 1.0
-        end
-        return change(s, R=R, regulation=f)
-    end
-    (; γ=γf, regulate=regulatef, label, policy="Exclusive Use Rights")
-end
-
-"""
-    tradable_use_rights_kit(; target=:effort, market_rate=0.05, label="Tradable Use Rights")
-
-Return a NamedTuple policy bundle for tradable use rights. Attaches γ, ϕ,
-and regulate; `regulate` also attaches `income_extra_fun` for trade income.
-"""
-function tradable_use_rights_kit(; target=:effort, market_rate=0.05, buyer_bias::Float64=0.0, opportunity_key=:opportunities, historical_use_rights::Bool=false, label="Tradable Use Rights")
-    γf = γ_tradable_use_rights
-    ϕf = ϕ_tradable_use_rights
-    function regulatef(s, f)
-        s2 = change(s, policy_target=target, market_rate=market_rate, buyer_bias=buyer_bias, opportunity_key=opportunity_key, historical_use_rights=historical_use_rights)
-        regulate_tradable_use_rights(s2, f)
-    end
-    (; γ=γf, ϕ=ϕf, regulate=regulatef, label, policy_meta=(; target, market_rate, buyer_bias, opportunity_key, historical_use_rights), policy="Tradable Use Rights")
-end
-
-"""
-    protected_area_kit(; m=0.3, label="Protected Area")
-
-Return a NamedTuple policy bundle for a Protected Area.
-"""
-function protected_area_kit(; m=0.3, label="Protected Area")
-    γf = γ_protected_area
-    μf = μ_protected_area
-    function regulatef(p, f)
-        regulate_protected_area(change(p, m=m), f)
-    end
-    (; γ=γf, μ=μf, regulate=regulatef, label, policy_meta=(; m), policy="Protected Area")
-end
-
-"""
-    economic_incentives_kit(; policy_target=[:γ,:μ], policy_method=:multiplicative, label="Economic Incentives")
-"""
-function economic_incentives_kit(; policy_target=[:γ, :μ], policy_method=:multiplicative, label="Economic Incentives")
-    function γf(val, x, p, t)
-        if :γ in vcat(policy_target)
-            if policy_method == :additive
-                return val .+ p.regulation
-            else
-                return val .* (1 - p.regulation * (policy_method == :taxation ? -1.0 : 1.0))
-            end
-        else
-            return val
-        end
-    end
-
-    function μf(val, x, p, t)
-        if :μ in vcat(policy_target)
-            return val .* (1 - p.regulation * (policy_method == :taxation ? -1.0 : 1.0))
-        else
-            return val
-        end
-    end
-
-    function regulatef(p, f)
-        change(p, regulation=f, policy_target=policy_target, policy_method=policy_method)
-    end
-    (; γ=γf, μ=μf, regulate=regulatef, label, policy_meta=(; policy_target, policy_method))
-end
-
-"""
-    development_kit(; μ_value=0.5, γ_value=0.5, label="Development")
-"""
-function development_kit(; μ_value=0.5, γ_value=0.5, label="Development")
-    function γf(val, x, p, t)
-        return val .+ p.regulation * t / 1000 * γ_value
-    end
-
-    function μf(val, x, p, t)
-        return val .+ p.regulation * 2 / p.N * t / 1000 * μ_value
-    end
-
-    function regulatef(p, f)
-        change(p, regulation=f, μ_value=μ_value, γ_value=γ_value)
-    end
-    (; γ=γf, μ=μf, regulate=regulatef, label, policy_meta=(; μ_value, γ_value))
+function limit_dev(val, x, p, t)
+    return val .+ p.regulation * 2 / p.N * t / 1000 * p.μ_value
 end

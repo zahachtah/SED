@@ -19,7 +19,7 @@ end
 
 function attractor_plot!(axis, sol; color=:darkorange, markersize=15, marker=:circle)
     N = sol.prob.p.N
-    scatter!(axis, [sol[N+1, end-2]], [sum(sol[1:N, end-2] ./ sol.prob.p.μ(sol.u[end-2], sol.prob.p, sol.t[end-2]) ./ N)];
+    scatter!(axis, [sol[N+1, end-2]], [sum(sol[1:N, end-2] ./ sol.prob.p.limit(sol.u[end-2], sol.prob.p, sol.t[end-2]) ./ N)];
         color, markersize, marker)
 end
 
@@ -27,7 +27,7 @@ function trajectory_plot!(axis, sol; color=:darkorange, startcolor=:lightgray, l
     scenario = sol.prob.p
     lines!(axis,
         [u[scenario.N+1] for u in sol.u[1:end-2]],
-        [sum(u[1:scenario.N] ./ scenario.μ(u, scenario, sol.t[i])) / scenario.N for (i, u) in enumerate(sol.u[1:end-2])];
+        [sum(u[1:scenario.N] ./ scenario.limit(u, scenario, sol.t[i])) / scenario.N for (i, u) in enumerate(sol.u[1:end-2])];
         color, linestyle=:dot, colormap=cgrad([startcolor, color], [0.0, 0.5, 1.0]), linewidth)
 end
 
@@ -165,7 +165,9 @@ function phase_plot!(axis, sol; show_trajectory=false, show_target=false, open_a
     limits!(axis, 0.0, 1.0, 0.0, 1.0)
     y = range(0.0, stop=1.0, length=100)
     if show_oa
-        oa = change(scenario, policy="Open Access", γ=master_γ, μ=master_μ, regulate=regulate, ϕ=master_ϕ, policies=Any[])
+        # Create OA scenario using new API
+        oa = change(scenario, policy="Open Access",
+            cost=master_cost, limit=master_limit, dynamics=master_dynamics, regulate=regulate)
         oasol = sim(oa)
         lines!(axis, y, Γ.(y, Ref(oa), x=sol.u[end-1]), color=open_access_color, linewidth=3)
         lines!(axis, y, Φ.(y, Ref(oa)), color=open_access_color, linewidth=1)
@@ -179,12 +181,12 @@ function phase_plot!(axis, sol; show_trajectory=false, show_target=false, open_a
     if show_trajectory
         lines!(axis,
             [u[scenario.N+1] for u in sol.u[1:end-2]],
-            [sum(u[1:scenario.N] ./ scenario.μ(u, scenario, sol.t[i])) / scenario.N for (i, u) in enumerate(sol.u[1:end-2])],
+            [sum(u[1:scenario.N] ./ scenario.limit(u, scenario, sol.t[i])) / scenario.N for (i, u) in enumerate(sol.u[1:end-2])],
             color=scenario.policy == "Development" ? sol.t[1:end-2] : trajectory_color,
             linestyle=:dot,
             colormap=cgrad([:lightgray, :darkorange], [0.0, 0.5, 1.0]))
     end
-    scatter!(axis, [sol[N+1, end-2]], [sum(sol[1:N, end-2] ./ scenario.μ(sol.u[end-2], scenario, sol.t[end-2]) ./ N)], color=:black, markersize=10)
+    scatter!(axis, [sol[N+1, end-2]], [sum(sol[1:N, end-2] ./ scenario.limit(sol.u[end-2], scenario, sol.t[end-2]) ./ N)], color=:black, markersize=10)
 end
 
 function phase_plot(sol)

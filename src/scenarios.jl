@@ -3,57 +3,40 @@ using Statistics
 # Open Access policy primitives and scenario builders moved here to keep SED_core.jl focused
 
 # Base primitives
-base_γ(x, p, t) = hasproperty(p, :w̃) && hasproperty(p.w̃, :data) ? p.w̃.data : p.w̃
-base_μ(x, p, t) = hasproperty(p, :ū) && hasproperty(p.ū, :data) ? p.ū.data : p.ū
-base_ϕ(dx, x, p, t) = nothing
+base_cost(x, p, t) = hasproperty(p, :w̃) && hasproperty(p.w̃, :data) ? p.w̃.data : p.w̃
+base_limit(x, p, t) = hasproperty(p, :ū) && hasproperty(p.ū, :data) ? p.ū.data : p.ū
+base_dynamics(dx, x, p, t) = nothing
 
-# Master functions that iterate over policies
-function master_γ(x, p, t)
-    val = base_γ(x, p, t)
-    if hasproperty(p, :policies)
-        for pol in p.policies
-            if hasproperty(pol, :γ)
-                val = pol.γ(val, x, p, t)
-            end
-        end
+# Master functions that dispatch to policy implementation
+function master_cost(x, p, t)
+    val = base_cost(x, p, t)
+    if hasproperty(p, :policy) && p.policy != "Open Access"
+        return cost(val, x, p, t) # Dispatch to policies.jl
     end
     return val
 end
 
-function master_μ(x, p, t)
-    val = base_μ(x, p, t)
-    if hasproperty(p, :policies)
-        for pol in p.policies
-            if hasproperty(pol, :μ)
-                val = pol.μ(val, x, p, t)
-            end
-        end
+function master_limit(x, p, t)
+    val = base_limit(x, p, t)
+    if hasproperty(p, :policy) && p.policy != "Open Access"
+        return limit(val, x, p, t) # Dispatch to policies.jl
     end
     return val
 end
 
-function master_ϕ(dx, x, p, t)
-    base_ϕ(dx, x, p, t)
-    if hasproperty(p, :policies)
-        for pol in p.policies
-            if hasproperty(pol, :ϕ)
-                pol.ϕ(dx, x, p, t)
-            end
-        end
+function master_dynamics(dx, x, p, t)
+    base_dynamics(dx, x, p, t)
+    if hasproperty(p, :policy) && p.policy != "Open Access"
+        dynamics(dx, x, p, t) # Dispatch to policies.jl
     end
 end
 
-# Aliases for backward compatibility and exports
-const γ = master_γ
-const μ = master_μ
-const ϕ = master_ϕ
 
-regulate(p, f) = p
 
 function scenario(p; kwargs...)
-    # Initialize with empty policies list and master functions
-    temp = (; p..., policy="Open Access", policies=Any[],
-        γ=master_γ, μ=master_μ, ϕ=master_ϕ, regulate=regulate, kwargs...)
+    # Initialize with default Open Access policy
+    temp = (; p..., policy="Open Access",
+        cost=master_cost, limit=master_limit, dynamics=master_dynamics, regulate=regulate, kwargs...)
     return (; temp...)
 end
 
@@ -90,9 +73,4 @@ function high_incentives(; N=100, sigma=0.0)
     return scenario(p)
 end
 
-# Minimal policy functions retained for reference; legacy implementation archived in archive/legacy_dist_block.jl
-
-# Legacy distribution definitions moved to archive/legacy_dist_block.jl for reference.
-
-# The modular Dist type now lives in src/SED/Core/Dist.jl
 

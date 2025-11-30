@@ -10,10 +10,12 @@ returns its steady state as a warm start (u*, y*, extra set to defaults).
 """
 function sim_init(p; from::Symbol=:zeros, t_end=1000.0)
     N = p.N
+    pol = hasproperty(p, :policy) ? p.policy : "Open Access"
+
     if from == :zeros
-        if (hasproperty(p, :policy) ? p.policy : "") == "Tradable Use Rights"
+        if pol == "Tradable Use Rights"
             return (zeros(N), 1.0, 0.0)
-        elseif (hasproperty(p, :policy) ? p.policy : "") == "Protected Area Two Pop"
+        elseif pol == "Protected Area Two Pop"
             return (zeros(N), 1.0, 1.0)
         else
             return (zeros(N), 1.0)
@@ -26,9 +28,9 @@ function sim_init(p; from::Symbol=:zeros, t_end=1000.0)
         prob = ODEProblem(dxdt, initVals, (0.0, t_end), oa)
         sol = solve(prob, SSPRK432(; stage_limiter!), callback=TerminateSteadyState(1e-6, 1e-4))
         # Copy back u*, y* and keep extra states at defaults
-        if (hasproperty(p, :policy) ? p.policy : "") == "Tradable Use Rights"
+        if pol == "Tradable Use Rights"
             return (sol[1:N, end-2], sol[N+1, end-2], 0.0)
-        elseif (hasproperty(p, :policy) ? p.policy : "") == "Protected Area Two Pop"
+        elseif pol == "Protected Area Two Pop"
             return (sol[1:N, end-2], sol[N+1, end-2], sol[N+1, end-2])
         else
             return (sol[1:N, end-2], sol[N+1, end-2])
@@ -40,14 +42,19 @@ end
 
 function dxdt(dx, x, p, t)
     N = p.N
-    dx[1:N] = p.α .* (x[N+1] .- p.γ(x, p, t))
+    # Effort dynamics: proportional to Profit (Revenue - Cost)
+    dx[1:N] = p.α .* (x[N+1] .- p.cost(x, p, t))
+    # Resource dynamics: Logistic Growth - Harvest
     dx[N+1] = x[N+1] * ((1 - x[N+1]) - sum(x[1:N]))
-    p.ϕ(dx, x, p, t)
+    # Policy dynamics (e.g. market price)
+    p.dynamics(dx, x, p, t)
 end
 
 function stage_limiter!(x, integrator, p, t)
+    # Limit effort between 0 and capacity/limit
+    limit_val = p.limit(x, p, t)
     x[1:p.N] .= ifelse.(x[1:p.N] .< 0.0, 0.0,
-        ifelse.(x[1:p.N] .> (p.μ(x, p, t)), p.μ(x, p, t), x[1:p.N]))
+        ifelse.(x[1:p.N] .> limit_val, limit_val, x[1:p.N]))
     for j in p.N+1:length(x)
         x[j] = max(0.0, x[j])
     end
@@ -57,10 +64,11 @@ function sim(s; u0=zeros(s.N), y0=1.0, ϕ0=0.0, regulation=0.0, start_from_OA=fa
     sample!(s; force=false)
     tspan = (0.0, t_end)
     p = s.regulate(s, regulation)
+    pol = hasproperty(p, :policy) ? p.policy : "Open Access"
 
-    if s.policy == "Tradable Use Rights"
+    if pol == "Tradable Use Rights"
         initVals = [u0; y0; ϕ0]
-    elseif s.policy == "Protected Area Two Pop"
+    elseif pol == "Protected Area Two Pop"
         initVals = [u0; y0; y0]
     else
         initVals = [u0; y0]

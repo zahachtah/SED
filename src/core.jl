@@ -54,6 +54,8 @@ mutable struct SEDist{S<:AbstractSource,D<:AbstractDependency} <: AbstractArray{
     unit::Union{String,Nothing}
 end
 
+export change, dist, sample!, @dependent, Dist, SEDist
+
 change(params::NamedTuple; kwargs...) = (; params..., kwargs...)
 
 # --- Property Access ---

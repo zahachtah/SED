@@ -1,6 +1,0 @@
-┌ Warning: Using arrays or dicts to store parameters of different types can hurt performance.
-│ Consider using tuples instead.
-└ @ SciMLBase ~/.julia/packages/SciMLBase/YE7xF/src/performance_warnings.jl:33
-Buyer bias verification passed.
-Test Summary:           | Pass  Total   Time
-Buyer Bias Verification |    2      2  37.2s

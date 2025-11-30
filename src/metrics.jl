@@ -30,9 +30,8 @@ function regulation_scan(p; m=100, kR=0.5, kT=1.0, kG=-0.2, kE=0.0, kI=0.0, warm
             u0_prev = prev_sol[1:p.N, end-2]
             y0_prev = prev_sol[p.N+1, end-2]
             if policystr == "Tradable Use Rights"
-                ϕ0_prev = prev_sol[p.N+2, end-2]
-                ϕ0_prev = max(0.0, ϕ0_prev)
-                sol = sim(p, regulation=i, t_end=1000, u0=u0_prev, y0=y0_prev, ϕ0=ϕ0_prev)
+                # Force cold start for TUR to ensure price discovery (demand requires dx > 0)
+                sol = sim(p, regulation=i, t_end=1000, u0=zeros(p.N), y0=1.0, ϕ0=0.0)
             elseif policystr == "Protected Area Two Pop"
                 y2_prev = prev_sol[p.N+2, end-2]
                 y2_prev = max(0.0, y2_prev)
@@ -105,23 +104,23 @@ end
 
 function Γ(y, p; x=zeros(p.N + 1), t=0.0)
     x[p.N+1] = y
-    γ = p.γ(x, p, t)
-    id = sortperm(γ)
-    f = sum(γ[id] .< y) / p.N
+    c = p.cost(x, p, t)
+    id = sortperm(c)
+    f = sum(c[id] .< y) / p.N
 end
 
 function Φ(y, p; t=0.0)
     x = zeros(p.N + 1)
     x[end] = y
-    γ = p.γ(x, p, t)
-    id = sortperm(γ)
-    μ = p.μ(x, p, t)
-    cu = cumsum(μ[id])
+    c = p.cost(x, p, t)
+    id = sortperm(c)
+    l = p.limit(x, p, t)
+    cu = cumsum(l[id])
     f = sum(cu .< (1.0 - y))
     if f == 0
-        f = (1.0 - y) / μ[id[1]]
+        f = (1.0 - y) / l[id[1]]
     elseif f < p.N
-        f = f + ((1 - y) - cu[f]) / μ[id[f+1]]
+        f = f + ((1 - y) - cu[f]) / l[id[f+1]]
     end
     return f / p.N
 end
@@ -139,15 +138,15 @@ function incomes(x, p; summarize=false, dimensional::Bool=false)
     # wages based on μ and γ. For policies that introduce a market price or
     # rescale incentives (TUR/EUR/PA), use the baseline w̃ for wage accounting
     # and keep market-related revenue in the extra (trade) component.
-    μ = p.μ(x, p, 0.0)
+    μ = p.limit(x, p, 0.0)
     policystr = hasproperty(p, :policy) ? String(p.policy) : ""
-    use_baseline_gamma = occursin("Tradable Use Rights", policystr) ||
-                         occursin("Exclusive Use Rights", policystr) ||
-                         occursin("Protected Area", policystr)
-    γw = if use_baseline_gamma && hasproperty(p, :w̃)
+    use_baseline_cost = (policystr == "Tradable Use Rights") ||
+                        (policystr == "Exclusive Use Rights") ||
+                        (policystr == "Protected Area")
+    γw = if use_baseline_cost && hasproperty(p, :w̃)
         hasproperty(p.w̃, :data) ? p.w̃.data : p.w̃
     else
-        p.γ(x, p, 0.0)
+        p.cost(x, p, 0.0)
     end
     wages_nd = (μ .- u) .* γw
     wages_0_nd = μ .* γw
