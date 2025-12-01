@@ -18,10 +18,10 @@ CairoMakie.activate!()
 outdir = joinpath(@__DIR__, "figures")
 isdir(outdir) || mkpath(outdir)
 
-# Example 1: Phase + incomes for a baseline scenario
 N = 100
-s = S.scenario(S.base(N=N))
-sol = S.sim(s)
+# Example 1: Phase + incomes for a baseline scenario
+s = scenario(base(N=N))
+sol = sim(s)
 
 fig1 = Figure(size=(900, 420))
 ax1 = Axis(fig1[1, 1])
@@ -50,43 +50,43 @@ println("Figures written to: ", outdir)
 # =====================
 
 """
-    policy_outcomes_figure(; s= S.base(N=100), order=false, goal=:Gov)
+    policy_outcomes_figure(; s=base(N=100), order=false, goal=:Gov)
 
 Build a multi‑panel figure comparing key policies at their optimal regulation
 for a selected goal (default: :Gov). Panels show phase plots and incomes.
 """
-function policy_outcomes_figure(; s=S.base(N=100), order=false, goal=:Gov)
+function policy_outcomes_figure(; s=base(N=100), order=false, goal=:Gov)
     # Baseline distributions
     N = s.N
-    w = S.dist(min=0.2, max=0.4)
-    q = S.dist(min=1 / N, max=1 / N, normalize=true)
+    w = dist(min=0.2, max=0.4)
+    q = dist(min=1 / N, max=1 / N, normalize=true)
     sample!(w, N)
     sample!(q, N)
-    w̃ = S.dist(min=0.1, max=1.0, dependency_fun="q .* w .+ independent")
-    ū = S.dist(dependency_fun="q")
-    S.sample!(w̃, N; context=(; s..., w, q))
-    S.sample!(ū, N; context=(; s..., w, q))
+    w̃ = dist(min=0.1, max=1.0, dependency_fun="q .* w .+ independent")
+    ū = dist(dependency_fun="q")
+    sample!(w̃, N; context=(; s..., w, q))
+    sample!(ū, N; context=(; s..., w, q))
 
     # Build comparable policies
-    OA = S.scenario(S.base(N=N); w̃, ū, title="Open Access")
-    EUR = S.scenario(S.base(N=N); w̃, ū, policy="Exclusive Use Rights", reverse=true, title="hi w̃ excluded")
-    EURf = S.scenario(S.base(N=N); w̃, ū, policy="Exclusive Use Rights", reverse=false, title="low w̃ excluded")
-    TUR = S.scenario(S.base(N=N); w̃, ū, policy="Tradable Use Rights", policy_target=:effort, market_rate=0.05, title="effort")
-    TURy = S.scenario(S.base(N=N); w̃, ū, policy="Tradable Use Rights", policy_target=:yield, market_rate=0.05, title="yield")
-    PA = S.scenario(S.base(N=N); w̃, ū, policy="Protected Area", m=0.3, title="PA")
+    OA = scenario(base(N=N); w̃, ū, title="Open Access")
+    EUR = scenario(base(N=N); w̃, ū, policy="Exclusive Use Rights", reverse=true, title="hi w̃ excluded")
+    EURf = scenario(base(N=N); w̃, ū, policy="Exclusive Use Rights", reverse=false, title="low w̃ excluded")
+    TUR = scenario(base(N=N); w̃, ū, policy="Tradable Use Rights", policy_target=:effort, market_rate=0.05, title="effort")
+    TURy = scenario(base(N=N); w̃, ū, policy="Tradable Use Rights", policy_target=:yield, market_rate=0.05, title="yield")
+    PA = scenario(base(N=N); w̃, ū, policy="Protected Area", m=0.3, title="PA")
 
     pols = [OA, EUR, EURf, TUR, TURy, PA]
 
     # Optimize regulation per policy for selected goal
     function optimize_goal(p)
-        R = S.regulation_scan(p; warmstart=:chain)
+        R = regulation_scan(p)
         g = R.RR .^ 0.5 .* R.ToR .^ 1.0 .* (1 .- R.GI) .^ 0.0 .* R.EH .^ 0.0
         opt = argmax(goal == :Gov ? g : R[goal])
         (reg=R.r[opt], idx=opt)
     end
 
     opts = optimize_goal.(pols)
-    sols = [S.sim(p, regulation=o.reg) for (p, o) in zip(pols, opts)]
+    sols = [sim(p, regulation=o.reg) for (p, o) in zip(pols, opts)]
 
     # Assemble figure 2 rows x 3 cols
     f = Figure(size=(1000, 800))
@@ -95,39 +95,39 @@ function policy_outcomes_figure(; s=S.base(N=100), order=false, goal=:Gov)
         c = mod(i - 1, 3) + 1
         ax1 = Axis(f[2r-1, c], title=sol.prob.p.title)
         ax2 = Axis(f[2r, c])
-        S.phase_plot!(ax1, sol)
-        S.incomes_plot!(ax2, sol; order)
+        phase_plot!(ax1, sol)
+        incomes_plot!(ax2, sol; order)
     end
     f
 end
 
 """
-    regscan_figure(; s=S.base(N=100), outcomes=[:RR,:ToR,:GI,:EH,:RI,:Gov])
+    regscan_figure(; s=base(N=100), outcomes=[:RR,:ToR,:GI,:EH,:RI,:Gov])
 
 Create a grid figure showing outcomes vs regulation for a standard policy set.
 Marks the optimal regulation point per policy/outcome.
 """
 function regscan_figure(; s=base(N=100), outcomes=[:RR, :ToR, :GI, :EH, :RI, :Gov])
     N = s.N
-    w = S.dist(min=0.2, max=0.4)
-    q = S.dist(min=1 / N, max=1 / N, normalize=true)
-    S.sample!(w, N)
-    S.sample!(q, N)
-    w̃ = S.dist(min=0.1, max=1.0, dependency_fun="q .* w .+ independent")
-    ū = S.dist(dependency_fun="q")
-    S.sample!(w̃, N; context=(; s..., w, q))
-    S.sample!(ū, N; context=(; s..., w, q))
+    w = dist(min=0.2, max=0.4)
+    q = dist(min=1 / N, max=1 / N, normalize=true)
+    sample!(w, N)
+    sample!(q, N)
+    w̃ = dist(min=0.1, max=1.0, dependency_fun="q .* w .+ independent")
+    ū = dist(dependency_fun="q")
+    sample!(w̃, N; context=(; s..., w, q))
+    sample!(ū, N; context=(; s..., w, q))
 
     policies = [
-        S.scenario(S.base(N=N); w̃, ū, policy="Exclusive Use Rights", reverse=true, name="EUR_hi"),
-        S.scenario(S.base(N=N); w̃, ū, policy="Exclusive Use Rights", reverse=false, name="EUR_lo"),
-        S.scenario(S.base(N=N); w̃, ū, policy="Tradable Use Rights", policy_target=:effort, market_rate=0.05, name="TUR_effort"),
-        S.scenario(S.base(N=N); w̃, ū, policy="Tradable Use Rights", policy_target=:yield, market_rate=0.05, name="TUR_yield"),
-        S.scenario(S.base(N=N); w̃, ū, policy="Protected Area", m=0.3, name="PA_03"),
-        S.scenario(S.base(N=N); w̃, ū, policy="Protected Area", m=0.5, name="PA_05"),
+        scenario(base(N=N); w̃, ū, policy="Exclusive Use Rights", reverse=true, name="EUR_hi"),
+        scenario(base(N=N); w̃, ū, policy="Exclusive Use Rights", reverse=false, name="EUR_lo"),
+        scenario(base(N=N); w̃, ū, policy="Tradable Use Rights", policy_target=:effort, market_rate=0.05, name="TUR_effort"),
+        scenario(base(N=N); w̃, ū, policy="Tradable Use Rights", policy_target=:yield, market_rate=0.05, name="TUR_yield"),
+        scenario(base(N=N); w̃, ū, policy="Protected Area", m=0.3, name="PA_03"),
+        scenario(base(N=N); w̃, ū, policy="Protected Area", m=0.5, name="PA_05"),
     ]
 
-    scans = [S.regulation_scan(p; warmstart=:chain) for p in policies]
+    scans = [regulation_scan(p) for p in policies]
     f = Figure(size=(1100, 900))
     for (i, rs) in enumerate(scans)
         for (j, o) in enumerate(outcomes)
@@ -233,9 +233,9 @@ function figure3(; s=high_impact())
     #xlims!(inc_plot,(0.0,20.0))
     #axislegend(inc_plot,framevisible=false)
 
-    w = SED.sample!(dist(median=0.002, sigma=0.3, distribution=LogNormal), 100)
-    q1 = SED.sample!(dist(median=0.9, sigma=0.4, distribution=Uniform, normalize=true), 100)
-    q2 = SED.sample!(dist(median=1.3, sigma=1.4, distribution=Uniform, normalize=true), 100)
+    w = sample!(dist(median=0.002, sigma=0.3, distribution=LogNormal), 100)
+    q1 = sample!(dist(median=0.9, sigma=0.4, distribution=Uniform, normalize=true), 100)
+    q2 = sample!(dist(median=1.3, sigma=1.4, distribution=Uniform, normalize=true), 100)
     #scatter!(qw_plot,w,w, color=no_change)
 
 
@@ -280,12 +280,12 @@ function figureShift(; s=high_impact())
     s = scenario(s, w̃=dist(median=0.3, sigma=0.8, distribution=LogNormal))
     #[phase_plot!(a,sim(s)) for a in [α_plot]]
 
-    w = SED.sample!(dist(median=0.002, sigma=0.3, distribution=LogNormal), 100)
-    q1 = SED.sample!(dist(median=0.9, sigma=0.4, distribution=Uniform, normalize=true), 100)
-    q2 = SED.sample!(dist(median=1.3, sigma=1.4, distribution=Uniform, normalize=true), 100)
-    w = SED.sample!(dist(median=0.002, sigma=0.3, distribution=LogNormal), 100)
-    q1 = SED.sample!(dist(median=0.9, sigma=0.4, distribution=Uniform, normalize=true), 100)
-    q2 = SED.sample!(dist(median=1.3, sigma=1.4, distribution=Uniform, normalize=true), 100)
+    w = sample!(dist(median=0.002, sigma=0.3, distribution=LogNormal), 100)
+    q1 = sample!(dist(median=0.9, sigma=0.4, distribution=Uniform, normalize=true), 100)
+    q2 = sample!(dist(median=1.3, sigma=1.4, distribution=Uniform, normalize=true), 100)
+    w = sample!(dist(median=0.002, sigma=0.3, distribution=LogNormal), 100)
+    q1 = sample!(dist(median=0.9, sigma=0.4, distribution=Uniform, normalize=true), 100)
+    q2 = sample!(dist(median=1.3, sigma=1.4, distribution=Uniform, normalize=true), 100)
     #scatter!(qw_plot,w,w, color=no_change)
     scatter!(qw_plot, w, q1, color=no_change)
     scatter!(qw_plot, w, q2, color=:darkorange)
