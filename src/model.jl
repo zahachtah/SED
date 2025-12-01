@@ -10,12 +10,12 @@ returns its steady state as a warm start (u*, y*, extra set to defaults).
 """
 function sim_init(p; from::Symbol=:zeros, t_end=1000.0)
     N = p.N
-    pol = hasproperty(p, :policy) ? p.policy : "Open Access"
+    pol = hasproperty(p, :policy) ? p.policy : OpenAccess()
 
     if from == :zeros
-        if pol == "Tradable Use Rights"
+        if pol isa TradableUseRights
             return (zeros(N), 1.0, 0.0)
-        elseif pol == "Protected Area Two Pop"
+        elseif pol isa ProtectedAreaTwoPop
             return (zeros(N), 1.0, 1.0)
         else
             return (zeros(N), 1.0)
@@ -28,9 +28,9 @@ function sim_init(p; from::Symbol=:zeros, t_end=1000.0)
         prob = ODEProblem(dxdt, initVals, (0.0, t_end), oa)
         sol = solve(prob, SSPRK432(; stage_limiter!), callback=TerminateSteadyState(1e-6, 1e-4))
         # Copy back u*, y* and keep extra states at defaults
-        if pol == "Tradable Use Rights"
+        if pol isa TradableUseRights
             return (sol[1:N, end-2], sol[N+1, end-2], 0.0)
-        elseif pol == "Protected Area Two Pop"
+        elseif pol isa ProtectedAreaTwoPop
             return (sol[1:N, end-2], sol[N+1, end-2], sol[N+1, end-2])
         else
             return (sol[1:N, end-2], sol[N+1, end-2])
@@ -60,18 +60,38 @@ function stage_limiter!(x, integrator, p, t)
     end
 end
 
-function sim(s; u0=zeros(s.N), y0=1.0, ϕ0=0.0, regulation=0.0, start_from_OA=false, t_end=1000.0)
+function sim(s; u0=nothing, y0=1.0, ϕ0=0.0, regulation=0.0, start_from_OA=false, t_end=1000.0)
     sample!(s; force=false)
     tspan = (0.0, t_end)
     p = s.regulate(s, regulation)
-    pol = hasproperty(p, :policy) ? p.policy : "Open Access"
+    pol = hasproperty(p, :policy) ? p.policy : OpenAccess()
 
-    if pol == "Tradable Use Rights"
-        initVals = [u0; y0; ϕ0]
-    elseif pol == "Protected Area Two Pop"
-        initVals = [u0; y0; y0]
+    # 2. Initial Conditions
+    if u0 === nothing
+        # Default start
+        if pol isa TradableUseRights
+            u0_val = fill(1e-5, s.N)
+            y0_val = 1.0
+            extra_val = [ϕ0]
+        elseif pol isa ProtectedAreaTwoPop
+            u0_val = zeros(s.N)
+            y0_val = 1.0
+            extra_val = [y0_val]
+        else
+            u0_val = zeros(s.N)
+            y0_val = 1.0
+            extra_val = Float64[]
+        end
+        initVals = vcat(u0_val, y0_val, extra_val)
     else
-        initVals = [u0; y0]
+        # User provided u0
+        if pol isa TradableUseRights
+            initVals = [u0; y0; ϕ0]
+        elseif pol isa ProtectedAreaTwoPop
+            initVals = [u0; y0; y0]
+        else
+            initVals = [u0; y0]
+        end
     end
 
     if start_from_OA

@@ -1,78 +1,82 @@
 # Centralized Policy Implementation
-# Replaces the complex "Kit" system with straightforward dispatch.
+# Policies as Types: Using Julia's multiple dispatch for extensibility and simplicity.
 
 using OrdinaryDiffEq
 using DiffEqCallbacks: TerminateSteadyState
 using Random
 
+export AbstractPolicy
+export OpenAccess, TradableUseRights, ExclusiveUseRights, ProtectedArea, ProtectedAreaTwoPop, EconomicIncentives, Development
 export cost, limit, dynamics, regulate
 
 # =========================================================================================
-# Dispatch Functions (Called by Master Functions in scenarios.jl)
+# Abstract Policy Type
 # =========================================================================================
 
-function cost(val, x, p, t)
-    pol = p.policy
-    if pol == "Tradable Use Rights"
-        return cost_tur(val, x, p, t)
-    elseif pol == "Exclusive Use Rights"
-        return cost_eur(val, x, p, t)
-    elseif pol == "Protected Area"
-        return cost_pa(val, x, p, t)
-    elseif pol == "Protected Area Two Pop"
-        return val # PA Two Pop only affects dynamics and limit
-    elseif pol == "Economic Incentives"
-        return cost_ei(val, x, p, t)
-    elseif pol == "Development"
-        return cost_dev(val, x, p, t)
-    end
-    return val
-end
-
-function limit(val, x, p, t)
-    pol = p.policy
-    if pol == "Protected Area"
-        return limit_pa(val, x, p, t)
-    elseif pol == "Protected Area Two Pop"
-        return limit_pa_two_pop(val, x, p, t)
-    elseif pol == "Economic Incentives"
-        return limit_ei(val, x, p, t)
-    elseif pol == "Development"
-        return limit_dev(val, x, p, t)
-    end
-    return val
-end
-
-function dynamics(dx, x, p, t)
-    pol = p.policy
-    if pol == "Tradable Use Rights"
-        dynamics_tur(dx, x, p, t)
-    elseif pol == "Protected Area Two Pop"
-        dynamics_pa_two_pop(dx, x, p, t)
-    end
-end
+abstract type AbstractPolicy end
 
 # =========================================================================================
-# Regulation Logic (Called by sim() to set up the scenario before solving)
+# Concrete Policy Structs
 # =========================================================================================
 
-function regulate(s, f)
-    pol = s.policy
-    if pol == "Tradable Use Rights"
-        return regulate_tur(s, f)
-    elseif pol == "Exclusive Use Rights"
-        return regulate_eur(s, f)
-    elseif pol == "Protected Area"
-        return regulate_pa(s, f)
-    elseif pol == "Protected Area Two Pop"
-        return regulate_pa_two_pop(s, f)
-    elseif pol == "Economic Incentives"
-        return regulate_ei(s, f)
-    elseif pol == "Development"
-        return regulate_dev(s, f)
-    end
+struct OpenAccess <: AbstractPolicy end
+
+struct TradableUseRights <: AbstractPolicy
+    target::Symbol      # :effort or :yield
+    market_rate::Float64
+    buyer_bias::Float64
+    historical_use_rights::Bool
+end
+
+struct ExclusiveUseRights <: AbstractPolicy
+    selector::Symbol # :top, :bottom, :random
+    reverse::Bool # Legacy parameter
+end
+
+struct ProtectedArea <: AbstractPolicy
+    m::Float64 # Mobility
+end
+
+struct ProtectedAreaTwoPop <: AbstractPolicy
+    m::Float64 # Migration
+end
+
+struct EconomicIncentives <: AbstractPolicy
+    target::Vector{Symbol} # [:cost] or [:limit]
+    method::Symbol # :taxation, :additive, :multiplicative
+end
+
+struct Development <: AbstractPolicy
+    μ_value::Float64
+    γ_value::Float64
+end
+
+
+# =========================================================================================
+# Dispatchers & Fallbacks
+# =========================================================================================
+
+# --- Dispatchers (Unpack policy from scenario) ---
+cost(val, x, p, t) = cost(val, x, p, t, p.policy)
+limit(val, x, p, t) = limit(val, x, p, t, p.policy)
+dynamics(dx, x, p, t) = dynamics(dx, x, p, t, p.policy)
+regulate(s, f) = regulate(s, f, s.policy)
+
+# --- Default Fallbacks (Open Access behavior) ---
+cost(val, x, p, t, ::AbstractPolicy) = val
+limit(val, x, p, t, ::AbstractPolicy) = val
+dynamics(dx, x, p, t, ::AbstractPolicy) = nothing
+
+"""
+    regulate(s, f, policy)
+
+Apply regulation level `f` to scenario `s` for the given policy.
+Returns a new scenario with updated parameters.
+"""
+function regulate(s, f, pol::AbstractPolicy)
     return change(s, regulation=f)
 end
+
 
 # =========================================================================================
 # Policy Implementations
@@ -80,23 +84,20 @@ end
 
 # ----- Tradable Use Rights (TUR) -----
 
-function regulate_tur(s, f)
-    # Defaults
-    target = hasproperty(s, :policy_target) ? s.policy_target : :effort
-
+function regulate(s, f, pol::TradableUseRights)
     # Default allocation: equal shares of allowed effort or yield
     R = fill(f == 0 ? 1.0 : (1 - Float64(f)) / s.N, s.N)
 
-    if haskey(s, :historical_use_rights) && s.historical_use_rights
+    if pol.historical_use_rights
         # Solve OA once to estimate historical baselines
         # Create a temporary OA scenario
-        s_oa = change(s, policy="Open Access")
-        u0 = zeros(s.N)
+        s_oa = change(s, policy=OpenAccess())
+        u0 = fill(0.1, s.N) # Ensure non-zero start
         y0 = 1.0
         oaprob = ODEProblem(dxdt, [u0; y0], (0.0, 1000.0), s_oa)
         oasol = solve(oaprob, SSPRK432(; stage_limiter!), callback=TerminateSteadyState(1e-6, 1e-4))
 
-        if target == :yield
+        if pol.target == :yield
             hist_u = oasol[1:s.N, end-1]
             hist_y = oasol[s.N+1, end-1]
             hist_yield = hist_u .* hist_y
@@ -117,7 +118,8 @@ function regulate_tur(s, f)
     function _tur_income_extra(x, p, t)
         u = x[1:p.N]
         y = x[p.N+1]
-        target = hasproperty(p, :policy_target) ? p.policy_target : :effort
+        # p.policy is now the struct
+        target = p.policy.target
         if target == :yield
             (p.R .- (u .* y)) .* x[p.N+2]
         else
@@ -128,14 +130,14 @@ function regulate_tur(s, f)
     return change(s, R=R, regulation=f, income_extra_fun=_tur_income_extra)
 end
 
-function cost_tur(val, x, p, t)
+function cost(val, x, p, t, pol::TradableUseRights)
     # Cost = w + Price
     return val .+ x[end]
 end
 
-function dynamics_tur(dx, x, p, t)
-    target = hasproperty(p, :policy_target) ? p.policy_target : :effort
-    market_rate = hasproperty(p, :market_rate) ? p.market_rate : 0.05
+function dynamics(dx, x, p, t, pol::TradableUseRights)
+    target = pol.target
+    market_rate = pol.market_rate
 
     # Supply: Aggregate clamping (Legacy/Stable logic)
     supply = if target == :yield
@@ -155,7 +157,7 @@ function dynamics_tur(dx, x, p, t)
     end
 
     # Buyer Bias
-    bias = hasproperty(p, :buyer_bias) ? Float64(getfield(p, :buyer_bias)) : 0.0
+    bias = pol.buyer_bias
     if bias != 0.0 && hasproperty(p, :opportunities)
         opp = getfield(p, :opportunities)
         oppv = hasproperty(opp, :data) ? opp.data : opp
@@ -190,21 +192,18 @@ end
 
 # ----- Exclusive Use Rights (EUR) -----
 
-function regulate_eur(s, f)
+function regulate(s, f, pol::ExclusiveUseRights)
     N = s.N
     R = zeros(N)
     n = max(0, min(N, round(Int, f * N)))
 
     if n > 0
-        # Determine selection strategy from policy_name or extra field
-        # Default to "top" if not specified
-        # We can use s.selector if provided, or infer from policy variant name
+        # Determine selection strategy
+        selector = pol.selector
 
         # Get data to sort by (opportunities or w̃)
         data = hasproperty(s, :opportunities) ? (hasproperty(s.opportunities, :data) ? s.opportunities.data : s.opportunities) :
                (hasproperty(s, :w̃) ? (hasproperty(s.w̃, :data) ? s.w̃.data : s.w̃) : zeros(N))
-
-        selector = hasproperty(s, :selector) ? s.selector : :top
 
         idx = Int[]
         if selector == :top
@@ -220,20 +219,21 @@ function regulate_eur(s, f)
     return change(s, R=R, regulation=f)
 end
 
-function cost_eur(val, x, p, t)
+function cost(val, x, p, t, pol::ExclusiveUseRights)
     # Add R to cost (R=1 means excluded/high cost)
     return val .+ p.R
 end
 
+
 # ----- Protected Area (PA) -----
 
-function regulate_pa(p, f)
+function regulate(p, f, pol::ProtectedArea)
     # Provide resource_factor_fun so incomes scale resource by (1 - f)
     rff(x, pp, t) = (1 - pp.regulation)
     return change(p, regulation=f, resource_factor_fun=rff)
 end
 
-function cost_pa(val, x, p, t)
+function cost(val, x, p, t, pol::ProtectedArea)
     return val .* (1 - p.regulation) .^ -1
 end
 
@@ -253,74 +253,64 @@ function rₛ(y, fₚ, m; K::Float64=1.0, r::Float64=1.0, xK::Float64=0.0, xr::F
     (fₚ / (1 - fₚ) * m * (yₚ(y, fₚ, m; r, K, xK, xr) .- y)) ./ max.(y, 1e-6)
 end
 
-function limit_pa(val, x, p, t)
-    m = hasproperty(p, :m) ? p.m : 0.3
-    return val .* (1 .+ rₛ(x[p.N+1], p.regulation, m)) .^ -1
+function limit(val, x, p, t, pol::ProtectedArea)
+    return val .* (1 .+ rₛ(x[p.N+1], p.regulation, pol.m)) .^ -1
 end
 
 # ----- Protected Area Two Populations -----
 
-function regulate_pa_two_pop(p, f)
-    m = hasproperty(p, :m) ? p.m : 0.3
-    return change(p, regulation=f, m=m)
+function regulate(p, f, pol::ProtectedAreaTwoPop)
+    return change(p, regulation=f)
 end
 
-function dynamics_pa_two_pop(dx, x, p, t)
+function dynamics(dx, x, p, t, pol::ProtectedAreaTwoPop)
     mx = x[p.N+2] - x[p.N+1]
-    dx[p.N+2] = (1.0 - x[p.N+2]) * dx[p.N+2] - (1.0 - p.regulation) / p.regulation * p.m * mx
-    dx[p.N+1] += p.regulation / (1.0 - p.regulation) * p.m * mx
+    dx[p.N+2] = (1.0 - x[p.N+2]) * dx[p.N+2] - (1.0 - p.regulation) / p.regulation * pol.m * mx
+    dx[p.N+1] += p.regulation / (1.0 - p.regulation) * pol.m * mx
 end
 
-function limit_pa_two_pop(val, x, p, t)
+function limit(val, x, p, t, pol::ProtectedAreaTwoPop)
     y_u = x[p.N+1]
     y_p = x[p.N+2]
     # Regularized division by y_u
-    r_s_local = ((1.0 - p.regulation) / p.regulation) * p.m * (y_p - y_u) / max(y_u, 1e-6)
+    r_s_local = ((1.0 - p.regulation) / p.regulation) * pol.m * (y_p - y_u) / max(y_u, 1e-6)
     return val .* (1 .+ r_s_local) .^ (-1)
 end
 
 # ----- Economic Incentives -----
 
-function regulate_ei(p, f)
+function regulate(p, f, pol::EconomicIncentives)
     return change(p, regulation=f)
 end
 
-function cost_ei(val, x, p, t)
-    target = hasproperty(p, :policy_target) ? p.policy_target : [:cost, :limit]
-    method = hasproperty(p, :policy_method) ? p.policy_method : :multiplicative
-
-    if :cost in vcat(target) || :γ in vcat(target) # Support old symbol too
-        if method == :additive
+function cost(val, x, p, t, pol::EconomicIncentives)
+    if :incentives in pol.target || :cost in pol.target || :γ in pol.target
+        if pol.method == :additive
             return val .+ p.regulation
         else
-            return val .* (1 - p.regulation * (method == :taxation ? -1.0 : 1.0))
+            return val .* (1 - p.regulation * (pol.method == :taxation ? -1.0 : 1.0))
         end
     end
     return val
 end
 
-function limit_ei(val, x, p, t)
-    target = hasproperty(p, :policy_target) ? p.policy_target : [:cost, :limit]
-    method = hasproperty(p, :policy_method) ? p.policy_method : :multiplicative
-
-    if :limit in vcat(target) || :μ in vcat(target) # Support old symbol too
-        return val .* (1 - p.regulation * (method == :taxation ? -1.0 : 1.0))
+function limit(val, x, p, t, pol::EconomicIncentives)
+    if :impact in pol.target || :limit in pol.target || :μ in pol.target
+        return val .* (1 - p.regulation * (pol.method == :taxation ? -1.0 : 1.0))
     end
     return val
 end
 
 # ----- Development -----
 
-function regulate_dev(p, f)
-    μ_value = hasproperty(p, :μ_value) ? p.μ_value : 0.5
-    γ_value = hasproperty(p, :γ_value) ? p.γ_value : 0.5
-    return change(p, regulation=f, μ_value=μ_value, γ_value=γ_value)
+function regulate(p, f, pol::Development)
+    return change(p, regulation=f)
 end
 
-function cost_dev(val, x, p, t)
-    return val .+ p.regulation * t / 1000 * p.γ_value
+function cost(val, x, p, t, pol::Development)
+    return val .+ p.regulation * t / 1000 * pol.γ_value
 end
 
-function limit_dev(val, x, p, t)
-    return val .+ p.regulation * 2 / p.N * t / 1000 * p.μ_value
+function limit(val, x, p, t, pol::Development)
+    return val .+ p.regulation * 2 / p.N * t / 1000 * pol.μ_value
 end

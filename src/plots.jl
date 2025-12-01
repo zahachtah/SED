@@ -166,9 +166,7 @@ function phase_plot!(axis, sol; show_trajectory=false, show_target=false, open_a
     y = range(0.0, stop=1.0, length=100)
     if show_oa
         # Create OA scenario using new API
-        oa = change(scenario, policy="Open Access",
-            cost=master_cost, limit=master_limit, dynamics=master_dynamics, regulate=regulate)
-        oasol = sim(oa)
+        oa = change(scenario, policy=OpenAccess())
         lines!(axis, y, Γ.(y, Ref(oa), x=sol.u[end-1]), color=open_access_color, linewidth=3)
         lines!(axis, y, Φ.(y, Ref(oa)), color=open_access_color, linewidth=1)
     end
@@ -182,7 +180,7 @@ function phase_plot!(axis, sol; show_trajectory=false, show_target=false, open_a
         lines!(axis,
             [u[scenario.N+1] for u in sol.u[1:end-2]],
             [sum(u[1:scenario.N] ./ scenario.limit(u, scenario, sol.t[i])) / scenario.N for (i, u) in enumerate(sol.u[1:end-2])],
-            color=scenario.policy == "Development" ? sol.t[1:end-2] : trajectory_color,
+            color=scenario.policy isa Development ? sol.t[1:end-2] : trajectory_color,
             linestyle=:dot,
             colormap=cgrad([:lightgray, :darkorange], [0.0, 0.5, 1.0]))
     end

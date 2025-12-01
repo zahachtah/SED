@@ -22,17 +22,17 @@ function regulation_scan(p; m=100, kR=0.5, kT=1.0, kG=-0.2, kE=0.0, kI=0.0, warm
     end
     for (j, i) in enumerate(r)
         # Debug logging
-        pol_label = hasproperty(p, :label) ? p.label : (hasproperty(p, :policy) ? p.policy : "Unknown")
+        pol = hasproperty(p, :policy) ? p.policy : OpenAccess()
+        pol_label = hasproperty(p, :label) ? p.label : string(typeof(pol))
 
         if warmstart == :chain && prev_sol !== nothing
-            policystr = hasproperty(p, :policy) ? p.policy : ""
             # pull previous steady state safely and clamp extra states nonnegative
             u0_prev = prev_sol[1:p.N, end-2]
             y0_prev = prev_sol[p.N+1, end-2]
-            if policystr == "Tradable Use Rights"
+            if pol isa TradableUseRights
                 # Force cold start for TUR to ensure price discovery (demand requires dx > 0)
-                sol = sim(p, regulation=i, t_end=1000, u0=zeros(p.N), y0=1.0, ϕ0=0.0)
-            elseif policystr == "Protected Area Two Pop"
+                sol = sim(p, regulation=i, t_end=1000, u0=fill(1e-5, p.N), y0=1.0, ϕ0=0.0)
+            elseif pol isa ProtectedAreaTwoPop
                 y2_prev = prev_sol[p.N+2, end-2]
                 y2_prev = max(0.0, y2_prev)
                 sol = sim(p, regulation=i, t_end=1000, u0=u0_prev, y0=y0_prev, ϕ0=y2_prev)
@@ -40,10 +40,9 @@ function regulation_scan(p; m=100, kR=0.5, kT=1.0, kG=-0.2, kE=0.0, kI=0.0, warm
                 sol = sim(p, regulation=i, t_end=1000, u0=u0_prev, y0=y0_prev)
             end
         elseif warmstart == :oa_once
-            policystr = hasproperty(p, :policy) ? p.policy : ""
-            if policystr == "Tradable Use Rights"
+            if pol isa TradableUseRights
                 sol = sim(p, regulation=i, t_end=1000, u0=x0[1:p.N], y0=x0[p.N+1], ϕ0=0.0)
-            elseif policystr == "Protected Area Two Pop"
+            elseif pol isa ProtectedAreaTwoPop
                 sol = sim(p, regulation=i, t_end=1000, u0=x0[1:p.N], y0=x0[p.N+1], ϕ0=x0[p.N+1])
             else
                 sol = sim(p, regulation=i, t_end=1000, u0=x0[1:p.N], y0=x0[p.N+1])
@@ -139,10 +138,12 @@ function incomes(x, p; summarize=false, dimensional::Bool=false)
     # rescale incentives (TUR/EUR/PA), use the baseline w̃ for wage accounting
     # and keep market-related revenue in the extra (trade) component.
     μ = p.limit(x, p, 0.0)
-    policystr = hasproperty(p, :policy) ? String(p.policy) : ""
-    use_baseline_cost = (policystr == "Tradable Use Rights") ||
-                        (policystr == "Exclusive Use Rights") ||
-                        (policystr == "Protected Area")
+    pol = hasproperty(p, :policy) ? p.policy : OpenAccess()
+
+    use_baseline_cost = (pol isa TradableUseRights) ||
+                        (pol isa ExclusiveUseRights) ||
+                        (pol isa ProtectedArea)
+
     γw = if use_baseline_cost && hasproperty(p, :w̃)
         hasproperty(p.w̃, :data) ? p.w̃.data : p.w̃
     else
