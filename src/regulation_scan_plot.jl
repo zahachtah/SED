@@ -17,8 +17,8 @@ function default_regulation_scan_policies(s; tourism_factor::Float64=0.002)
         scenario(s, policy="Exclusive Use Rights", selector=:top),
         scenario(s, policy="Exclusive Use Rights", selector=:bottom),
         scenario(s, policy="Tradable Use Rights", policy_target=:effort, market_rate=0.05, buyer_bias=0.0),
-        scenario(s, policy="Tradable Use Rights", policy_target=:effort, market_rate=0.05, buyer_bias=+0.9),
-        scenario(s, policy="Tradable Use Rights", policy_target=:effort, market_rate=0.05, buyer_bias=-0.9),
+        #scenario(s, policy="Tradable Use Rights", policy_target=:effort, market_rate=0.05, buyer_bias=+0.9),
+        #scenario(s, policy="Tradable Use Rights", policy_target=:effort, market_rate=0.05, buyer_bias=-0.9),
         scenario(s, policy="Tradable Use Rights", policy_target=:yield, market_rate=0.05, buyer_bias=0.0),
         scenario(s, policy="Protected Area", m=0.3),
         # For the custom tourism case, we need a way to inject the income function.
@@ -33,8 +33,8 @@ function default_regulation_scan_policies(s; tourism_factor::Float64=0.002)
         "Exclusive Use Rights (top)",
         "Exclusive Use Rights (bottom)",
         "Tradable Use Rights (effort)",
-        "Tradable Use Rights (effort, rich)",
-        "Tradable Use Rights (effort, poor)",
+        #"Tradable Use Rights (effort, rich)",
+        #"Tradable Use Rights (effort, poor)",
         "Tradable Use Rights (yield)",
         "Protected Area",
         "Protected Area + Tourism"
@@ -44,8 +44,8 @@ function default_regulation_scan_policies(s; tourism_factor::Float64=0.002)
         "Fraction of excluded users",
         "Fraction of excluded users",
         "Total Effort Reduction",
-        "Total Effort Reduction",
-        "Total Effort Reduction",
+        #"Total Effort Reduction",
+        #"Total Effort Reduction",
         "Total Yield Reduction",
         "Fraction of protected area",
         "Fraction of protected area"
@@ -68,10 +68,12 @@ and `policyxlabels` to customize the lineup, or omit them to use
 """
 function regulation_scan_plot(; s=high_impact(), warmstart::Symbol=:chain, Tcontext=nothing,
     weights=(kR=0.5, kT=1.0, kG=-0.2, kE=0.0, kI=0.0),
-    tourism_factor::Float64=0.002,
+    tourism_factor=0.005,
     policies=nothing,
     policylabels=nothing,
-    policyxlabels=nothing)
+    policyxlabels=nothing,
+    heatmap::Bool=false,
+    resource::Bool=false)
 
     if policies === nothing
         policies, policylabels, policyxlabels = default_regulation_scan_policies(s; tourism_factor)
@@ -133,7 +135,12 @@ function regulation_scan_plot(; s=high_impact(), warmstart::Symbol=:chain, Tcont
     ncols = length(policies)
     base_w = 1050.0
     width = Int(round(base_w * (ncols / 6) * sc))
-    f = Figure(size=(width, Int(round(935 * sc))))
+
+    nrows = length(outcomes) + 1 + (heatmap ? 1 : 0) + (resource ? 1 : 0)
+    row_h = 180 # Approx height per row
+    height = Int(round(nrows * row_h * sc))
+
+    f = Figure(size=(width, height))
 
     for (j, o) in enumerate(outcomes)
         Label(f[j, 0], text=labels[o], tellheight=false, font=:bold, halign=:right)
@@ -195,6 +202,72 @@ function regulation_scan_plot(; s=high_impact(), warmstart::Symbol=:chain, Tcont
     end
 
     phase_row = length(outcomes) + 1
+
+    if resource
+        # Add Resource Row
+        res_row = phase_row
+        phase_row += 1
+
+        for (i, rs) in enumerate(RS)
+            rax = Axis(f[res_row, i])
+            # Plot resource level
+            lines!(rax, rs.r, rs.resources, color=:green, linewidth=2)
+
+            # Add marker for optimal governance point
+            ridx = getfield(rs, :oGov)
+            scatter!(rax, [rs.r[ridx]], [rs.resources[ridx]]; color=:green)
+            vlines!(rax, [regs_go[i]]; color=:crimson, linewidth=2)
+
+            hidespines!(rax)
+            if i > 1
+                hideydecorations!(rax; grid=false)
+            else
+                rax.ylabel = "Resource"
+            end
+            hidexdecorations!(rax; grid=false)
+        end
+        Label(f[res_row, 0], text="Resource\nStock", tellheight=false, font=:bold, halign=:right)
+    end
+
+    if heatmap
+        # Add Heatmap Row
+        heatmap_row = phase_row
+        phase_row += 1
+
+        # Determine global min/max for color scale across all policies
+        # to make them comparable (for effort/sols)
+        vmin = Inf
+        vmax = -Inf
+        for rs in RS
+            vmin = min(vmin, minimum(rs.sols))
+            vmax = max(vmax, maximum(rs.sols))
+        end
+
+        for (i, rs) in enumerate(RS)
+            hax = Axis(f[heatmap_row, i])
+            # sols is (m, N). We want Regulation (m) on x, Actors (N) on y.
+            # Makie expects z to be (nx, ny) where nx=length(x) and ny=length(y).
+            # Here x=r (length m), y=1:N (length N).
+            # So z must be (m, N).
+            # This matches sols dimensions directly. No transpose needed.
+
+            # Custom colormap matching policy color
+            pol_color = cs[mod1(i, length(cs))]
+            cmap = cgrad(["#f1f1f1", pol_color])
+
+            hm = heatmap!(hax, rs.r, 1:s.N, rs.sols; colorrange=(vmin, vmax), colormap=cmap)
+
+            hidespines!(hax)
+            if i > 1
+                hideydecorations!(hax; grid=false)
+            else
+                hax.ylabel = "Actors"
+            end
+            hidexdecorations!(hax; grid=false)
+        end
+        Label(f[heatmap_row, 0], text="Effort\nDist.", tellheight=false, font=:bold, halign=:right)
+    end
+
     for (i, ppol) in enumerate(policies)
         pax = Axis(f[phase_row, i])
         hidespines!(pax)

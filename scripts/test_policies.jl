@@ -20,6 +20,6 @@ policies = [
     end
 ]
 
-sols = [sim(policy, regulation=0.5) for policy in policies]
+sols = [sim(policy, regulation=0.75) for policy in policies]
 
-SED.phase_plot(sols[1])
+SED.phase_plot(sols[4])

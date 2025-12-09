@@ -375,28 +375,18 @@ function dist(;
         # Implicit source?
         # If dependency_fun uses 'independent', we need a source.
 
-        uses_indep = false
-        if !isnothing(dependency_fun)
-            uses_indep = occursin("independent", dependency_fun) || occursin("sed", dependency_fun)
-        end
-        # For @dependent, we assume it might use independent (it's always passed).
-        # But if we want to optimize, we could check the expression? 
-        # Hard to check compiled function.
-        # Let's assume YES for @dependent unless we want to force ZeroSource?
-        # Actually, if no distribution is given, we default to Uniform(0,1) usually.
-        # But if it's purely functional (e.g. q*w), we might want ZeroSource.
-        # However, passing 0.0 as independent is fine for q*w.
-        # Passing random noise is NOT fine if q*w doesn't use it? 
-        # Actually it is fine, just unused.
-        # BUT performance! Generating random numbers for nothing.
-
-        # For now, let's stick to the logic: if no distribution, default to Uniform(0,1).
-        # Unless we can prove independent is unused.
-
-        # If dependency is provided, we don't know if it uses independent.
-        # Let's default to Uniform(0,1) to be safe/consistent with legacy.
-
-        if haskey(kw, :min) || haskey(kw, :max)
+        # Check if mean/sigma are provided to infer distribution
+        if haskey(kw, :mean) && haskey(kw, :sigma)
+            mu = Float64(kw[:mean])
+            sig = Float64(kw[:sigma])
+            if sig <= 1e-9
+                # Constant / Dirac
+                source = RandomSource(Dirac(mu), random)
+            else
+                # Default to Normal if mean/sigma provided
+                source = RandomSource(Normal(mu, sig), random)
+            end
+        elseif haskey(kw, :min) || haskey(kw, :max)
             d_obj = build_distribution(Uniform, kw)
             source = RandomSource(d_obj, random)
         else
@@ -404,7 +394,20 @@ function dist(;
         end
     else
         # Default default
-        source = RandomSource(Uniform(0, 1), random)
+        # Check if mean/sigma are provided to infer distribution
+        if haskey(kw, :mean) && haskey(kw, :sigma)
+            mu = Float64(kw[:mean])
+            sig = Float64(kw[:sigma])
+            if sig <= 1e-9
+                # Constant / Dirac
+                source = RandomSource(Dirac(mu), random)
+            else
+                # Default to Normal if mean/sigma provided
+                source = RandomSource(Normal(mu, sig), random)
+            end
+        else
+            source = RandomSource(Uniform(0, 1), random)
+        end
     end
 
     # 2. Build Dependency

@@ -127,6 +127,24 @@ function regulate(s, f, pol::TradableUseRights)
         end
     end
 
+    # Calculate Buyer Bias Weights
+    bias = pol.buyer_bias
+    tur_weights = ones(s.N)
+    if bias != 0.0 && hasproperty(s, :opportunities)
+        opp = getfield(s, :opportunities)
+        oppv = hasproperty(opp, :data) ? opp.data : opp
+        if length(oppv) == s.N
+            omin = minimum(oppv)
+            omax = maximum(oppv)
+            rng = omax - omin
+            if rng > 0
+                norm = (oppv .- omin) ./ rng
+                s_scaled = 2 .* (norm .- 0.5)
+                tur_weights .= clamp.(1 .+ bias .* s_scaled, 0.001, Inf)
+            end
+        end
+    end
+
     return change(s, R=R, regulation=f, income_extra_fun=_tur_income_extra)
 end
 
@@ -156,24 +174,6 @@ function dynamics(dx, x, p, t, pol::TradableUseRights)
         min.(p.ū[id] - x[id], dx[id])
     end
 
-    # Buyer Bias
-    bias = pol.buyer_bias
-    if bias != 0.0 && hasproperty(p, :opportunities)
-        opp = getfield(p, :opportunities)
-        oppv = hasproperty(opp, :data) ? opp.data : opp
-        if length(oppv) == p.N
-            omin = minimum(oppv)
-            omax = maximum(oppv)
-            rng = omax - omin
-            if rng > 0
-                norm = (oppv .- omin) ./ rng
-                s = 2 .* (norm .- 0.5)
-                wfull = clamp.(1 .+ bias .* s, 0.001, Inf)
-                ind_demand = ind_demand .* wfull[id]
-            end
-        end
-    end
-
     demand = sum(ind_demand)
 
     # Price Dynamics
@@ -181,11 +181,46 @@ function dynamics(dx, x, p, t, pol::TradableUseRights)
 
     # Rationing if demand exceeds supply
     if demand > supply && demand > 0
-        if target == :yield
-            y = max(eps(), x[p.N+1])
-            dx[id] .= (supply .* ind_demand ./ demand) ./ y
-        else
-            dx[id] .= supply .* ind_demand ./ demand
+
+        # Check for Buyer Bias
+        bias = pol.buyer_bias
+        used_biased_allocation = false
+
+        if bias != 0.0 && hasproperty(p, :opportunities)
+            opp = getfield(p, :opportunities)
+            oppv = hasproperty(opp, :data) ? opp.data : opp
+
+            if length(oppv) == p.N
+                # Calculate weights based on bias
+                omin = minimum(oppv)
+                omax = maximum(oppv)
+                rng = omax - omin
+
+                if rng > 0
+                    norm = (oppv[id] .- omin) ./ rng
+                    # Map [0,1] to [-1,1] then scale by bias
+                    # w = 1 + bias * s
+                    # If bias=1, range is [0, 2]. If bias=-1, range is [2, 0].
+                    s_scaled = 2 .* (norm .- 0.5)
+                    weights = clamp.(1 .+ bias .* s_scaled, 0.001, Inf)
+
+                    total_w = sum(weights)
+                    if total_w > 0
+                        dx[id] .= supply .* (weights ./ total_w)
+                        used_biased_allocation = true
+                    end
+                end
+            end
+        end
+
+        if !used_biased_allocation
+            # Standard logic (proportional to demand)
+            if target == :yield
+                y = max(eps(), x[p.N+1])
+                dx[id] .= (supply .* ind_demand ./ demand) ./ y
+            else
+                dx[id] .= supply .* ind_demand ./ demand
+            end
         end
     end
 end

@@ -15,6 +15,7 @@ function regulation_scan(p; m=100, kR=0.5, kT=1.0, kG=-0.2, kE=0.0, kI=0.0, warm
     x0[p.N+1] = 1.0
     sols = zeros(m, p.N)
     incdist = zeros(m, p.N)
+    resources = zeros(m)
     prev_sol = nothing
     if warmstart == :oa_once
         u0, y0_extra... = sim_init(p; from=:oa)
@@ -87,8 +88,18 @@ function regulation_scan(p; m=100, kR=0.5, kT=1.0, kG=-0.2, kE=0.0, kI=0.0, warm
         # Safe power for nonnegative inputs (avoid complex/NaN from negatives or zeros)
         _sp(x, k) = (max(x, eps())^k)
         Gov[j] = _sp(Rsum, kR) * _sp(Tsum, kT) * _sp(Gval, kG) * _sp(Eval, kE) * _sp(Isum, kI)
-        sols[j, :] = sol.u[end-1][1:p.N] ./ p.ū
+
+        # Sort by w̃ (opportunity cost) for visualization if available
+        w_data = hasproperty(p, :w̃) ? (hasproperty(p.w̃, :data) ? p.w̃.data : p.w̃) : nothing
+        if w_data !== nothing && length(w_data) == p.N
+            id = sortperm(w_data)
+            sols[j, :] = sol.u[end-1][id] ./ p.ū[id]
+        else
+            sols[j, :] = sol.u[end-1][1:p.N] ./ p.ū
+        end
+
         incdist[j, :] = inc.total
+        resources[j] = sol.u[end-1][p.N+1]
     end
     oRR = argmax(RR)
     oWR = argmax(WR)
@@ -98,7 +109,7 @@ function regulation_scan(p; m=100, kR=0.5, kT=1.0, kG=-0.2, kE=0.0, kI=0.0, warm
     oEH = argmax(EH)
     oRI = argmax(EH)
     oGov = argmax(Gov)
-    return (; RR, WR, TR, ToR, GI, EH, RI, Gov=Gov ./ 100.0, r, oRR, oWR, oTR, oToR, oGI, oEH, oRI, oGov, sols, incdist)
+    return (; RR, WR, TR, ToR, GI, EH, RI, Gov=Gov ./ 100.0, r, oRR, oWR, oTR, oToR, oGI, oEH, oRI, oGov, sols, incdist, resources)
 end
 
 function Γ(y, p; x=zeros(p.N + 1), t=0.0)

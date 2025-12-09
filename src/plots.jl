@@ -545,3 +545,26 @@ function distribution_plot(
     rowgap!(fig.layout, 6)
     return fig
 end
+# ----------------------------------------------------------------------------
+# Plot recipe for SEDist (KDE)
+# ----------------------------------------------------------------------------
+function CairoMakie.plot(d::SEDist; color=:gray20, bandcolor=:gray35, alpha=0.5, kwargs...)
+    # Ensure data is populated
+    if isempty(d.data)
+        error("SEDist has no data to plot. Call sample!(d) first.")
+    end
+
+    # Create figure and axis
+    f = Figure()
+    ax = Axis(f[1, 1]; xlabel="Value", ylabel="Density", kwargs...)
+
+    # KDE
+    kd = kde(d.data)
+    
+    # Plot
+    ylims!(ax, 0, maximum(kd.density) * 1.05)
+    lines!(ax, kd.x, kd.density; color=color)
+    band!(ax, kd.x, zero.(kd.density), kd.density; color=bandcolor, transparency=true, alpha=alpha)
+
+    return f
+end
