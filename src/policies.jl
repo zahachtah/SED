@@ -86,14 +86,16 @@ end
 
 function regulate(s, f, pol::TradableUseRights)
     # Default allocation: equal shares of allowed effort or yield
+
     R = fill(f == 0 ? 1.0 : (1 - Float64(f)) / s.N, s.N)
+
 
     if pol.historical_use_rights
         # Solve OA once to estimate historical baselines
         # Create a temporary OA scenario
         s_oa = change(s, policy=OpenAccess())
-        u0 = fill(0.1, s.N) # Ensure non-zero start
         y0 = 1.0
+        u0 = fill(0.0, s.N)
         oaprob = ODEProblem(dxdt, [u0; y0], (0.0, 1000.0), s_oa)
         oasol = solve(oaprob, SSPRK432(; stage_limiter!), callback=TerminateSteadyState(1e-6, 1e-4))
 
