@@ -1,8 +1,5 @@
 using Test
 using Statistics
-using Distributions
-include("../src/SED.jl")
-using .SED
 
 @testset "SEDist Refactor" begin
 
@@ -56,7 +53,9 @@ using .SED
             res=SED.dist(mean=0, sigma=1, distribution=Normal, dependency_fun="q + independent") # 1 + N(0,1)
         )
         SED.sample!(ctx3)
-        @test abs(mean(ctx3.res) - 1.0) < 0.2
+        # `mean(::SEDist)` describes the independent source; dependencies are
+        # reflected in the realized data.
+        @test abs(mean(ctx3.res.data) - 1.0) < 0.2
     end
 
     @testset "Random vs Quantiles" begin

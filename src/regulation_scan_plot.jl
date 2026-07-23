@@ -373,7 +373,7 @@ function regulation_scan_plot(; s=high_impact(), warmstart::Symbol=:chain, Tcont
             pax.xlabel = "Resource level"
         end
         if i == 1
-            pax.ylabel = "Participation"
+            pax.ylabel = "Participation (fraction)"
             pax.ylabelsize = 12
             pax.ylabelrotation = π / 2
             pax.ylabelvisible = true

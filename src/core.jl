@@ -206,6 +206,20 @@ function build_distribution(::Type{Bernoulli}, kw)
     return Bernoulli(p)
 end
 
+function build_distribution(::Type{Exponential}, kw)
+    if haskey(kw, :mean)
+        m = max(float(kw[:mean]), eps())
+        return Exponential(m)
+    elseif haskey(kw, :sigma)
+        s = max(abs(float(kw[:sigma])), eps())
+        return Exponential(s)
+    elseif haskey(kw, :min) && haskey(kw, :max)
+        span = max(float(kw[:max]) - float(kw[:min]), eps())
+        return Exponential(span / 2)
+    end
+    return Exponential(1.0)
+end
+
 function build_distribution(::Type{Beta}, kw)
     if haskey(kw, :alpha) && haskey(kw, :beta)
         return Beta(kw[:alpha], kw[:beta])

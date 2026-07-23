@@ -41,7 +41,7 @@ function scenario(p; kwargs...)
         historical = get(kwargs, :historical_use_rights, false)
         TradableUseRights(target, Float64(market_rate), Float64(buyer_bias), historical)
     elseif pol_arg == "Exclusive Use Rights"
-        selector = get(kwargs, :selector, :top)
+        selector = get(kwargs, :selector, haskey(kwargs, :reverse) ? (get(kwargs, :reverse, false) ? :top : :bottom) : :top)
         reverse = get(kwargs, :reverse, false)
         ExclusiveUseRights(selector, reverse)
     elseif pol_arg == "Protected Area"

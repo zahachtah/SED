@@ -6,6 +6,67 @@ using KernelDensity
 using Printf
 using Makie: LinearTicks  # for max tick count
 
+function _income_bar_tints(color)
+    c = Makie.to_color(color)
+    r, g, b, a = red(c), green(c), blue(c), alpha(c)
+    opportunity = RGBAf(r + (1 - r) * 0.56, g + (1 - g) * 0.56, b + (1 - b) * 0.56, a * 0.86)
+    net = RGBAf(r * 0.82, g * 0.82, b * 0.82, min(1.0, a * 1.12))
+    trade = RGBAf(r * 0.55, g * 0.55, b * 0.55, min(1.0, a))
+    return opportunity, net, trade
+end
+
+function _tradable_policy(p)
+    hasproperty(p, :policy) && p.policy isa TradableUseRights
+end
+
+function _rent_reallocation_legend!(ax, N, ymin, ymax, opportunity_color, resource_color, trade_color)
+    yrange = max(ymax - ymin, eps())
+    sw = max(N * 0.030, 2.0)
+    sh = yrange * 0.038
+    x0 = max(N * 0.040, 2.0)
+    y0 = ymax - yrange * 0.18
+    items = [
+        (resource_color, "resource rent"),
+        (opportunity_color, "opportunity cost"),
+        (trade_color, "permit rent paid (-) / redistributed (+)"),
+    ]
+    for (k, (c, label)) in enumerate(items)
+        y = y0 - (k - 1) * 1.34sh
+        poly!(ax, Rect2f(x0, y, sw, sh); color=c, strokewidth=0)
+        text!(ax, x0 + 1.35sw, y + 0.5sh; text=label,
+            color=RGBAf(0.18, 0.20, 0.24, 0.82), fontsize=8.0,
+            align=(:left, :center))
+    end
+end
+
+function _rent_reallocation_arrow!(ax, trade_neg, trade_pos, wages_sorted, resource_sorted,
+        trade_color; arrow_scale=1.0)
+    neg_ids = findall(<(0.0), trade_neg)
+    pos_ids = findall(>(0.0), trade_pos)
+    (isempty(neg_ids) || isempty(pos_ids)) && return ax
+
+    neg_i = neg_ids[cld(length(neg_ids), 2)]
+    pos_i = pos_ids[cld(length(pos_ids), 2)]
+    start = Point2f(neg_i, 0.50 * trade_neg[neg_i])
+    added_base = trade_neg[pos_i] + wages_sorted[pos_i] + resource_sorted[pos_i]
+    stop = Point2f(pos_i, added_base + 0.50 * trade_pos[pos_i])
+    lift = max(abs(stop[2] - start[2]), maximum(trade_pos) - minimum(trade_neg), eps()) * 0.22
+    control = Point2f(0.50 * (start[1] + stop[1]), min(start[2], stop[2]) - lift)
+
+    ts = range(0.0, 1.0, length=42)
+    curve = [Point2f((1 - t)^2 * start[1] + 2 * (1 - t) * t * control[1] + t^2 * stop[1],
+        (1 - t)^2 * start[2] + 2 * (1 - t) * t * control[2] + t^2 * stop[2]) for t in ts]
+    arrow_color = RGBAf(0.82, 0.12, 0.13, 0.92)
+    lines!(ax, curve; color=arrow_color, linewidth=3.0 * arrow_scale)
+    head_start = curve[max(1, length(curve) - 9)]
+    head_delta = Vec2f(stop[1] - head_start[1], stop[2] - head_start[2])
+    arrows2d!(ax, [head_start], [head_delta]; color=arrow_color,
+        shaftwidth=0.32 * arrow_scale, tipwidth=26 * arrow_scale,
+        tiplength=30 * arrow_scale)
+
+    return ax
+end
+
 
 
 function Γ_plot!(axis, sol; color=:darkorange, linewidth=3, t=0.0)
@@ -140,7 +201,7 @@ function dependency_graph_plot!(
     pretty_label(sym::Symbol) = begin
         s = String(sym)
         if sym == Symbol("w̃") || occursin(r"^w(\\tilde|tilde)", s) || occursin(Char(0x0303), s)
-            return "Incentive"
+            return "Thresholds"
         elseif sym == Symbol("ū") || occursin(r"^u(\\bar|bar)", s) || occursin(Char(0x0304), s)
             return "Impact"
         else
@@ -197,22 +258,101 @@ function phase_plot(sol)
     f
 end
 
-function incomes_plot!(ax, sol; order=false, sort_by_incentives=false, color=:darkorange, dimensional::Bool=false, resource_incomes=true)
-    inc = incomes(sol)
+function incomes_plot!(ax, sol; order=false, sort_by_incentives=false, color=:darkorange,
+        dimensional::Bool=false, resource_incomes=true, show_active=true,
+        active_coloring=false, active_color=color, inactive_color=:lightgray,
+        state=nothing, time=nothing, rent_reallocation=nothing,
+        trade_color=RGBAf(0.16, 0.17, 0.18, 0.72),
+        annotate_rent_reallocation=false, rent_arrow_scale=1.0,
+        sort_values=nothing)
+    p = sol.prob.p
+    x = state === nothing ? sol.u[end] : state
+    t = time === nothing ? sol.t[end] : time
+    inc = incomes(x, p; dimensional)
     res = inc.resource
     wage = inc.wages
     trd = inc.trade
     total = inc.total
-    idx = order ? sort_by_incentives ? sortperm(sol.prob.p.w̃) : sortperm(total) : eachindex(total)
-    barplot!(ax, (res[idx] .+ wage[idx]), color=color, alpha=1.0, offset=trd[idx])
-    barplot!(ax, (res[idx]), color=:steelblue, alpha=1.0, offset=trd[idx])
-    barplot!(ax, trd[idx], color=color)
-    barplot!(ax, trd[idx], color=HSLA(0, 0, 0, 0.2))
+    outside_only = inc.wages_0
+
+    idx = if !order
+        eachindex(total)
+    elseif sort_values !== nothing
+        sortperm(sort_values)
+    elseif sort_by_incentives
+        sortperm(p.cost(x, p, t))
+    else
+        sortperm(total)
+    end
+
+    opportunity_color, net_color, _ = _income_bar_tints(color)
+    net_resource_income = total[idx] .- outside_only[idx]
+    active = res .> 0.0
+    show_rent_reallocation = rent_reallocation === nothing ? _tradable_policy(p) : rent_reallocation
+
+    if show_rent_reallocation
+        opportunity_colors = active_coloring ?
+            [isactive ? first(_income_bar_tints(active_color)) : first(_income_bar_tints(inactive_color)) for isactive in active[idx]] :
+            opportunity_color
+        net_colors = active_coloring ?
+            [_income_bar_tints(isactive ? active_color : inactive_color)[2] for isactive in active[idx]] :
+            net_color
+
+        trade_sorted = trd[idx]
+        trade_neg = min.(trade_sorted, 0.0)
+        trade_pos = max.(trade_sorted, 0.0)
+        wages_sorted = wage[idx]
+        resource_sorted = res[idx]
+
+        barplot!(ax, trade_neg, color=trade_color, alpha=1.0)
+        barplot!(ax, wages_sorted, color=opportunity_colors, alpha=1.0,
+            offset=trade_neg)
+        barplot!(ax, resource_sorted, color=net_colors, alpha=1.0,
+            offset=trade_neg .+ wages_sorted)
+        barplot!(ax, trade_pos, color=trade_color, alpha=1.0,
+            offset=trade_neg .+ wages_sorted .+ resource_sorted)
+
+        if annotate_rent_reallocation
+            _rent_reallocation_arrow!(ax, trade_neg, trade_pos, wages_sorted,
+                resource_sorted, trade_color; arrow_scale=rent_arrow_scale)
+        end
+        return ax
+    end
+
+    if active_coloring
+        opportunity_colors = map(active[idx]) do isactive
+            first(_income_bar_tints(isactive ? active_color : inactive_color))
+        end
+        net_colors = map(active[idx]) do isactive
+            _income_bar_tints(isactive ? active_color : inactive_color)[2]
+        end
+    else
+        opportunity_colors = opportunity_color
+        net_colors = net_color
+    end
+
+    barplot!(ax, outside_only[idx], color=opportunity_colors, alpha=1.0)
+    if resource_incomes || any(abs.(net_resource_income) .> eps())
+        barplot!(ax, net_resource_income, color=net_colors, alpha=1.0,
+            offset=outside_only[idx])
+    end
+    if resource_incomes && show_active
+        active_positions = findall(active[idx])
+        if !isempty(active_positions)
+            scatter!(ax, active_positions, total[idx][active_positions], color=:black, markersize=3)
+        end
+    end
+    return ax
 end
 
-function incomes_plot(sol; order=false, color=:darkorange, dimensional::Bool=false, sort_by_incentives=false, resource_incomes=true)
+function incomes_plot(sol; order=false, color=:darkorange, dimensional::Bool=false,
+        sort_by_incentives=false, resource_incomes=true, show_active=true,
+        active_coloring=false, active_color=color, inactive_color=:lightgray,
+        sort_values=nothing)
     f = Figure()
-    incomes_plot!(Axis(f[1, 1]), sol; order, color, dimensional, resource_incomes, sort_by_incentives)
+    incomes_plot!(Axis(f[1, 1]), sol; order, color, dimensional, resource_incomes,
+        sort_by_incentives, show_active, active_coloring, active_color, inactive_color,
+        sort_values)
     f
 end
 

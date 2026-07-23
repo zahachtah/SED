@@ -1,96 +1,124 @@
-# SED — Socio‑economic/Social‑ecological Distributions
+# SED
 
-SED provides simple, composable distributions for agents and resources, plus simulation and plotting helpers for socio‑ecological models. It’s lightweight by default; plotting functions load when Makie is available.
+SED is a Julia model of how heterogeneous exit thresholds and impact potentials
+shape renewable-resource use, ecological attractors, and income distributions.
+It provides composable actor distributions, a bounded ODE simulation, policy
+types, outcome metrics, and CairoMakie plotting helpers.
 
-Quick Start
+The scientific model and notation are documented in
+[`docs/model-paper-crosswalk.md`](docs/model-paper-crosswalk.md). AI-assisted
+study work should also follow [`AGENTS.md`](AGENTS.md).
+
+## Install and Test
+
+```bash
+julia --project=. -e 'using Pkg; Pkg.instantiate()'
+julia --project=. -e 'using Pkg; Pkg.test()'
+```
+
+## Minimal Simulation
 
 ```julia
-include("SED.jl"); using .SED
+using SED
 
-N = 100
-s = (
-  N = N,
-  q = dist(min=1/N, max=1/N, normalize=true),
-  w = dist(min=0.2, max=0.4),
-  K = 2.0,
-  # deps inferred from the string; `independent` is the base vector
-  w̃ = dist(min=0.1, max=1.0, dependency_fun = "q .* w ./ K .+ independent"),
-  ū  = dist(dependency_fun = "q ./ w̃"),
+s = base(N=300)
+sample!(s; random=false)  # ordered quantiles
+
+open_access = sim(s)
+
+policy = scenario(
+    s;
+    policy=TradableUseRights(:effort, 0.05, 0.0, false),
 )
-sample!(s)   # resolves dependencies topologically
-
-sol = sim(scenario(base(N=N); w̃=dist(data=s.w̃), ū=dist(data=s.ū)))
+with_quota = sim(policy; regulation=0.40, start_from_OA=true)
 ```
 
-Policies (simple first)
+`regulation=0.40` means a 40% reduction from the unregulated total quota for
+tradable rights, leaving aggregate rights of `0.60`.
+
+## Custom Population
+
+The paper uses `\Theta_i` for exit thresholds and `\bar u_i` for impact
+potentials. Their current internal field names are `w̃` and `ū`.
 
 ```julia
-# Start from a baseline
-s = scenario(base(N=200))
+using SED
 
-# Apply a policy with a kit (recommended)
-tur = with_policy(s; tradable_use_rights_kit(; target=:effort, market_rate=0.05)...)
-R = regulation_scan(tur; m=50, warmstart=:chain)
+N = 500
+p = (
+    N=N,
+    α=0.05,
+    outside_income=dist(min=0.1, max=1.0, distribution=LogNormal),
+    efficiency=dist(min=0.5, max=1.5),
+    w̃=dist(dependency_fun="outside_income / efficiency"),
+    ū=dist(dependency_fun="efficiency", normalize=true),
+    R=ones(N),
+)
 
-# Or define it manually (set policy so extra state is added)
-tur2 = scenario(s; policy="Tradable Use Rights",
-  γ=γ_tradable_use_rights, ϕ=ϕ_tradable_use_rights, regulate=regulate_tradable_use_rights,
-  policy_target=:effort, market_rate=0.05)
-sol = sim(tur2; regulation=0.5)
+s = scenario(p)
+sample!(s; random=true)
+sol = sim(s)
 ```
 
-Example output:
-
-![Phase + incomes](examples/figures/readme_phase_incomes.png)
-
-Learn More
-
-- [Core](docs/core.md): concepts, contexts, simulation
-- [Distributions](docs/distributions.md): independent/dependent, function vs string, sampling
-- [Visualizations](docs/visualizations.md): phase, incomes, Γ and Φ, dependency graph
-- [Policies](docs/policies.md): scenarios, regulation scan, evaluation
-  - Why aggregate clamp for TUR supply and when to use warm‑starts
-
-Plotting (optional)
+Dependencies are resolved topologically. Use `@dependent` instead of a string
+when the relationship is easier to express as Julia:
 
 ```julia
-import CairoMakie; CairoMakie.activate!()
-fig = Figure(); ax = Axis(fig[1,1]); phase_plot!(ax, sol); display(fig)
-gfig = dependency_graph_plot(s); display(gfig)
+w̃ = dist(dependency=@dependent (outside_income, efficiency) ->
+    outside_income ./ efficiency)
 ```
 
-Figures
-
-- README: `julia --project examples/readme_figures.jl` → `examples/figures`
-- Manuscript: `julia --project manuscript/figures.jl` → `manuscript/figures`
-
-Dependency graph (README example):
-
-![Dependency Graph](examples/figures/readme_dep_graph.png)
-
-Sampling compare (non‑random vs random):
-
-![Sampling Compare](examples/figures/readme_sampling_compare.png)
-
-Γ and Φ curves (README example):
-
-![Gamma Phi](examples/figures/readme_gamma_phi.png)
-
-sample! Overrides
+## Built-in Policies
 
 ```julia
-sample!(s, :q; N=50)       # realize one param at length 50
-sample!(s; N=50)           # whole context at length 50
-sample!(s; random=true)    # force random sampling for this call
+scenario(s; policy=OpenAccess())
+scenario(s; policy=ExclusiveUseRights(:top, false))
+scenario(s; policy=TradableUseRights(:effort, 0.05, 0.0, false))
+scenario(s; policy=ProtectedArea(0.3))
+scenario(s; policy=EconomicIncentives([:cost], :additive))
 ```
 
-Core API
+See [`docs/policies.md`](docs/policies.md) before using a policy in a study.
+Some policies are exact manuscript implementations, while others are generic
+reduced forms or experimental.
 
-- `dist`, `sample!` (per Dist, per param, whole context; `N`, `random` overrides)
-- `scenario`, `base`/`high_impact`/`low_impact`/`high_incentives`
-- `sim`, `incomes`, `gini`, `regulation_scan`, `dependency_graph`
+## Curves and Outcomes
 
-Plotting API (loads when Makie is available)
+```julia
+y = 0.5
+participation = Γ(y, sol.prob.p)
+sustainable_participation = Φ(y, sol.prob.p)
+income = incomes(sol)
+```
 
-- `phase_plot!`, `phase_plot`, `incomes_plot!`, `dependency_graph_plot`
-- Components: `Γ_plot!`, `Φ_plot!`, `attractor_plot!`, `trajecory_plot!`, `bg_plot!`, `target_plot!`
+- `Γ(y, p)` is the paper's participation curve `P(y)`.
+- `Φ(y, p)` is the paper's ordered sustainable-participation curve `I(y)`.
+- `incomes(sol)` returns resource, outside-option, policy-transfer, total
+  income, Gini, and resource state components.
+
+## Plotting
+
+```julia
+using CairoMakie
+CairoMakie.activate!()
+
+fig = Figure(size=(1100, 700))
+phase_plot!(Axis(fig[1, 1]), with_quota; show_trajectory=true)
+incomes_plot!(Axis(fig[2, 1]), with_quota; order=true)
+fig
+```
+
+Generate current publication figures with the scripts in `manuscript/` and
+supplementary figures with `SM_science/supplementary_figures.jl`.
+
+## Repository Map
+
+- `src/`: scientific package implementation.
+- `test/`: distribution and paper-alignment regression tests.
+- `docs/`: model, policies, distributions, plots, and extension guides.
+- `manuscript/`: current main-figure scripts and outputs.
+- `SM_science/`: supplementary manuscript, figures, and figure generator.
+- `easy/`: compact simulation and visualization wrappers.
+- `webapp/`: interactive browser port.
+- `examples/`: demonstrations and diagnostics.
+- `archive/`: historical implementations and figures.

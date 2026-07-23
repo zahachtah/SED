@@ -93,9 +93,9 @@ function regulation_scan(p; m=100, kR=0.5, kT=1.0, kG=-0.2, kE=0.0, kI=0.0, warm
         w_data = hasproperty(p, :w̃) ? (hasproperty(p.w̃, :data) ? p.w̃.data : p.w̃) : nothing
         if w_data !== nothing && length(w_data) == p.N
             id = sortperm(w_data)
-            sols[j, :] = sol.u[end-1][id] ./ p.ū[id]
+            sols[j, :] = sol.u[end-1][id] ./ p.ū[id]
         else
-            sols[j, :] = sol.u[end-1][1:p.N] ./ p.ū
+            sols[j, :] = sol.u[end-1][1:p.N] ./ p.ū
         end
 
         incdist[j, :] = inc.total
@@ -107,7 +107,7 @@ function regulation_scan(p; m=100, kR=0.5, kT=1.0, kG=-0.2, kE=0.0, kI=0.0, warm
     oToR = argmax(ToR)
     oGI = argmin(GI)
     oEH = argmax(EH)
-    oRI = argmax(EH)
+    oRI = argmax(RI)
     oGov = argmax(Gov)
     return (; RR, WR, TR, ToR, GI, EH, RI, Gov=Gov ./ 100.0, r, oRR, oWR, oTR, oToR, oGI, oEH, oRI, oGov, sols, incdist, resources)
 end
@@ -123,16 +123,26 @@ function Φ(y, p; t=0.0)
     x = zeros(p.N + 1)
     x[end] = y
     c = p.cost(x, p, t)
-    id = sortperm(c)
     l = p.limit(x, p, t)
-    cu = cumsum(l[id])
-    f = sum(cu .< (1.0 - y))
-    if f == 0
-        f = (1.0 - y) / l[id[1]]
-    elseif f < p.N
-        f = f + ((1 - y) - cu[f]) / l[id[f+1]]
+    eligible = findall(<=(1.0), c)
+    isempty(eligible) && return 0.0
+
+    id = eligible[sortperm(c[eligible])]
+    l_sorted = l[id]
+    pressure = 1.0 - y
+    pressure <= 0.0 && return 0.0
+    if pressure >= sum(l_sorted)
+        return length(id) / p.N
     end
-    return f / p.N
+
+    cu = cumsum(l_sorted)
+    f = sum(cu .< pressure)
+    if f == 0
+        f = pressure / max(l_sorted[1], eps())
+    elseif f < length(id)
+        f = f + (pressure - cu[f]) / max(l_sorted[f+1], eps())
+    end
+    return clamp(f / p.N, 0.0, length(id) / p.N)
 end
 
 function incomes(x, p; summarize=false, dimensional::Bool=false)

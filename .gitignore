@@ -1,1 +1,24 @@
 .DS_Store
+
+# Julia and editor scratch
+*.cov
+*.mem
+*.jl.cov
+*.jl.mem
+
+# LaTeX build auxiliaries
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+
+# Temporary diagnostics
+/tmp/
+/tmp_outputs/
+/dist[0-9]*.png
+/reg[0-9]*.png
+/test_*.png
+/baseline_results.jls

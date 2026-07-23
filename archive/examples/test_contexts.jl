@@ -52,8 +52,8 @@ T = (
 
     # EFFICIENCY (CPUE proxy, unitless scaler on [min,max]):
     # women ≈ 0.35 of men; scaled up with parental (capital/gear access)
-    efficiency=dist(min=0.015, max=0.20, normalize=false,
-        dependency_fun="( (1-gender) + 0.35*gender ) * parental * independent"),
+    efficiency=dist(min=0.010, max=0.13, normalize=false,
+        dependency_fun="0.65 * ( (1-gender) + 0.35*gender ) * parental * independent"),
 
     # Alternative Income Opportunities (AIO) — keep LogNormal with min/max (no meanlog/sdlog)
     # Slightly higher pull for women via dependency_fun; small scale 0.02*parental matches earlier logic.
@@ -382,16 +382,45 @@ function pairgrid_blank_upper_redblue_with_dep(
     dep_label_colors[:AIO] = aio_label_color
     dependency_graph_plot!(depplot, data; label_colors=dep_label_colors)
 
-    # Optional phase plot region
+    # Optional actor-level relational plot region
     if phase_plot !== nothing
+        for ii in phase_plot[1], jj in phase_plot[2]
+            if 1 <= ii <= size(axes, 1) && 1 <= jj <= size(axes, 2)
+                old_ax = axes[ii, jj]
+                if old_ax !== nothing
+                    old_ax.blockscene.visible[] = false
+                    old_ax.scene.visible[] = false
+                end
+            end
+        end
         pax = Axis(fig[phase_plot[1], phase_plot[2]];
-            #title="Open Access",
-            xlabel="Resource level-Incentive threshold",
-            ylabel="Participation",
-            yaxisposition=:right)
+            title="Relational actor positions",
+            xlabel="Threshold, Tᵢ",
+            ylabel="Impact, Hᵢ",
+            yaxisposition=:right,
+            xticks=LinearTicks(3),
+            yticks=LinearTicks(3),
+            backgroundcolor=:white)
+        Tvals = Float64.(getproperty(data, :w̃))
+        Hvals = Float64.(getproperty(data, :ū))
+        scatter!(pax, Tvals, Hvals; color=:black, markersize=markersize + 1,
+            transparency=true, alpha=0.58)
+        xlims!(pax, minimum(Tvals), maximum(Tvals))
+        ylims!(pax, minimum(Hvals), maximum(Hvals))
         hidespines!(pax)
-        hidedecorations!(pax)
-        phase_plot!(pax, sim(scenario(data)))
+        pax.xgridvisible = true
+        pax.ygridvisible = true
+        pax.titlefont = :bold
+        pax.titlesize = 14
+        pax.xlabelsize = 12
+        pax.ylabelsize = 12
+        pax.xticklabelsize = 9
+        pax.yticklabelsize = 9
+        rht = cor(Tvals, Hvals)
+        text!(pax, 0.04, 0.95; text=@sprintf("corr(Tᵢ,Hᵢ)=%.2f", rht),
+            space=:relative, align=(:left, :top),
+            fontsize=11, color=:black, font=:bold,
+            glowcolor=:white, glowwidth=4)
     end
     colgap!(fig.layout, 8)
     rowgap!(fig.layout, 6)
@@ -402,11 +431,11 @@ end
 
 function build_pairgrid_figure(; data=T,
     vars=[:gender, :health, :parental, :time, :efficiency, :AIO, :ū, :w̃],
-    labels=["Gender", "Health", "Parental", "Time", "Efficiency", "AIO", "Impact", "Incentive"],
+    labels=["Gender", "Health", "Parental", "Time", "Efficiency", "AIO", "Impact", "Thresholds"],
     corr=:spearman,
     cellsize=(90, 90), markersize=3,
     cmap=:coolwarm, reverse_cmap=false,
-    dep_range=(1:4, 5:8), phase_plot=(5:6, 7:8),
+    dep_range=(1:4, 5:8), phase_plot=(3:4, 1:2),
     incentive_color=:darkorange, impact_color=:darkorange,
     incentive_label_color=:darkorange, impact_label_color=:darkorange,
     time_color=:forestgreen, efficiency_color=:forestgreen, aio_color=:forestgreen,

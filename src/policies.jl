@@ -301,9 +301,11 @@ function regulate(p, f, pol::ProtectedAreaTwoPop)
 end
 
 function dynamics(dx, x, p, t, pol::ProtectedAreaTwoPop)
-    mx = x[p.N+2] - x[p.N+1]
-    dx[p.N+2] = (1.0 - x[p.N+2]) * dx[p.N+2] - (1.0 - p.regulation) / p.regulation * pol.m * mx
-    dx[p.N+1] += p.regulation / (1.0 - p.regulation) * pol.m * mx
+    y_u = x[p.N+1]
+    y_p = x[p.N+2]
+    migration = pol.m * (y_p - y_u)
+    dx[p.N+1] += p.regulation / (1.0 - p.regulation) * migration
+    dx[p.N+2] = y_p * (1.0 - y_p) - migration
 end
 
 function limit(val, x, p, t, pol::ProtectedAreaTwoPop)

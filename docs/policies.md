@@ -1,115 +1,146 @@
 # Policies
 
-## Overview
+Policies are Julia types that subtype `AbstractPolicy`. A policy can transform:
 
-Policies in SED are defined as types (structs) that subtype `AbstractPolicy`. This allows for efficient dispatch and clear organization of policy-specific parameters. Each policy type implements specific behaviors for:
-- **Cost:** How the policy affects the cost of effort (e.g., taxes, fees).
-- **Limit:** How the policy constrains effort (e.g., quotas, exclusions).
-- **Dynamics:** Additional state variables and their evolution (e.g., market prices).
-- **Regulation:** How the policy responds to a regulation intensity parameter `f`.
+- `cost`: the exit-threshold vector used in actor dynamics.
+- `limit`: the actor impact-potential vector.
+- `dynamics`: additional state equations, such as a rights price.
+- `regulate`: scenario parameters at a policy intensity `f`.
+- income hooks: resource-income factors or transfers.
 
-## Built-in Policies
+Construct a policy explicitly and pass it to `scenario`:
 
-### Open Access
-The default state with no regulation.
 ```julia
-policy = OpenAccess()
+regulated = scenario(
+    baseline;
+    policy=TradableUseRights(:effort, 0.05, 0.0, false),
+)
+sol = sim(regulated; regulation=0.4, start_from_OA=true)
 ```
 
-### Tradable Use Rights (TUR)
-Allocates rights to users and allows trading. A market price `ϕ` evolves based on supply and demand.
+String policy names remain supported by `scenario` for older scripts, but typed
+constructors are clearer and safer.
+
+## Open Access
+
 ```julia
-policy = TradableUseRights(
-    target=:effort,      # :effort or :yield
-    market_rate=0.05,    # Speed of price adjustment
-    buyer_bias=0.0,      # Bias in trading
-    historical_use_rights=false # Allocation based on history
+OpenAccess()
+```
+
+Open access leaves exit thresholds and impact potentials unchanged.
+
+## Exclusive Use Rights
+
+```julia
+ExclusiveUseRights(:top, false)
+```
+
+The selector is `:top`, `:bottom`, or `:random`. The regulated fraction is
+selected using outside opportunities when available and otherwise the internal
+exit-threshold field `w̃`.
+
+This is the paper's binary strong-sanction specialization. The internal `R`
+vector is an exclusion mask:
+
+- `R_i=0`: actor is permitted.
+- `R_i=1`: actor is excluded, shifting the effective exit threshold above the
+  feasible resource domain.
+
+This differs from tradable policy notation, where `R_i` is an allocated
+quantity of rights. Do not interpret the exclusive-policy mask as a divisible
+entitlement.
+
+## Tradable Use Rights
+
+```julia
+TradableUseRights(
+    :effort,  # :effort or :yield
+    0.05,     # market-price adjustment rate
+    0.0,      # buyer bias
+    false,    # historical initial allocation
 )
 ```
 
-### Exclusive Use Rights (EUR)
-Excludes a subset of users based on a selection criterion (usually efficiency `w̃`).
+For regulation level `f`, aggregate rights equal `1-f`. Rights are initially
+equal or proportional to open-access use when historical allocation is
+enabled. The numerical market:
+
+- adds the evolving price `\phi` to every exit threshold;
+- adjusts `\phi` using demand minus supply;
+- rations additional demand when it exceeds available supply;
+- records `(R_i-u_i)\phi`, or its yield equivalent, as a transfer.
+
+Transfers sum to zero when aggregate use equals the quota. Check quota balance
+and price convergence before interpreting a run.
+
+## Protected Area
+
 ```julia
-policy = ExclusiveUseRights(
-    selector=:top,       # :top (exclude high w̃) or :bottom
-    reverse=false        # Legacy parameter
+ProtectedArea(0.3)
+```
+
+The constructor argument is mobility/spillover `m`, not protected fraction.
+The simulation keyword `regulation=f_p` is the protected fraction.
+
+The tested one-resource reduced form:
+
+- rescales thresholds by `1/(1-f_p)` because only the open fraction can be
+  used;
+- reduces required actor impact through the spillover term;
+- scales resource income by the accessible fraction.
+
+## Economic Incentives
+
+```julia
+EconomicIncentives([:cost], :additive)
+EconomicIncentives([:limit], :multiplicative)
+```
+
+Targets can include `:cost`/`:incentives` or `:limit`/`:impact`. Methods are
+generic additive or multiplicative transformations, with `:taxation` using the
+opposite multiplicative direction.
+
+This policy is a reduced-form geometry tool. It does not, by itself, guarantee
+the exact dimensional identities for a proportional royalty, gear subsidy, or
+outside-income intervention. Derive a study-specific policy type when the
+causal interpretation matters.
+
+## Experimental Policies
+
+`ProtectedAreaTwoPop` and `Development` are retained for ongoing development.
+Their equations and initialization have not yet received the same
+paper-alignment regression coverage as the policies above. Do not use them for
+inferential studies without an explicit derivation and new tests.
+
+## Policy Scans
+
+```julia
+scan = regulation_scan(
+    regulated;
+    m=50,
+    warmstart=:chain,
+    kR=0.5,
+    kT=1.0,
+    kG=-0.2,
 )
 ```
 
-### Protected Area (PA)
-Closes a fraction of the resource to extraction.
-```julia
-policy = ProtectedArea(
-    m=0.3                # Fraction of area protected
-)
-```
+Warm starts:
 
-### Protected Area Two Pop
-A variant of Protected Area that explicitly models two populations (protected and unprotected) with migration.
-```julia
-policy = ProtectedAreaTwoPop(
-    m=0.3                # Fraction of area protected
-)
-```
+- `:chain`: initialize each point from the preceding solution.
+- `:oa_once`: initialize every policy point from one open-access solution.
+- any other value: cold starts.
 
-### Economic Incentives (EI)
-Applies taxes or subsidies to modify user behavior.
-```julia
-policy = EconomicIncentives(
-    target=[:cost],      # Targets: :cost, :limit, etc.
-    method=:taxation     # :taxation or :subsidy
-)
-```
+The governance score is a Cobb-Douglas product of resource income, total
+income, Gini, ecology, and behavioral policy impact. Exponents are analysis
+choices, not model parameters, and should be reported.
 
-### Development
-Models development interventions that affect costs and limits.
-```julia
-policy = Development(
-    μ_value=0.5,
-    γ_value=0.5
-)
-```
+## Adding a Policy
 
-## Usage
+See [`custom_policies.md`](custom_policies.md). At minimum:
 
-You can create a scenario with a policy in two ways:
-
-1. **Using Strings (Backward Compatible):**
-   The `scenario` function accepts a `policy` string and additional keyword arguments, which are converted to the appropriate struct.
-   ```julia
-   s = scenario(base(), policy="Tradable Use Rights", market_rate=0.1)
-   ```
-
-2. **Using Types (Recommended):**
-   You can instantiate the policy struct directly and pass it to `scenario`.
-   ```julia
-   s = scenario(base(), policy=TradableUseRights(:effort, 0.1, 0.0, false))
-   ```
-
-## Governance Objective (Cobb–Douglas)
-
-When scanning regulation, we sometimes want a single scalar objective that trades off several outcomes. We use a Cobb–Douglas product of aggregate metrics.
-
-For each regulation value `r` we compute aggregate metrics:
-- `R(r)` = ∑ resource incomes (resource revenues)
-- `T(r)` = ∑ total incomes (total revenues)
-- `G(r)` = Gini of total incomes (inequality)
-- `E(r)` = ecological state (e.g., resource level y)
-- `I(r)` = ∑ |uᵒᵃ − u(r)| (impact on behaviour)
-
-And combine them as:
-```
-Gov(r) = R(r)^kR · T(r)^kT · G(r)^kG · E(r)^kE · I(r)^kI
-```
-
-## Warm‑start Scanning
-
-When scanning regulation, “warm‑start” means starting each solve from a good initial condition instead of from scratch.
-- `:chain` (default): reuse the steady state from the previous regulation value.
-- `:oa_once`: solve Open Access once and use its steady state.
-- `:none`: no warm‑start (cold starts).
-
-Example:
-```julia
-R = regulation_scan(s; m=50, warmstart=:chain)
-```
+1. subtype `AbstractPolicy`;
+2. implement only the dispatch methods the policy changes;
+3. add an equation-level note to the model-paper crosswalk;
+4. test thresholds, limits, state bounds, incomes, and any accounting identity;
+5. compare the simulated endpoint with `Γ` and `Φ`.

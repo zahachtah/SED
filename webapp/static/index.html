@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SED Browser Lab</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <h1>SED Browser Lab</h1>
+        <p>Browser-only scenario editor, live model runs, and policy scans.</p>
+      </div>
+      <div class="topbar-actions">
+        <button id="loadPresetButton" class="secondary">Load Preset</button>
+        <label class="toggle">
+          <input type="checkbox" id="autoRunToggle" checked>
+          <span>Auto run</span>
+        </label>
+        <button id="runButton">Run model</button>
+        <button id="scanButton">Scan policies</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel controls-panel">
+        <div class="panel-header">
+          <h2>Scenario</h2>
+        </div>
+
+        <div class="form-grid compact">
+          <label>
+            <span>Agents</span>
+            <input id="agentCountInput" type="range" min="24" max="256" step="8" value="96">
+            <output id="agentCountValue">96</output>
+          </label>
+          <label>
+            <span>Time Horizon</span>
+            <input id="timeHorizonInput" type="range" min="100" max="2500" step="50" value="800">
+            <output id="timeHorizonValue">800</output>
+          </label>
+          <label>
+            <span>Time Step</span>
+            <input id="dtInput" type="range" min="0.01" max="0.5" step="0.01" value="0.08">
+            <output id="dtValue">0.08</output>
+          </label>
+          <label>
+            <span>Response α</span>
+            <input id="alphaInput" type="range" min="0.01" max="0.4" step="0.01" value="0.10">
+            <output id="alphaValue">0.10</output>
+          </label>
+          <label>
+            <span>Deterministic Sampling</span>
+            <select id="samplingModeSelect">
+              <option value="quantiles">Quantiles</option>
+              <option value="random">Random</option>
+            </select>
+          </label>
+          <label>
+            <span>Seed</span>
+            <input id="seedInput" type="number" min="1" step="1" value="42">
+          </label>
+        </div>
+
+        <div class="subpanel">
+          <div class="subpanel-header">
+            <h3>Outputs</h3>
+          </div>
+          <div class="form-grid compact">
+            <label>
+              <span>`w̃` source</span>
+              <select id="wTildeSelect"></select>
+            </label>
+            <label>
+              <span>`ū` source</span>
+              <select id="uBarSelect"></select>
+            </label>
+          </div>
+        </div>
+
+        <div class="subpanel">
+          <div class="subpanel-header">
+            <h3>Variables</h3>
+            <button id="addNodeButton" class="secondary">Add Variable</button>
+          </div>
+          <div id="nodeList" class="node-list"></div>
+        </div>
+
+        <div class="subpanel">
+          <div class="subpanel-header">
+            <h3>Policies</h3>
+          </div>
+          <div class="form-grid compact">
+            <label>
+              <span>Live Policy</span>
+              <select id="activePolicySelect"></select>
+            </label>
+            <label>
+              <span>Regulation</span>
+              <input id="activeRegulationInput" type="range" min="0" max="1" step="0.02" value="0.30">
+              <output id="activeRegulationValue">0.30</output>
+            </label>
+          </div>
+          <div id="policyList" class="policy-list"></div>
+        </div>
+      </section>
+
+      <section class="panel viz-panel">
+        <div class="viz-grid">
+          <div class="card wide">
+            <div class="card-header">
+              <h2>Causal Graph</h2>
+              <span class="status" id="graphStatus">Ready</span>
+            </div>
+            <svg id="graphSvg" viewBox="0 0 960 300" preserveAspectRatio="none"></svg>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h2>Outcome Summary</h2>
+            </div>
+            <div id="summaryCards" class="summary-grid"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h2>Steady-State Incomes</h2>
+            </div>
+            <canvas id="incomeCanvas" width="480" height="260"></canvas>
+          </div>
+
+          <div class="card wide">
+            <div class="card-header">
+              <h2>Dynamics</h2>
+            </div>
+            <canvas id="trajectoryCanvas" width="960" height="260"></canvas>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h2>`w̃` Distribution</h2>
+            </div>
+            <canvas id="wTildeCanvas" width="480" height="220"></canvas>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h2>`ū` Distribution</h2>
+            </div>
+            <canvas id="uBarCanvas" width="480" height="220"></canvas>
+          </div>
+
+          <div class="card wide">
+            <div class="card-header">
+              <h2>Policy Scan</h2>
+              <span class="status" id="scanStatus">Idle</span>
+            </div>
+            <canvas id="scanCanvas" width="960" height="320"></canvas>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <template id="nodeCardTemplate">
+    <article class="node-card">
+      <div class="node-card-header">
+        <input class="node-label-input" type="text">
+        <button class="remove-node-button ghost">Remove</button>
+      </div>
+      <div class="form-grid compact">
+        <label>
+          <span>Id</span>
+          <input class="node-id-input" type="text">
+        </label>
+        <label>
+          <span>Distribution</span>
+          <select class="node-distribution-select">
+            <option value="Uniform">Uniform</option>
+            <option value="Normal">Normal</option>
+            <option value="LogNormal">LogNormal</option>
+            <option value="Exponential">Exponential</option>
+            <option value="Bernoulli">Bernoulli</option>
+          </select>
+        </label>
+        <label>
+          <span>Mean</span>
+          <input class="node-mean-input" type="number" step="0.01">
+        </label>
+        <label>
+          <span>Sigma</span>
+          <input class="node-sigma-input" type="number" step="0.01">
+        </label>
+        <label>
+          <span>Min</span>
+          <input class="node-min-input" type="number" step="0.01">
+        </label>
+        <label>
+          <span>Max</span>
+          <input class="node-max-input" type="number" step="0.01">
+        </label>
+      </div>
+      <label class="node-expression">
+        <span>Dependency Expression</span>
+        <textarea class="node-expression-input" rows="2" placeholder="Use variable ids plus independent. Example: q * w / K + independent"></textarea>
+      </label>
+      <div class="checkbox-row">
+        <label class="toggle"><input class="node-normalize-input" type="checkbox"><span>Normalize</span></label>
+      </div>
+    </article>
+  </template>
+
+  <template id="policyTemplate">
+    <article class="policy-card">
+      <div class="policy-card-header">
+        <label class="toggle">
+          <input class="policy-enabled-input" type="checkbox">
+          <span class="policy-name"></span>
+        </label>
+      </div>
+      <div class="policy-body"></div>
+    </article>
+  </template>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
