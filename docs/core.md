@@ -9,8 +9,5 @@ Contents
 - Sampling (`sample!`) with `N`/`random` overrides
 - Simulation workflow (`scenario`, `base`, `sim`)
 
-See `examples/readme_figures.jl` for small, runnable scripts.
-
-Example Figures
-
-- Phase + incomes: `examples/figures/readme_phase_incomes.png`
+See the minimal simulation in the repository README and the maintained figure
+scripts in `manuscript/` for runnable uses of the public package API.

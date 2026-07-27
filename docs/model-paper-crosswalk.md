@@ -10,9 +10,11 @@ truth. Internal field names are retained for compatibility.
 | --- | --- | --- |
 | Actor use | `u_i` | `x[i]`, `i=1:N` |
 | Resource density | `y` | `x[N+1]` |
-| Exit threshold | `\Theta_i` | scenario field `w̃` |
+| Dimensional stock | `x` | not stored directly |
+| Dimensional response coefficient | `a_i` | not stored directly |
+| Exit threshold | `\theta_i` | scenario field `w̃` |
 | Impact potential | `\bar u_i` | scenario field `ū` |
-| Response rate | `\widetilde\alpha_i` | scenario field `α` |
+| Nondimensional response rate | `\alpha_i` | scenario field `α` |
 
 `α` may be scalar or actor-specific. `w̃` and `ū` may be vectors or realized
 `SEDist` objects.
@@ -23,7 +25,7 @@ Paper:
 
 ```math
 \frac{du_i}{d\tau}
-=\widetilde{\alpha}_i\left(y-\Theta_i\right),
+=\alpha_i\left(y-\theta_i\right),
 \qquad 0\le u_i\le\bar u_i.
 ```
 
@@ -35,7 +37,7 @@ dx[1:N] = p.α .* (x[N+1] .- p.cost(x, p, t))
 
 and `stage_limiter!` clamps actor states to `[0, p.limit(...)]`. Policies act
 through `cost` and `limit`, so the baseline corresponds to
-`cost=\Theta_i` and `limit=\bar u_i`.
+`cost=\theta_i` and `limit=\bar u_i`.
 
 Status: direct match.
 
@@ -61,11 +63,13 @@ Status: direct match.
 Paper:
 
 ```math
-P(y)=\frac{1}{N}\sum_i\mathbf{1}(\Theta_i<y).
+P_-(y)=\frac{1}{N}\sum_i\mathbf{1}(\theta_i<y).
 ```
 
-Code: `Γ(y, p)` computes the fraction whose policy-adjusted cost is strictly
-below `y`.
+Code: `Γ(y, p)` computes the strict lower participation boundary. At an exact
+threshold, the manuscript's participation curve includes the vertical interval
+to the weak-inequality boundary; simulated marginal use selects a point on that
+segment.
 
 Status: direct match, including the strict inequality.
 
@@ -87,7 +91,8 @@ Actors with policy-adjusted thresholds above one are ineligible on the
 non-dimensional resource domain and are excluded from the maximum attainable
 share.
 
-Status: direct match to `SM_science/Incentive_impact_curves.tex`.
+Status: direct match to
+`SupplementaryMaterial/sections/02_participation_balance.tex`.
 
 ## Attractor
 
@@ -106,7 +111,7 @@ provided the same policy-adjusted thresholds and limits apply.
 The implementation returns:
 
 - resource income: `u_i y`, optionally multiplied by a policy access factor;
-- outside-option income: `(\bar u_i-u_i)\Theta_i`;
+- outside-option income: `(\bar u_i-u_i)\theta_i`;
 - policy transfer: policy-specific extra income, including rights-market rent;
 - total income: the sum of these components.
 

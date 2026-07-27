@@ -1,19 +1,51 @@
+# Operating-system metadata
 .DS_Store
+._*
+Thumbs.db
 
-# Julia and editor scratch
+# Local editor and IDE state
+/.vscode/
+/.idea/
+*.swp
+*.swo
+*~
+
+# Julia scratch and machine-local preferences
 *.cov
 *.mem
 *.jl.cov
 *.jl.mem
+*.jls
+LocalPreferences.toml
+/.julia/
 
 # LaTeX build auxiliaries
 *.aux
+*.bbl
+*.bcf
+*.blg
 *.fdb_latexmk
 *.fls
 *.log
+*.nav
 *.out
+*.run.xml
+*.snm
 *.synctex.gz
 *.toc
+*.vrb
+*.xdv
+_minted-*/
+
+# Language and build caches
+__pycache__/
+*.py[cod]
+/.venv/
+/node_modules/
+**/node_modules/
+/.cache/
+**/coverage/
+**/dist/
 
 # Temporary diagnostics
 /tmp/
@@ -21,4 +53,12 @@
 /dist[0-9]*.png
 /reg[0-9]*.png
 /test_*.png
-/baseline_results.jls
+
+# Optional local wrappers, demonstrations, and helper scripts
+/easy/
+/examples/
+/scripts/
+
+# Unsupported local history retained outside the shared repository
+/archive/
+/SupplementaryMaterial/archive/

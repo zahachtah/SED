@@ -78,7 +78,7 @@ include("regulation_scan_plot.jl")
 
 function Φ_plot!(axis, sol; color=:darkorange, linewidth=3, t=0.0)
     y = range(0.0, stop=1.0, length=100)
-    lines!(axis, y, Φ.(y, Ref(sol.prob.p); t); color, linewidth)
+    lines!(axis, y, Φ.(y, Ref(sol.prob.p), x=sol.u[end-1]; t); color, linewidth)
 end
 
 function attractor_plot!(axis, sol; color=:darkorange, markersize=15, marker=:circle)
@@ -109,7 +109,9 @@ function target_plot!(axis, sol; color=:darkorange, linestyle=:dash, linewidth=3
     y = range(0.0, stop=1.0, length=100)
     if haskey(scenario, :policy_target)
         Y = scenario.policy_target == :effort ? ones(length(y)) : y
-        lines!(axis, y, Φ.(1 .- (1 - scenario.regulation) ./ Y, Ref(scenario)); color, linewidth, linestyle)
+        lines!(axis, y,
+            Φ.(1 .- (1 - scenario.regulation) ./ Y, Ref(scenario), x=sol.u[end-1]);
+            color, linewidth, linestyle)
     end
 end
 
@@ -232,13 +234,15 @@ function phase_plot!(axis, sol; show_trajectory=false, show_target=false, open_a
         # Create OA scenario using new API
         oa = change(scenario, policy=OpenAccess())
         lines!(axis, y, Γ.(y, Ref(oa), x=sol.u[end-1]), color=open_access_color, linewidth=3)
-        lines!(axis, y, Φ.(y, Ref(oa)), color=open_access_color, linewidth=1)
+        lines!(axis, y, Φ.(y, Ref(oa), x=sol.u[end-1]), color=open_access_color, linewidth=1)
     end
     lines!(axis, y, Γ.(y, Ref(scenario), x=sol.u[end-1]; t), color=incentive_line_color, linewidth=3)
-    lines!(axis, y, Φ.(y, Ref(scenario); t), color=impact_line_color, linewidth=1)
+    lines!(axis, y, Φ.(y, Ref(scenario), x=sol.u[end-1]; t), color=impact_line_color, linewidth=1)
     if show_target && haskey(scenario, :policy_target)
         Y = scenario.policy_target == :effort ? ones(length(y)) : y
-        lines!(axis, y, Φ.(1 .- (1 - scenario.regulation) ./ Y, Ref(scenario)), color=:darkorange, linestyle=:dot)
+        lines!(axis, y,
+            Φ.(1 .- (1 - scenario.regulation) ./ Y, Ref(scenario), x=sol.u[end-1]),
+            color=:darkorange, linestyle=:dot)
     end
     if show_trajectory
         lines!(axis,

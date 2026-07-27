@@ -1,13 +1,11 @@
 #!/usr/bin/env julia
 
 using CairoMakie
+using SED
 
 CairoMakie.activate!()
 
-if !isdefined(Main, :SED)
-    include(joinpath(@__DIR__, "..", "SED.jl"))
-end
-const S = Main.SED
+const S = SED
 
 function causal_dependency_context(; N=200)
     data = (

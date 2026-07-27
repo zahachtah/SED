@@ -112,18 +112,36 @@ function regulation_scan(p; m=100, kR=0.5, kT=1.0, kG=-0.2, kE=0.0, kI=0.0, warm
     return (; RR, WR, TR, ToR, GI, EH, RI, Gov=Gov ./ 100.0, r, oRR, oWR, oTR, oToR, oGI, oEH, oRI, oGov, sols, incdist, resources)
 end
 
-function Γ(y, p; x=zeros(p.N + 1), t=0.0)
+function _metric_state(p, y)
+    pol = hasproperty(p, :policy) ? p.policy : OpenAccess()
+    n_extra = (pol isa TradableUseRights || pol isa ProtectedAreaTwoPop) ? 1 : 0
+    x = zeros(p.N + 1 + n_extra)
     x[p.N+1] = y
-    c = p.cost(x, p, t)
+    if pol isa ProtectedAreaTwoPop
+        x[p.N+2] = y
+    end
+    return x
+end
+
+function _metric_state(p, y, x)
+    state = copy(x)
+    length(state) >= p.N + 1 ||
+        throw(ArgumentError("metric state must include N actor states and resource density"))
+    state[p.N+1] = y
+    return state
+end
+
+function Γ(y, p; x=nothing, t=0.0)
+    state = x === nothing ? _metric_state(p, y) : _metric_state(p, y, x)
+    c = p.cost(state, p, t)
     id = sortperm(c)
     f = sum(c[id] .< y) / p.N
 end
 
-function Φ(y, p; t=0.0)
-    x = zeros(p.N + 1)
-    x[end] = y
-    c = p.cost(x, p, t)
-    l = p.limit(x, p, t)
+function Φ(y, p; x=nothing, t=0.0)
+    state = x === nothing ? _metric_state(p, y) : _metric_state(p, y, x)
+    c = p.cost(state, p, t)
+    l = p.limit(state, p, t)
     eligible = findall(<=(1.0), c)
     isempty(eligible) && return 0.0
 

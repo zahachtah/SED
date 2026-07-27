@@ -3,14 +3,12 @@
 using CairoMakie
 using Printf
 using Random
+using SED
 using Statistics
 
 CairoMakie.activate!()
 
-if !isdefined(Main, :SED)
-    include(joinpath(@__DIR__, "..", "SED.jl"))
-end
-const S = Main.SED
+const S = SED
 
 const DARK = RGBf(0.10, 0.12, 0.16)
 const MUTED = RGBf(0.40, 0.44, 0.52)

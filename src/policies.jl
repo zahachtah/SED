@@ -91,28 +91,17 @@ function regulate(s, f, pol::TradableUseRights)
 
 
     if pol.historical_use_rights
-        # Solve OA once to estimate historical baselines
-        # Create a temporary OA scenario
+        # Historical users share the quota equally; realized open-access use
+        # determines eligibility, not the size of each initial endowment.
         s_oa = change(s, policy=OpenAccess())
         y0 = 1.0
         u0 = fill(0.0, s.N)
         oaprob = ODEProblem(dxdt, [u0; y0], (0.0, 1000.0), s_oa)
         oasol = solve(oaprob, SSPRK432(; stage_limiter!), callback=TerminateSteadyState(1e-6, 1e-4))
-
-        if pol.target == :yield
-            hist_u = oasol[1:s.N, end-1]
-            hist_y = oasol[s.N+1, end-1]
-            hist_yield = hist_u .* hist_y
-            total_hist_yield = sum(hist_yield)
-            if total_hist_yield > 0
-                R = hist_yield .* (1 - f) ./ total_hist_yield
-            end
-        else
-            hur = oasol[1:s.N, end-1]
-            denom = sum(hur)
-            if denom > 0
-                R = hur .* (1 - f) ./ denom
-            end
+        historical_users = oasol[1:s.N, end-1] .> 0.0
+        n_historical = count(historical_users)
+        if n_historical > 0
+            R = historical_users .* ((1 - f) / n_historical)
         end
     end
 
@@ -151,8 +140,9 @@ function regulate(s, f, pol::TradableUseRights)
 end
 
 function cost(val, x, p, t, pol::TradableUseRights)
-    # Cost = w + Price
-    return val .+ x[end]
+    price = length(x) >= p.N + 2 ? x[p.N+2] : 0.0
+    price_wedge = pol.target == :yield ? x[p.N+1] * price : price
+    return val .+ price_wedge
 end
 
 function dynamics(dx, x, p, t, pol::TradableUseRights)
@@ -238,9 +228,12 @@ function regulate(s, f, pol::ExclusiveUseRights)
         # Determine selection strategy
         selector = pol.selector
 
-        # Get data to sort by (opportunities or w̃)
-        data = hasproperty(s, :opportunities) ? (hasproperty(s.opportunities, :data) ? s.opportunities.data : s.opportunities) :
-               (hasproperty(s, :w̃) ? (hasproperty(s.w̃, :data) ? s.w̃.data : s.w̃) : zeros(N))
+        # The manuscript policy selects actors by exit threshold. Outside
+        # opportunities can help construct thresholds, but are not themselves
+        # the selection variable.
+        data = hasproperty(s, :w̃) ?
+               (hasproperty(s.w̃, :data) ? s.w̃.data : s.w̃) :
+               zeros(N)
 
         idx = Int[]
         if selector == :top
@@ -280,7 +273,10 @@ function yₚ(y::Float64, f_p::Float64, m::Float64; K::Float64=1.0, r::Float64=1
     end
     r_p = r * (1 + xr)
     K_p = K * (1 + xK)
-    k = (1.0 - f_p) / f_p * m
+    # At quasi-steady state, the protected-patch equation is
+    # y_p(1-y_p) - m(y_p-y) = 0. The protected fraction scales the
+    # reciprocal flux in the exploited patch, not this local balance.
+    k = m
     discriminant = max(0.0, (r_p - k)^2 + 4.0 * r_p * k * y / K_p)
     y_p = ((r_p - k) + sqrt(discriminant)) * K_p / (2.0 * r_p)
     return y_p
@@ -312,7 +308,8 @@ function limit(val, x, p, t, pol::ProtectedAreaTwoPop)
     y_u = x[p.N+1]
     y_p = x[p.N+2]
     # Regularized division by y_u
-    r_s_local = ((1.0 - p.regulation) / p.regulation) * pol.m * (y_p - y_u) / max(y_u, 1e-6)
+    r_s_local = (p.regulation / (1.0 - p.regulation)) *
+                pol.m * (y_p - y_u) / max(y_u, 1e-6)
     return val .* (1 .+ r_s_local) .^ (-1)
 end
 

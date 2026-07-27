@@ -1,12 +1,8 @@
 #!/usr/bin/env julia
 
-if !isdefined(Main, :SED)
-    include(joinpath(@__DIR__, "..", "SED.jl"))
-end
-
-using .SED
 using CairoMakie
 using Printf
+using SED
 using Statistics
 
 CairoMakie.activate!()

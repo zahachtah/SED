@@ -2,13 +2,10 @@
 # Reproducible figure generation for the manuscript
 
 using Random
+using SED
 Random.seed!(42)
 
-if !isdefined(Main, :SED)
-    include(joinpath(@__DIR__, "..", "SED.jl"))
-end
-const S = Main.SED
-using .SED
+const S = SED
 
 # Choose a Makie backend (uncomment your preference)
 using CairoMakie

@@ -1,7 +1,5 @@
 using Test
-
-include(joinpath(@__DIR__, "..", "SED.jl"))
-using .SED
+using SED
 
 let makie_loaded = false
     try

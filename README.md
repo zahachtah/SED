@@ -9,6 +9,10 @@ The scientific model and notation are documented in
 [`docs/model-paper-crosswalk.md`](docs/model-paper-crosswalk.md). AI-assisted
 study work should also follow [`AGENTS.md`](AGENTS.md).
 
+The current manuscript is available as
+[`Science_MS_compact.pdf`](Science_MS_compact.pdf), with its editable DOCX in
+[`manuscript/AN_compact-6.docx`](manuscript/AN_compact-6.docx).
+
 ## Install and Test
 
 ```bash
@@ -38,7 +42,7 @@ tradable rights, leaving aggregate rights of `0.60`.
 
 ## Custom Population
 
-The paper uses `\Theta_i` for exit thresholds and `\bar u_i` for impact
+The paper uses `\theta_i` for exit thresholds and `\bar u_i` for impact
 potentials. Their current internal field names are `w̃` and `ū`.
 
 ```julia
@@ -109,7 +113,8 @@ fig
 ```
 
 Generate current publication figures with the scripts in `manuscript/` and
-supplementary figures with `SM_science/supplementary_figures.jl`.
+supplementary figures with
+`SupplementaryMaterial/scripts/generate_figures.jl`.
 
 ## Repository Map
 
@@ -117,8 +122,11 @@ supplementary figures with `SM_science/supplementary_figures.jl`.
 - `test/`: distribution and paper-alignment regression tests.
 - `docs/`: model, policies, distributions, plots, and extension guides.
 - `manuscript/`: current main-figure scripts and outputs.
-- `SM_science/`: supplementary manuscript, figures, and figure generator.
-- `easy/`: compact simulation and visualization wrappers.
+- `SupplementaryMaterial/`: supplementary manuscript, figures, generator, and
+  manuscript-consistency audit.
 - `webapp/`: interactive browser port.
-- `examples/`: demonstrations and diagnostics.
-- `archive/`: historical implementations and figures.
+
+Optional wrappers, demonstrations, helper scripts, historical drafts, and
+diagnostics may be retained locally in the ignored `easy/`, `examples/`,
+`scripts/`, and `archive/` directories; they are not part of the shared
+repository.

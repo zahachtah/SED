@@ -1,11 +1,7 @@
 #!/usr/bin/env julia
 
-if !isdefined(Main, :SED)
-    include(joinpath(@__DIR__, "..", "SED.jl"))
-end
-
-using .SED
 using Printf
+using SED
 
 steady_index(sol) = max(1, length(sol.t) - 2)
 state_at(sol) = copy(sol.u[steady_index(sol)])

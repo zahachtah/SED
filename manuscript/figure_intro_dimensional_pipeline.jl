@@ -4,16 +4,14 @@ using CairoMakie
 using LaTeXStrings
 using Printf
 using Random
+using SED
 using Statistics
 
 CairoMakie.activate!()
 
 include(joinpath(@__DIR__, "figure_style.jl"))
 
-if !isdefined(Main, :SED)
-    include(joinpath(@__DIR__, "..", "SED.jl"))
-end
-const S = Main.SED
+const S = SED
 
 const DARK = RGBf(0.12, 0.14, 0.17)
 const MUTED = RGBf(0.43, 0.48, 0.56)
@@ -280,7 +278,7 @@ function draw_phase!(ax, ex, figstyle)
     text!(ax, ex.ystar + 0.030, ex.participation - 0.055;
         text=@sprintf("Attractor\ny* = %.2f", ex.ystar),
         fontsize=pt(figstyle, 16.2), color=DARK, align=(:left, :top), font=:bold)
-    text!(ax, 0.38, 0.20; text="Sustainable Participation level  I(y)", color=BLUE,
+    text!(ax, 0.33, 0.20; text="Sustainable Participation level  I(y)", color=BLUE,
         fontsize=pt(figstyle, 17.0), font=:bold, align=(:left, :top))
     text!(ax, 0.54, 0.94; text="Cumulative participation  P(y)", color=ORANGE,
         fontsize=pt(figstyle, 17.0), font=:bold, align=(:left, :top))
@@ -309,7 +307,7 @@ function draw_income_component_legend!(ax, xmin, ymax, yrange, figstyle)
     sw = 4.8
     sh = 0.026 * yrange
     entries = [
-        (withalpha(RED, 0.86), "color = resource surplus income"),
+        (withalpha(RED, 0.86), "color = resource surplus income (rent)"),
         (withalpha(PINK, 0.70), "whitened color = opportunity cost"),
         (withalpha(GRAY, 0.72), "gray = alternative incomes"),
     ]

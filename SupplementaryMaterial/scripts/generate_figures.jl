@@ -5,7 +5,7 @@ using Statistics
 
 CairoMakie.activate!()
 
-const FIGURE_DIR = joinpath(@__DIR__, "figures")
+const FIGURE_DIR = normpath(joinpath(@__DIR__, "..", "figures"))
 mkpath(FIGURE_DIR)
 
 const ORANGE = Makie.RGBf(0.93, 0.49, 0.10)
@@ -91,7 +91,7 @@ function attractor_construction_figure()
     end
 
     ax1 = Axis(fig[1, 1], title="1. Order actors by exit threshold",
-        xlabel=L"\mathrm{exit\ threshold},\ \Theta_i",
+        xlabel=L"\mathrm{exit\ threshold},\ \theta_i",
         ylabel=L"\mathrm{impact\ potential},\ \bar{u}_i",
         limits=(0, 1, 0, 0.19))
     for i in eachindex(thresholds)
@@ -109,18 +109,19 @@ function attractor_construction_figure()
     panel_label!(fig[1, 1], "A")
 
     ax2 = Axis(fig[1, 2], title="2. Count who remains willing to harvest",
-        xlabel="resource density, y", ylabel=L"P(y)\ \mathrm{(fraction)}",
+        xlabel="resource density, y",
+        ylabel="Participation (share of all actors)",
         limits=(0, 1, 0, 1.02))
     stairs!(ax2, ygrid, participation, color=ORANGE, linewidth=5, step=:post)
     vlines!(ax2, [ystar], color=DARK, linestyle=:dash, linewidth=2)
     hlines!(ax2, [pstar], color=DARK, linestyle=:dot, linewidth=2)
     scatter!(ax2, [ystar], [pstar], color=DARK, markersize=17)
-    text!(ax2, 0.61, 0.82, text=L"P(y)=N^{-1}\sum_i\mathbf{1}(\Theta_i<y)",
+    text!(ax2, 0.61, 0.82, text=L"P_-(y)=N^{-1}\sum_i\mathbf{1}(\theta_i<y)",
         color=ORANGE, fontsize=23, align=(:center, :center))
     panel_label!(fig[1, 2], "B")
 
     ax3 = Axis(fig[2, 1], title="3. Accumulate impact in the same order",
-        xlabel="actors ordered by increasing Θᵢ (fraction)",
+        xlabel="actors ordered by increasing θᵢ (fraction)",
         ylabel="cumulative impact", limits=(0, 1, 0, 1.15))
     fractions = collect(0:N) ./ N
     stairs!(ax3, fractions, [0.0; ordered_cumulative], color=BLUE, linewidth=5, step=:post)
@@ -134,7 +135,8 @@ function attractor_construction_figure()
     panel_label!(fig[2, 1], "C")
 
     ax4 = Axis(fig[2, 2], title="4. Read the attractor from the crossing",
-        xlabel="resource density, y", ylabel="fraction of actors",
+        xlabel="resource density, y",
+        ylabel="Participation (share of all actors)",
         limits=(0, 1, 0, 1.02))
     lines!(ax4, ygrid, participation, color=ORANGE, linewidth=5)
     lines!(ax4, ygrid, required, color=BLUE, linewidth=5, linestyle=:dash)
@@ -142,7 +144,7 @@ function attractor_construction_figure()
     scatter!(ax4, [ystar], [pstar], color=DARK, markersize=21)
     text!(ax4, 0.73, 0.88, text="participation  P(y)", color=ORANGE,
         fontsize=23, align=(:center, :center))
-    text!(ax4, 0.70, 0.17, text="active-impact  I(y)", color=BLUE,
+    text!(ax4, 0.70, 0.17, text="required participation  I(y)", color=BLUE,
         fontsize=23, align=(:center, :center))
     text!(ax4, ystar + 0.025, pstar + 0.025,
         text="attractor  y* = $(round(ystar, digits=2))", color=DARK, fontsize=22)
@@ -170,7 +172,8 @@ function dynamics_figure()
     end
 
     ax1 = Axis(fig[1, 1:2], title="Same attractor, different approaches",
-        xlabel="resource density, y", ylabel="realized participation",
+        xlabel="resource density, y",
+        ylabel="Participation (share of all actors)",
         limits=(0, 1, 0, 1.02))
     lines!(ax1, ygrid, participation, color=ORANGE, linewidth=3, alpha=0.45)
     lines!(ax1, ygrid, required, color=BLUE, linewidth=3, linestyle=:dash, alpha=0.45)
@@ -181,7 +184,7 @@ function dynamics_figure()
         lines!(ax1, path_y, path_p, color=color, linewidth=4)
         scatter!(ax1, [path_y[1]], [path_p[1]], color=color, markersize=12, marker=:rect)
         text!(ax1, path_y[min(end, 8)] + 0.015, path_p[min(end, 8)],
-            text="$label  α̃=$(rate)", color=color, fontsize=21)
+            text="$label  α=$(rate)", color=color, fontsize=21)
     end
     scatter!(ax1, [ystar], [pstar], color=DARK, markersize=22)
     text!(ax1, ystar + 0.025, pstar + 0.025, text="shared attractor", color=DARK, fontsize=22)
@@ -199,7 +202,8 @@ function dynamics_figure()
 
     ax3 = Axis(fig[2, 2], title="Participation trajectories",
         xlabel=L"\mathrm{dimensionless\ time},\ \tau+1\ \mathrm{(log\ scale)}",
-        ylabel="realized participation", xscale=log10, limits=(1, 3001, 0, 0.95))
+        ylabel="Participation (share of all actors)",
+        xscale=log10, limits=(1, 3001, 0, 0.95))
     for (sol, color) in zip(sols, colors)
         path_p = [sum(u[1:base_s.N] ./ potentials) / base_s.N for u in sol.u]
         lines!(ax3, sol.t .+ 1, path_p, color=color, linewidth=4)
@@ -269,7 +273,7 @@ function rights_allocation_figure()
     end
 
     ymax = 1.22 * maximum(potentials)
-    actor_ticks = ([1, N], ["low Θᵢ", "high Θᵢ"])
+    actor_ticks = ([1, N], ["low θᵢ", "high θᵢ"])
 
     ax1 = Axis(exclusive_fig[1, 1], title="Exclusive rights: assign a sanctioned-use threshold",
         xlabel="actors ordered by exit threshold",
@@ -385,17 +389,17 @@ function incentive_switch_figure()
 
     ax2 = Axis(fig[1, 2], title="The exit-threshold ordering can reverse",
         xlabel=L"\mathrm{outside\ opportunity},\ w",
-        ylabel=L"\mathrm{exit\ threshold},\ \Theta(w)")
+        ylabel=L"\mathrm{exit\ threshold},\ \theta(w)")
     lines!(ax2, w, theta_no, color=BLUE, linewidth=5)
     lines!(ax2, w, theta_switch, color=ORANGE, linewidth=5)
-    text!(ax2, 1.68, 0.445, text="outside opportunity dominates\nΘ rises with w",
+    text!(ax2, 1.68, 0.445, text="outside opportunity dominates\nθ rises with w",
         color=BLUE, fontsize=21, align=(:center, :center))
-    text!(ax2, 1.25, theta_switch[120], text="efficiency dominates\nΘ falls with w",
+    text!(ax2, 1.25, theta_switch[120], text="efficiency dominates\nθ falls with w",
         color=ORANGE, fontsize=21, align=(:left, :top))
     panel_label!(fig[1, 2], "B")
 
     ax3 = Axis(fig[2, 1:2], title="The resulting threshold-impact ordering",
-        xlabel=L"\mathrm{exit\ threshold},\ \Theta",
+        xlabel=L"\mathrm{exit\ threshold},\ \theta",
         ylabel=L"\mathrm{impact\ potential},\ \bar{u}")
     lines!(ax3, theta_no, potential_no, color=BLUE, linewidth=5)
     lines!(ax3, theta_switch, potential_switch, color=ORANGE, linewidth=5)

@@ -11,7 +11,7 @@ thresholds and impact potentials generate two population curves whose crossing
 predicts the social-ecological attractor:
 
 ```math
-\frac{du_i}{d\tau}=\widetilde{\alpha}_i\left(y-\Theta_i\right),
+\frac{du_i}{d\tau}=\alpha_i\left(y-\theta_i\right),
 \qquad 0\le u_i\le\bar u_i,
 ```
 
@@ -22,11 +22,11 @@ predicts the social-ecological attractor:
 At resource density `y`, the participation curve is
 
 ```math
-P(y)=\frac{1}{N}\sum_i \mathbf{1}(\Theta_i<y).
+P_-(y)=\frac{1}{N}\sum_i \mathbf{1}(\theta_i<y).
 ```
 
-The active-impact or sustainable-participation curve orders actors by
-`\Theta_i` and asks what fraction of the full population is required for
+The required-participation curve orders actors by
+`\theta_i` and asks what fraction of the full population is required for
 cumulative impact potential to equal replacement pressure `1-y`. The
 implementation interpolates within the marginal actor.
 
@@ -34,12 +34,12 @@ implementation interpolates within the marginal actor.
 
 When sources disagree, use this order:
 
-1. `Science_MS_compact.pdf`, the current main paper.
-2. `SM_science/main.tex` and the files it includes.
+1. `Science_MS_compact.pdf`, rendered from `manuscript/AN_compact-6.docx`.
+2. `SupplementaryMaterial/main.tex` and the files it includes.
 3. Tested model behavior in `src/`.
-4. Figure scripts in `manuscript/` and `SM_science/`.
-5. Historical prose and scripts in `archive/`, `manuscript/MS.txt`, and old
-   exploratory examples.
+4. Figure scripts in `manuscript/` and `SupplementaryMaterial/scripts/`.
+5. Historical prose in `manuscript/MS.txt` and any local ignored archives or
+   exploratory files.
 
 Do not silently resolve a scientific disagreement. Record the discrepancy,
 identify which source is being followed, and add a regression test before
@@ -53,9 +53,11 @@ The paper notation and some internal Julia names differ:
 | --- | --- | --- |
 | Resource density | `y` | `x[N+1]` |
 | Realized use or effort | `u_i` | `x[1:N]` |
-| Exit threshold | `\Theta_i` | `w̃` |
+| Dimensional resource stock | `x` | not stored directly |
+| Dimensional response coefficient | `a_i` | not stored directly |
+| Exit threshold | `\theta_i` | `w̃` |
 | Impact potential | `\bar u_i` | `ū` |
-| Behavioral response rate | `\widetilde\alpha_i` | `α` |
+| Nondimensional response rate | `\alpha_i` | `α` |
 | Participation curve | `P(y)` | `Γ(y, p)` |
 | Sustainable-participation curve | `I(y)` | `Φ(y, p)` |
 | Use-right allocation | `R_i` | `R` for TUR; see EUR warning below |
@@ -73,8 +75,6 @@ paper notation in prose, plots, and study reports.
 - `src/scenarios.jl`: open-access primitives and scenario construction.
 - `src/policies.jl`: policy types and policy-specific dispatch.
 - `src/plots.jl`: phase, income, distribution, and dependency plots.
-- `easy/Sim.jl`: compact simulation-facing wrapper.
-- `easy/Viz.jl`: optional compact visualization wrapper.
 - `webapp/`: interactive JavaScript port. It is not the scientific source of
   truth; parity changes require comparison with `src/` and tests.
 
@@ -87,9 +87,10 @@ Use these classifications in study design and reporting:
 
 - `OpenAccess`: direct implementation of the baseline model.
 - `TradableUseRights`: dynamic numerical rights market with effort or yield
-  quotas, equal or historical initial rights, price-adjusted exit thresholds,
-  rationing, and rent transfers. Market-clearing behavior is algorithmic and
-  should be checked for convergence in each study.
+  quotas, equal rights for all actors or equal historical rights among actors
+  with positive open-access use, price-adjusted exit thresholds, rationing,
+  and rent transfers. Market-clearing behavior is algorithmic and should be
+  checked for convergence in each study.
 - `ExclusiveUseRights`: binary strong-sanction specialization. Internally,
   `R_i=1` means excluded and shifts the threshold by one full resource unit;
   this internal mask is not a divisible use-right entitlement.
@@ -149,7 +150,7 @@ Representative figure scripts:
 julia --project=. manuscript/figure_intro_dimensional_pipeline.jl
 julia --project=. manuscript/figure3_relational_variables.jl
 julia --project=. manuscript/figure4_policy_transformations.jl
-julia --project=. SM_science/supplementary_figures.jl
+julia --project=. SupplementaryMaterial/scripts/generate_figures.jl
 ```
 
 Inspect generated PDF and PNG files visually. A successful script is not a
@@ -165,10 +166,10 @@ layout verification.
 - Do not edit generated LaTeX auxiliaries or derived PNG/PDF files by hand.
 - Do not move or delete manuscript outputs unless the user explicitly requests
   an archival cleanup.
-- Treat `archive/` and debug/example scripts as historical unless promoted and
-  tested.
+- Treat local ignored archives and debug scripts as historical unless promoted
+  and tested.
 - Keep publication figures in `manuscript/figures/` and supplementary figures
-  in `SM_science/figures/`.
+  in `SupplementaryMaterial/figures/`.
 - Keep temporary diagnostics in `tmp/` or `tmp_outputs/`; these are ignored.
 
 ## Before Reporting Results
@@ -176,10 +177,11 @@ layout verification.
 Confirm all of the following:
 
 - The paper notation is used in labels and prose.
-- `P(y)` uses the strict criterion `\Theta_i<y`.
-- `I(y)` uses actors ordered by `\Theta_i` and includes the marginal-actor
+- `P_-(y)` uses the strict criterion `\theta_i<y`; at an exact threshold,
+  participation spans the vertical interval to the weak-inequality boundary.
+- `I(y)` uses actors ordered by `\theta_i` and includes the marginal-actor
   interpolation.
-- Actors with `\Theta_i>1` are not counted as eligible on `y\in[0,1]`.
+- Actors with `\theta_i>1` are not counted as eligible on `y\in[0,1]`.
 - Policy and open-access runs use the same realized population.
 - Policy runs begin from the intended initial state.
 - TUR quota totals, price, and transfer accounting are numerically sensible.

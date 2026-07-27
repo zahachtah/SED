@@ -36,8 +36,8 @@ ExclusiveUseRights(:top, false)
 ```
 
 The selector is `:top`, `:bottom`, or `:random`. The regulated fraction is
-selected using outside opportunities when available and otherwise the internal
-exit-threshold field `w̃`.
+selected using the internal exit-threshold field `w̃`, matching the manuscript
+comparison.
 
 This is the paper's binary strong-sanction specialization. The internal `R`
 vector is an exclusion mask:
@@ -61,17 +61,24 @@ TradableUseRights(
 )
 ```
 
-For regulation level `f`, aggregate rights equal `1-f`. Rights are initially
-equal or proportional to open-access use when historical allocation is
-enabled. The numerical market:
+For regulation level `f`, aggregate rights equal `Q=1-f`. With `:effort`,
+`Q`, `R_i`, supply, and demand are measured in realized effort `u_i`; with
+`:yield`, they are measured in catch `y*u_i`. Rights are initially equal among
+all actors or, when historical allocation is enabled, equal among actors with
+positive open-access use. Historical use determines eligibility, not the size
+of each actor's endowment. The numerical market:
 
-- adds the evolving price `\phi` to every exit threshold;
+- applies price wedge `\phi` for effort rights or `y*\phi` for catch rights;
 - adjusts `\phi` using demand minus supply;
 - rations additional demand when it exceeds available supply;
-- records `(R_i-u_i)\phi`, or its yield equivalent, as a transfer.
+- records `(R_i-u_i)\phi` or `(R_i-y*u_i)\phi` as a transfer.
 
 Transfers sum to zero when aggregate use equals the quota. Check quota balance
 and price convergence before interpreting a run.
+
+For the optional `:yield` target, rights are measured in catch units `y*u_i`.
+The price wedge is therefore `y*\phi`, and marginal return is
+`y*(1-\phi)-\theta_i`. Figure 4 uses `:effort`.
 
 ## Protected Area
 
@@ -88,6 +95,10 @@ The tested one-resource reduced form:
   used;
 - reduces required actor impact through the spillover term;
 - scales resource income by the accessible fraction.
+
+Its quasi-steady protected-patch density is derived from
+`y_p*(1-y_p)-m*(y_p-y)=0`; the protected fraction appears in the reciprocal
+area scaling of spillover into the exploited patch.
 
 ## Economic Incentives
 

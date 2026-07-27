@@ -1333,20 +1333,27 @@
       rights: {
         title: "Tradable use rights",
         body: `
-          <p>Rights are an aggregate effort or yield quota. They do not change each actor's maximum impact capacity \\(\\bar u_i\\), so the ordered active-impact curve stays fixed. Instead, the rights market creates a permit price \\(\\pi\\) that shifts all harvesting thresholds additively:</p>
+          <p>Rights are an aggregate quota \\(Q\\), measured either in effort or catch. Actor quota use and aggregate accounting are</p>
           <p>\\[
-            c_i^{TUR} = c_i + \\pi
+            z_i(y,u_i)=
+            \\begin{cases}
+              u_i & \\text{effort quota},\\\\
+              yu_i & \\text{catch quota},
+            \\end{cases}
+            \\qquad \\sum_i R_i=Q.
           \\]</p>
+          <p>Trade income is \\((R_i-z_i)\\pi\\). Effort rights produce the additive threshold shift \\(c_i^{TUR}=c_i+\\pi\\). Catch rights instead give marginal return \\(y(1-\\pi)-c_i\\), so their price wedge is \\(y\\pi\\). Neither changes maximum impact capacity \\(\\bar u_i\\).</p>
           <p>Rights are endowed equally or from historical open-access use:</p>
           <p>\\[
-            R_i = \\frac{1-f}{N}, \\qquad
-            R_i^{hist} \\propto u_i^{OA} \\text{ or } u_i^{OA}y^{OA}
+            n^{OA}=\\sum_j\\mathbf 1(u_j^{OA}>0), \\qquad
+            R_i^{hist}=\\frac{Q}{n^{OA}}\\mathbf 1(u_i^{OA}>0)
           \\]</p>
+          <p>Historical use determines who receives an initial right, not its size: all open-access participants receive an equal share of the quota.</p>
           <p>The market price responds to excess demand:</p>
           <p>\\[
             \\dot\\pi = \\kappa(D-S)
           \\]</p>
-          <p>The simulation integrates \\((u_1,\\ldots,u_N,y,\\pi)\\) until equilibrium. Trade income is \\((R_i-u_i)\\pi\\) for effort rights or \\((R_i-u_i y)\\pi\\) for yield rights. The orange curve is the cumulative distribution of shifted thresholds, \\(c_i + \\pi\\), while the blue curve remains the unmodified ordered active-impact curve.</p>
+          <p>The simulation integrates \\((u_1,\\ldots,u_N,y,\\pi)\\) until equilibrium. Supply, demand, endowments, and quota use are evaluated in the selected effort or catch unit.</p>
         `
       },
       pa: {
@@ -1977,7 +1984,12 @@
       return 0;
     }
 
-    function assignRights(actors, p, historicalActors = null, historicalY = 1) {
+    function rightsPriceWedgeAt(y, p, price) {
+      if (p.policyType !== "rights") return 0;
+      return p.rightsTarget === "yield" ? y * price : price;
+    }
+
+    function assignRights(actors, p, historicalActors = null) {
       if (p.policyType !== "rights") return actors;
       const totalQuota = Math.max(0, p.impactCap);
       let weights = actors.map(() => 1);
@@ -1986,8 +1998,7 @@
         const history = new Map(historicalActors.map(a => [a.id, a]));
         weights = actors.map(a => {
           const h = history.get(a.id);
-          if (!h) return 0;
-          return p.rightsTarget === "yield" ? h.effort * historicalY : h.effort;
+          return h && h.effort > 0 ? 1 : 0;
         });
         if (weights.reduce((s, x) => s + x, 0) <= 1e-12) weights = actors.map(() => 1);
       }
@@ -2029,7 +2040,7 @@
       for (let i = 0; i < n; i++) sumU += u[i];
 
       for (let i = 0; i < n; i++) {
-        const c = costAt(actors[i], p, t) + (p.policyType === "rights" ? price : 0);
+        const c = costAt(actors[i], p, t) + rightsPriceWedgeAt(y, p, price);
         du[i] = actors[i].alpha * (y - c);
       }
 
@@ -2233,10 +2244,10 @@
     }
 
     function gammaAt(y, actors, p) {
-      const price = rightsPriceAt(y, actors, p);
+      const priceWedge = rightsPriceWedgeAt(y, p, rightsPriceAt(y, actors, p));
       const t = p.phaseTime || 0;
       let active = 0;
-      for (const a of actors) if (costAt(a, p, t) + price < y) active++;
+      for (const a of actors) if (costAt(a, p, t) + priceWedge < y) active++;
       // True empirical CDF over all actors; intentionally not rescaled at y = 1.
       return active / Math.max(1, actors.length);
     }
@@ -2338,14 +2349,14 @@
       if (p.policyType === "rights") {
         if (p.historicalRights) {
           if (options.openResult?.actors?.length) {
-            assignRights(transformed, p, options.openResult.actors, options.openResult.yStar);
+            assignRights(transformed, p, options.openResult.actors);
           } else {
             const historicalP = openAccessParams(p);
             const historicalActors = transformActors(base, historicalP);
             const historicalSim = simulateEquilibrium(historicalActors, historicalP);
             const historicalModelP = { ...historicalP, phaseTime: historicalSim.t };
             allocateIncome(historicalSim.y, historicalActors, historicalModelP, historicalSim.u, historicalSim.price, historicalSim.t);
-            assignRights(transformed, p, historicalActors, historicalSim.y);
+            assignRights(transformed, p, historicalActors);
           }
         } else {
           assignRights(transformed, p);
