@@ -1,0 +1,14 @@
+{
+  "name": "sed-research-companion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Development-only browser checks for the self-contained SED companion",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node test/model.test.cjs && node test/plots.test.cjs",
+    "test:browser": "node test/ui.test.cjs",
+    "capture": "node test/ui.test.cjs --update-readme"
+  },
+  "engines": { "node": ">=22" },
+  "devDependencies": { "playwright": "1.62.1" }
+}

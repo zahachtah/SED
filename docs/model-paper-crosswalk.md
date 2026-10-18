@@ -92,7 +92,7 @@ non-dimensional resource domain and are excluded from the maximum attainable
 share.
 
 Status: direct match to
-`SupplementaryMaterial/sections/02_participation_balance.tex`.
+`SupplementaryMaterial/sections/03_participation_balance.tex`.
 
 ## Attractor
 
@@ -105,6 +105,15 @@ P(y^*)=I(y^*).
 The ODE endpoint and curve crossing should agree up to numerical tolerance.
 Finite response rates change the trajectory, not the equilibrium geometry,
 provided the same policy-adjusted thresholds and limits apply.
+
+For the baseline projected dynamics, a Lyapunov function proves convergence
+from every positive-resource initial condition to the unique equilibrium
+resource density. If at most one actor is marginal, the full equilibrium is a
+globally asymptotically stable point; tied marginal actors produce a globally
+attracting set of allocations with the same resource density and total use.
+See `SupplementaryMaterial/sections/03_participation_balance.tex`. The proof
+also covers fixed policy transformations of thresholds and limits, but not
+policies with additional dynamic states or resource-dependent limits.
 
 ## Income Accounting
 
@@ -119,13 +128,18 @@ With `dimensional=true`, components are multiplied by scenario field `rpk`.
 The paper's exact dimensional interpretation therefore depends on how the
 scenario constructs `w̃`, `ū`, and `rpk`.
 
+For `ProtectedArea`, the simulated actor state is ecological-equivalent use
+scaled by `kappa(y)=(1-y)/(1-y+h(y))`. Income accounting first recovers
+physical use by dividing by `kappa(y)` and uses the original physical
+endowment; the ecological transform is not treated as lost gear or time.
+
 ## Policy Crosswalk
 
 | Policy | Code behavior | Scientific status |
 | --- | --- | --- |
 | Open access | Baseline thresholds and limits | Direct |
 | Exclusive rights | Selected actors receive a one-unit threshold shift | Binary strong-sanction specialization |
-| Tradable rights | Dynamic price shift, quota rationing, rent transfer | Numerical implementation of paper mechanism |
+| Tradable rights | Dynamic price shift, quota convergence, rent transfer | Numerical implementation of paper mechanism |
 | Protected area | Access scaling plus mobility-derived spillover | Tested one-resource reduced form |
 | Economic incentives | Generic additive/multiplicative transforms | Reduced-form geometry |
 | Protected area, two populations | Explicit two-patch resource equations | Equation-aligned, experimental workflow |

@@ -87,7 +87,7 @@ end
 function regulate(s, f, pol::TradableUseRights)
     # Default allocation: equal shares of allowed effort or yield
 
-    R = fill(f == 0 ? 1.0 : (1 - Float64(f)) / s.N, s.N)
+    R = fill((1 - Float64(f)) / s.N, s.N)
 
 
     if pol.historical_use_rights
@@ -97,7 +97,7 @@ function regulate(s, f, pol::TradableUseRights)
         y0 = 1.0
         u0 = fill(0.0, s.N)
         oaprob = ODEProblem(dxdt, [u0; y0], (0.0, 1000.0), s_oa)
-        oasol = solve(oaprob, SSPRK432(; stage_limiter!), callback=TerminateSteadyState(1e-6, 1e-4))
+        oasol = _solve_primary(oaprob)
         historical_users = oasol[1:s.N, end-1] .> 0.0
         n_historical = count(historical_users)
         if n_historical > 0
@@ -108,6 +108,7 @@ function regulate(s, f, pol::TradableUseRights)
     # Attach income extra function for trade revenue
     function _tur_income_extra(x, p, t)
         u = x[1:p.N]
+        p.regulation == 0 && return zeros(eltype(u), p.N)
         y = x[p.N+1]
         # p.policy is now the struct
         target = p.policy.target
@@ -140,81 +141,28 @@ function regulate(s, f, pol::TradableUseRights)
 end
 
 function cost(val, x, p, t, pol::TradableUseRights)
+    p.regulation == 0 && return val
     price = length(x) >= p.N + 2 ? x[p.N+2] : 0.0
     price_wedge = pol.target == :yield ? x[p.N+1] * price : price
     return val .+ price_wedge
 end
 
 function dynamics(dx, x, p, t, pol::TradableUseRights)
+    if p.regulation == 0
+        dx[p.N+2] = 0.0
+        return nothing
+    end
+
     target = pol.target
     market_rate = pol.market_rate
 
-    # Supply: Aggregate clamping (Legacy/Stable logic)
-    supply = if target == :yield
-        clamp(sum(p.R .- (x[1:p.N] .* x[p.N+1])), 0.0, Inf)
-    else
-        max(0.0, sum(p.R .- x[1:p.N]))
-    end
-
-    # Demand
-    id = findall((dx[1:p.N] .> 0.0))
-    ind_demand = if target == :yield
-        max_extra_yield = (p.ū[id] .- x[id]) .* x[p.N+1]
-        desired_extra_yield = dx[id] .* x[p.N+1]
-        min.(max_extra_yield, desired_extra_yield)
-    else
-        min.(p.ū[id] - x[id], dx[id])
-    end
-
-    demand = sum(ind_demand)
-
-    # Price Dynamics
-    dx[p.N+2] = market_rate * (demand - supply)
-
-    # Rationing if demand exceeds supply
-    if demand > supply && demand > 0
-
-        # Check for Buyer Bias
-        bias = pol.buyer_bias
-        used_biased_allocation = false
-
-        if bias != 0.0 && hasproperty(p, :opportunities)
-            opp = getfield(p, :opportunities)
-            oppv = hasproperty(opp, :data) ? opp.data : opp
-
-            if length(oppv) == p.N
-                # Calculate weights based on bias
-                omin = minimum(oppv)
-                omax = maximum(oppv)
-                rng = omax - omin
-
-                if rng > 0
-                    norm = (oppv[id] .- omin) ./ rng
-                    # Map [0,1] to [-1,1] then scale by bias
-                    # w = 1 + bias * s
-                    # If bias=1, range is [0, 2]. If bias=-1, range is [2, 0].
-                    s_scaled = 2 .* (norm .- 0.5)
-                    weights = clamp.(1 .+ bias .* s_scaled, 0.001, Inf)
-
-                    total_w = sum(weights)
-                    if total_w > 0
-                        dx[id] .= supply .* (weights ./ total_w)
-                        used_biased_allocation = true
-                    end
-                end
-            end
-        end
-
-        if !used_biased_allocation
-            # Standard logic (proportional to demand)
-            if target == :yield
-                y = max(eps(), x[p.N+1])
-                dx[id] .= (supply .* ind_demand ./ demand) ./ y
-            else
-                dx[id] .= supply .* ind_demand ./ demand
-            end
-        end
-    end
+    use = target == :yield ? x[1:p.N] .* x[p.N+1] : x[1:p.N]
+    quota = sum(p.R)
+    excess_use = sum(use) - quota
+    raw_price_rate = market_rate * excess_use
+    price = x[p.N+2]
+    dx[p.N+2] = price <= MARKET_PROJECTION_TOL && raw_price_rate < 0.0 ?
+                0.0 : raw_price_rate
 end
 
 # ----- Exclusive Use Rights (EUR) -----
@@ -286,14 +234,42 @@ function rₛ(y, fₚ, m; K::Float64=1.0, r::Float64=1.0, xK::Float64=0.0, xr::F
     (fₚ / (1 - fₚ) * m * (yₚ(y, fₚ, m; r, K, xK, xr) .- y)) ./ max.(y, 1e-6)
 end
 
+"""
+    protected_pressure_scale(y, f_p, m)
+
+Convert physical use in the explicit protected/exploited-patch equilibrium to
+ecological-equivalent use in the one-resource geometry.  If `h(y)` is the
+spillover contribution per unit exploited stock, the explicit equilibrium is
+`sum(u) = 1 - y + h(y)`.  Multiplication by this factor makes the same physical
+use balance the ordinary one-resource target `1 - y` exactly.
+"""
+function protected_pressure_scale(y, f_p, m;
+        K::Float64=1.0, r::Float64=1.0,
+        xK::Float64=0.0, xr::Float64=0.0)
+    (f_p == 0.0 || m == 0.0) && return 1.0
+
+    # Evaluate the removable 0/0 endpoint just inside the normalized domain.
+    # This keeps the state limiter finite when simulations initialize at y=1.
+    y_eval = clamp(Float64(y), 0.0, 1.0 - 1e-8)
+    replacement = 1.0 - y_eval
+    h = rₛ(y_eval, f_p, m; K, r, xK, xr)
+    return clamp(replacement / max(replacement + h, eps()), 0.0, 1.0)
+end
+
 function limit(val, x, p, t, pol::ProtectedArea)
-    return val .* (1 .+ rₛ(x[p.N+1], p.regulation, pol.m)) .^ -1
+    scale = protected_pressure_scale(x[p.N+1], p.regulation, pol.m)
+    return val .* scale
 end
 
 # ----- Protected Area Two Populations -----
 
 function regulate(p, f, pol::ProtectedAreaTwoPop)
-    return change(p, regulation=f)
+    rff(x, pp, t) = (1 - pp.regulation)
+    return change(p, regulation=f, resource_factor_fun=rff)
+end
+
+function cost(val, x, p, t, pol::ProtectedAreaTwoPop)
+    return val .* (1 - p.regulation) .^ -1
 end
 
 function dynamics(dx, x, p, t, pol::ProtectedAreaTwoPop)
@@ -305,12 +281,9 @@ function dynamics(dx, x, p, t, pol::ProtectedAreaTwoPop)
 end
 
 function limit(val, x, p, t, pol::ProtectedAreaTwoPop)
-    y_u = x[p.N+1]
-    y_p = x[p.N+2]
-    # Regularized division by y_u
-    r_s_local = (p.regulation / (1.0 - p.regulation)) *
-                pol.m * (y_p - y_u) / max(y_u, 1e-6)
-    return val .* (1 .+ r_s_local) .^ (-1)
+    # Spillover is already present in the explicit resource dynamics, so the
+    # physical actor endowment must not be transformed a second time.
+    return val
 end
 
 # ----- Economic Incentives -----

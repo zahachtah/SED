@@ -483,8 +483,10 @@ distribution_plot(
     data, vars;
     labels=nothing, corr=:pearson,
     cellsize=(120,120), markersize=3, alpha=0.6,
+    fontsize=10, labelsize=12,
     cmap=:coolwarm, reverse_cmap=false,
-    dep_range=(1:4, 5:8)
+    dep_range=(1:4, 5:8), dep_title="Causal Dependency (DAG)",
+    dep_titlesize=16, dependency_fontsize=12
 )
 
 - Upper triangle: blank (no axes).
@@ -509,9 +511,14 @@ function distribution_plot(
     cellsize=(120, 120),
     markersize=3,
     alpha=0.6,
+    fontsize=10,
+    labelsize=12,
     cmap=:coolwarm,
     reverse_cmap::Bool=false,
-    dep_range=(1:4, 5:8)
+    dep_range=(1:4, 5:8),
+    dep_title="Causal Dependency (DAG)",
+    dep_titlesize=16,
+    dependency_fontsize=12
 )
     @assert corr in (:pearson, :spearman)
 
@@ -539,18 +546,18 @@ function distribution_plot(
 
     # Figure (extra height for bottom labels)
     total_size = (cellsize[1] * p, cellsize[2] * p + 28)
-    fig = Figure(size=total_size, fontsize=10)
+    fig = Figure(size=total_size, fontsize=fontsize)
 
 
     # Left row labels (0th col)
     for i in 1:p
         fig[i, 0] = Label(fig, lab[i]; halign=:right, valign=:center,
-            fontsize=12, font=:bold, rotation=pi / 2, tellheight=false)
+            fontsize=labelsize, font=:bold, rotation=pi / 2, tellheight=false)
     end
     # Bottom column labels (row p+1)
     for j in 1:p
         fig[p+1, j] = Label(fig, lab[j]; halign=:center, valign=:top,
-            fontsize=12, font=:bold, tellwidth=false)
+            fontsize=labelsize, font=:bold, tellwidth=false)
     end
 
     # Colormap for signed r
@@ -637,7 +644,7 @@ function distribution_plot(
                     scatter!(ax, xi, yi; markersize=markersize, color=:black, transparency=true, alpha=alpha)
                     text!(ax, 0.065, 0.98, text=@sprintf("%.2f", r * r),
                         space=:relative, align=(:left, :top),
-                        fontsize=12, color=:white, font=:bold,
+                        fontsize=labelsize, color=:white, font=:bold,
                         glowcolor=:black, glowwidth=6)
                 else
                     scatter!(ax, xi, yi; markersize=markersize, color=:black, transparency=true, alpha=alpha)
@@ -677,14 +684,14 @@ function distribution_plot(
     depplot = Axis(fig;
         xticks=LinearTicks(3),
         yticks=LinearTicks(3),
-        title="Causal Dependency (DAG)",
-        titlesize=16,
+        title=dep_title,
+        titlesize=dep_titlesize,
         titlefont=:bold
     )
     fig[dep_range[1], dep_range[2]] = depplot
     hidespines!(depplot)
     hidedecorations!(depplot)  # remove ticks, labels, grid, etc.
-    dependency_graph_plot!(depplot, data)
+    dependency_graph_plot!(depplot, data; fontsize=dependency_fontsize)
     colgap!(fig.layout, 8)
     rowgap!(fig.layout, 6)
     return fig

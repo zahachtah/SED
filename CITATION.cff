@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "Please cite the SED software and the accompanying manuscript, and identify the exact release or commit used."
+type: software
+title: "SED: A distributional social-ecological model of resource use and governance"
+authors:
+  - family-names: Anderies
+    given-names: John M.
+  - family-names: Norberg
+    given-names: Jon
+version: 0.1.0
+license: MIT
+repository-code: "https://github.com/zahachtah/SED"
+url: "https://zahachtah.github.io/SED/"
+abstract: >-
+  A Julia model and interactive browser companion connecting heterogeneous
+  actor exit thresholds and impact potentials to renewable-resource dynamics,
+  governance policies, and distributional income outcomes.
+keywords:
+  - social-ecological systems
+  - common-pool resources
+  - heterogeneity
+  - resource governance
+  - bioeconomics

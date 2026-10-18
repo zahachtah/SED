@@ -2,7 +2,7 @@
 
 julia_version = "1.12.5"
 manifest_format = "2.0"
-project_hash = "3b05d009dfa7f454e3772f4b5c690070d3960498"
+project_hash = "fd96b148a98e923321b751d5aa5a931085a7f8a3"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "8be2ae325471fc20b11c27bb34b518541d07dd3a"
@@ -1993,7 +1993,7 @@ uuid = "7e49a35a-f44a-4d26-94aa-eba1b4ca6b47"
 version = "0.5.16"
 
 [[deps.SED]]
-deps = ["CairoMakie", "ColorSchemes", "Colors", "DiffEqCallbacks", "Distributions", "KernelDensity", "LinearAlgebra", "Makie", "OrdinaryDiffEq", "Printf", "Random", "Statistics", "StatsBase"]
+deps = ["CairoMakie", "ColorSchemes", "Colors", "DiffEqCallbacks", "Distributions", "KernelDensity", "LaTeXStrings", "LinearAlgebra", "Makie", "OrdinaryDiffEq", "Printf", "Random", "Statistics", "StatsBase"]
 path = "."
 uuid = "8a6c7107-4e38-4a1b-8a87-1d0b1a7f9c55"
 version = "0.1.0"

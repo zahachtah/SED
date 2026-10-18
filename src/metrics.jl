@@ -143,13 +143,17 @@ function Φ(y, p; x=nothing, t=0.0)
     c = p.cost(state, p, t)
     l = p.limit(state, p, t)
     eligible = findall(<=(1.0), c)
-    isempty(eligible) && return 0.0
+    pressure = 1.0 - y
+    pressure <= 0.0 && return 0.0
+    isempty(eligible) && return NaN
 
     id = eligible[sortperm(c[eligible])]
     l_sorted = l[id]
-    pressure = 1.0 - y
-    pressure <= 0.0 && return 0.0
-    if pressure >= sum(l_sorted)
+    available_pressure = sum(l_sorted)
+    feasibility_tol = 32eps(max(available_pressure, pressure, 1.0))
+    if pressure > available_pressure + feasibility_tol
+        return NaN
+    elseif pressure >= available_pressure - feasibility_tol
         return length(id) / p.N
     end
 
@@ -163,10 +167,55 @@ function Φ(y, p; x=nothing, t=0.0)
     return clamp(f / p.N, 0.0, length(id) / p.N)
 end
 
+"""
+    tradable_market_diagnostics(sol; index=max(1, length(sol.t) - 2))
+
+Return final quota use, signed quota residual, price, and price derivative for
+a `TradableUseRights` simulation. A positive `excess_use` means quota demand
+exceeds supply; at a binding converged market, both `excess_use` and
+`price_rate` approach zero.
+"""
+function tradable_market_diagnostics(sol; index=max(1, length(sol.t) - 2))
+    p = sol.prob.p
+    pol = hasproperty(p, :policy) ? p.policy : OpenAccess()
+    pol isa TradableUseRights ||
+        throw(ArgumentError("tradable_market_diagnostics requires TradableUseRights"))
+
+    x = sol.u[index]
+    y = x[p.N+1]
+    quota = sum(p.R)
+    quota_use = pol.target == :yield ? y * sum(x[1:p.N]) : sum(x[1:p.N])
+    dx = zeros(eltype(x), length(x))
+    dxdt(dx, x, p, sol.t[index])
+    return (
+        target=pol.target,
+        quota=quota,
+        quota_use=quota_use,
+        excess_use=quota_use - quota,
+        quota_balance_error=abs(quota_use - quota),
+        quota_violation=max(quota_use - quota, 0.0),
+        price=x[p.N+2],
+        price_rate=dx[p.N+2],
+        complementarity_error=abs(x[p.N+2] * (quota_use - quota)),
+    )
+end
+
 function incomes(x, p; summarize=false, dimensional::Bool=false)
     # unpack state and parameters
     y = x[p.N+1]
-    u = x[1:p.N]
+    u_model = x[1:p.N]
+    pol = hasproperty(p, :policy) ? p.policy : OpenAccess()
+
+    # The reduced protected-area model stores ecological-equivalent use so
+    # that its one-resource equilibrium matches the explicit two-patch model.
+    # Income, however, is earned from physical use and foregone from the
+    # unchanged physical endowment.
+    u = if pol isa ProtectedArea
+        scale = protected_pressure_scale(y, p.regulation, pol.m)
+        scale <= eps() ? zeros(p.N) : clamp.(u_model ./ scale, 0.0, p.ū)
+    else
+        u_model
+    end
 
     # resource income with optional policy-provided factor
     rf = hasproperty(p, :resource_factor_fun) ? p.resource_factor_fun(x, p, 0.0) : 1.0
@@ -176,12 +225,14 @@ function incomes(x, p; summarize=false, dimensional::Bool=false)
     # wages based on μ and γ. For policies that introduce a market price or
     # rescale incentives (TUR/EUR/PA), use the baseline w̃ for wage accounting
     # and keep market-related revenue in the extra (trade) component.
-    μ = p.limit(x, p, 0.0)
-    pol = hasproperty(p, :policy) ? p.policy : OpenAccess()
+    μ = pol isa ProtectedArea ?
+        (hasproperty(p.ū, :data) ? p.ū.data : p.ū) :
+        p.limit(x, p, 0.0)
 
     use_baseline_cost = (pol isa TradableUseRights) ||
                         (pol isa ExclusiveUseRights) ||
-                        (pol isa ProtectedArea)
+                        (pol isa ProtectedArea) ||
+                        (pol isa ProtectedAreaTwoPop)
 
     γw = if use_baseline_cost && hasproperty(p, :w̃)
         hasproperty(p.w̃, :data) ? p.w̃.data : p.w̃

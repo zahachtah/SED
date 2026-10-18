@@ -21,7 +21,7 @@ export ProtectedAreaTwoPop, EconomicIncentives, Development
 export cost, limit, dynamics, regulate
 
 # Outcomes
-export Γ, Φ, incomes, regulation_scan, gini
+export Γ, Φ, incomes, regulation_scan, gini, tradable_market_diagnostics
 
 # Plotting API
 export phase_plot!, phase_plot, incomes_plot!, incomes_plot

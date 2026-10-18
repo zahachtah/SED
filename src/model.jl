@@ -1,6 +1,22 @@
 using OrdinaryDiffEq
 using DiffEqCallbacks: TerminateSteadyState
 
+const DEFAULT_SOLVER_ABSTOL = 1e-8
+const DEFAULT_SOLVER_RELTOL = 1e-6
+const DEFAULT_STEADY_ABSTOL = 1e-6
+const DEFAULT_STEADY_RELTOL = 1e-4
+const MARKET_PROJECTION_TOL = 1e-10
+
+_steady_callback() =
+    TerminateSteadyState(DEFAULT_STEADY_ABSTOL, DEFAULT_STEADY_RELTOL)
+
+function _solve_primary(prob)
+    solve(prob, SSPRK432(; stage_limiter!);
+        callback=_steady_callback(),
+        abstol=DEFAULT_SOLVER_ABSTOL,
+        reltol=DEFAULT_SOLVER_RELTOL)
+end
+
 """
     sim_init(p; from::Symbol = :zeros, t_end=1000.0)
 
@@ -21,12 +37,13 @@ function sim_init(p; from::Symbol=:zeros, t_end=1000.0)
             return (zeros(N), 1.0)
         end
     elseif from == :oa
-        # OA warm start: solve with f=0.0 and reuse u*, y*
-        u0, y0_extra... = sim_init(p; from=:zeros)
-        initVals = vcat(u0, y0_extra...)
-        oa = p.regulate(p, 0.0)
+        # Solve the explicit open-access system for the same realized actors.
+        # Zero-regulation policy equations are tested to be open-access
+        # equivalent, but may still carry policy-specific auxiliary states.
+        oa = scenario(p; policy=OpenAccess())
+        initVals = [zeros(N); 1.0]
         prob = ODEProblem(dxdt, initVals, (0.0, t_end), oa)
-        sol = solve(prob, SSPRK432(; stage_limiter!), callback=TerminateSteadyState(1e-6, 1e-4))
+        sol = _solve_primary(prob)
         # Copy back u*, y* and keep extra states at defaults
         if pol isa TradableUseRights
             return (sol[1:N, end-2], sol[N+1, end-2], 0.0)
@@ -55,8 +72,14 @@ function stage_limiter!(x, integrator, p, t)
     limit_val = p.limit(x, p, t)
     x[1:p.N] .= ifelse.(x[1:p.N] .< 0.0, 0.0,
         ifelse.(x[1:p.N] .> limit_val, limit_val, x[1:p.N]))
-    for j in p.N+1:length(x)
+    x[p.N+1] = clamp(x[p.N+1], 0.0, 1.0)
+    for j in p.N+2:length(x)
         x[j] = max(0.0, x[j])
+    end
+
+    pol = hasproperty(p, :policy) ? p.policy : OpenAccess()
+    if pol isa ProtectedAreaTwoPop && length(x) >= p.N + 2
+        x[p.N+2] = clamp(x[p.N+2], 0.0, 1.0)
     end
 end
 
@@ -95,29 +118,61 @@ function sim(s; u0=nothing, y0=1.0, ϕ0=0.0, regulation=0.0, start_from_OA=false
     end
 
     if start_from_OA
-        oa = p.regulate(p, 0.0)
-        oaprob = ODEProblem(dxdt, initVals, tspan, oa)
-        oasol = solve(oaprob, SSPRK432(; stage_limiter!), callback=TerminateSteadyState(1e-6, 1e-4))
-        initVals[1:oa.N+1] = oasol[1:oa.N+1, end-2]
+        oa = scenario(s; policy=OpenAccess())
+        oa_init = [initVals[1:s.N]; initVals[s.N+1]]
+        oaprob = ODEProblem(dxdt, oa_init, tspan, oa)
+        oasol = _solve_primary(oaprob)
+        initVals[1:s.N+1] = oasol[1:s.N+1, end-2]
+        if pol isa ProtectedArea
+            scale = protected_pressure_scale(initVals[s.N+1], p.regulation, pol.m)
+            initVals[1:s.N] .*= scale
+        end
     end
+
+    # Policy changes can tighten feasible use bounds at the intervention time.
+    stage_limiter!(initVals, nothing, p, 0.0)
 
     prob = ODEProblem(dxdt, initVals, tspan, p)
     # try primary algorithm with limiter; on failure, try fallbacks
     function _try_solve(prob)
+        function valid(sol)
+            SciMLBase.successful_retcode(sol) || return false
+            tol = 1e-7
+            try
+                for (x, t) in zip(sol.u, sol.t)
+                    all(isfinite, x) || return false
+                    (-tol <= x[p.N+1] <= 1.0 + tol) || return false
+                    all(x[1:p.N] .>= -tol) || return false
+                    all(x[1:p.N] .<= p.limit(x, p, t) .+ tol) || return false
+                    all(x[p.N+1:end] .>= -tol) || return false
+                    if pol isa ProtectedAreaTwoPop
+                        x[p.N+2] <= 1.0 + tol || return false
+                    end
+                end
+            catch
+                return false
+            end
+            return true
+        end
+
         # 1) SSPRK with limiter
         try
-            sol = solve(prob, SSPRK432(; stage_limiter!), callback=TerminateSteadyState(1e-6, 1e-4))
-            return sol
+            sol = _solve_primary(prob)
+            valid(sol) && return sol
         catch
         end
         # 2) Stiff fallback
         try
-            sol = solve(prob, Rosenbrock23(), callback=TerminateSteadyState(1e-6, 1e-4))
-            return sol
+            sol = solve(prob, Rosenbrock23(); callback=_steady_callback(),
+                abstol=DEFAULT_SOLVER_ABSTOL, reltol=DEFAULT_SOLVER_RELTOL)
+            valid(sol) && return sol
         catch
         end
-        # 3) Non-stiff fallback
-        return solve(prob, Tsit5(), callback=TerminateSteadyState(1e-6, 1e-4))
+        # 3) Adaptive non-stiff fallback with the same feasibility projection.
+        sol = solve(prob, Tsit5(; stage_limiter!); callback=_steady_callback(),
+            abstol=DEFAULT_SOLVER_ABSTOL, reltol=DEFAULT_SOLVER_RELTOL)
+        valid(sol) || error("All simulation algorithms failed or violated model bounds")
+        return sol
     end
     sol = _try_solve(prob)
     return sol

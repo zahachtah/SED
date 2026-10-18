@@ -1,5 +1,6 @@
 name = "SED"
 uuid = "8a6c7107-4e38-4a1b-8a87-1d0b1a7f9c55"
+authors = ["John M. Anderies", "Jon Norberg"]
 version = "0.1.0"
 
 [deps]
@@ -19,14 +20,21 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 
 [compat]
+CairoMakie = "0.15.6"
+ColorSchemes = "3.31"
+Colors = "0.13"
+DiffEqCallbacks = "4.10"
 Distributions = "0.25.120"
 KernelDensity = "0.6.10"
 LaTeXStrings = "1.4.0"
 LinearAlgebra = "1.11.0"
 Makie = "0.24.6"
+OrdinaryDiffEq = "6.103"
 Printf = "1.11.0"
 Random = "1.11.0"
+Statistics = "1.11"
 StatsBase = "0.34.8"
+julia = "1.12"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

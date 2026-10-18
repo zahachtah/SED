@@ -8,6 +8,10 @@ Policies are Julia types that subtype `AbstractPolicy`. A policy can transform:
 - `regulate`: scenario parameters at a policy intensity `f`.
 - income hooks: resource-income factors or transfers.
 
+For every policy, regulation level `f=0` is the mathematical open-access
+boundary: policy transformations and any auxiliary coupling to the baseline
+state equations are inactive.
+
 Construct a policy explicitly and pass it to `scenario`:
 
 ```julia
@@ -69,12 +73,16 @@ positive open-access use. Historical use determines eligibility, not the size
 of each actor's endowment. The numerical market:
 
 - applies price wedge `\phi` for effort rights or `y*\phi` for catch rights;
-- adjusts `\phi` using demand minus supply;
-- rations additional demand when it exceeds available supply;
+- adjusts `\phi` from current rights deficits minus unused rights, equivalently
+  `sum(z_i)-Q`;
+- permits temporary excess use to feed back into the numerical price;
 - records `(R_i-u_i)\phi` or `(R_i-y*u_i)\phi` as a transfer.
 
 Transfers sum to zero when aggregate use equals the quota. Check quota balance
 and price convergence before interpreting a run.
+
+At `f=0`, the price and transfer hooks are inactive, so the policy
+equations reduce exactly to open access.
 
 For the optional `:yield` target, rights are measured in catch units `y*u_i`.
 The price wedge is therefore `y*\phi`, and marginal return is
@@ -93,12 +101,20 @@ The tested one-resource reduced form:
 
 - rescales thresholds by `1/(1-f_p)` because only the open fraction can be
   used;
-- reduces required actor impact through the spillover term;
+- maps physical impact to ecological-equivalent impact with
+  `kappa(y)=(1-y)/(1-y+h(y))`, where the explicit two-patch equilibrium is
+  `sum(u)=1-y+h(y)`;
 - scales resource income by the accessible fraction.
 
 Its quasi-steady protected-patch density is derived from
 `y_p*(1-y_p)-m*(y_p-y)=0`; the protected fraction appears in the reciprocal
 area scaling of spillover into the exploited patch.
+
+The transformed limit is used only for the reduced ecological dynamics and
+phase geometry. Income accounting converts realized equivalent use back to
+physical use and retains the original physical impact endowment. The explicit
+`ProtectedAreaTwoPop` model keeps physical actor limits unchanged because its
+resource equation already contains the spillover flux.
 
 ## Economic Incentives
 

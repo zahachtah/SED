@@ -1,37 +1,76 @@
-# Distributions
+# Building an Actor Population
 
-Explains independent vs dependent distributions, function vs string dependency functions, and the `independent` shorthand in strings.
+`dist` describes a quantity; `sample!` realizes its actor-level values. A
+quantity can be a distribution, observed data, a constant, or a function of
+other actor quantities. Dependencies are resolved in order, so the same
+person's income, efficiency, and effort remain linked.
 
-Topics
+## Start From Dimensional Quantities
 
-- Independent: `dist(min/max/mean/median/sigma; distribution, random, normalize)`
-- Dependent (function): `dist(dependent=(...), dependency_fun=(indep, dep)-> ...)`
-- Dependent (string): `dist(dependency_fun="...")` with `independent` bound to the base vector
-- Allowed functions inside strings: `min`, `max`, `clamp`, `abs`, `sqrt`, `exp`, `log`.
-  These auto‑broadcast when any argument is a vector (e.g., `max(0.0, independent)`).
-- Sampling: `sample!(dist, N; random)` vs `sample!(context; N, random)`
-- Weighted dependents and broadcasting rules
+This small illustrative population follows the construction used in Figure 2:
 
-Sampling Policy Options
+```julia
+using SED, Random
+Random.seed!(42)
 
-These options live on each `Dist` and control how min/max for LogNormal is interpreted and how sampling treats bounds:
+population = scenario(base(N=115);
+    price=1.0, Kdim=1.0, rdim=1.0,
+    aio=dist(distribution=LogNormal, median=0.34, sigma=0.52),
+    q=dist(distribution=LogNormal, median=0.98, sigma=0.06,
+        dependency_fun="independent * (aio / 0.34)^0.65"),
+    effort_cap=dist(distribution=LogNormal, median=0.0106, sigma=0.18),
+    w̃=dist(dependency_fun="aio / (price * q * Kdim)"),
+    ū=dist(dependency_fun="q * effort_cap / rdim"),
+    α=0.05)
 
-- `bounds_quantiles::(Float64,Float64)` (default `(0.01, 0.99)`):
-  Interprets `min,max` as the `(qlo,qhi)` quantiles for LogNormal, and fits `(μ,σ)` accordingly.
+sample!(population; random=true)
+result = sim(population)
+```
 
-- `determ_bounds::Symbol` (default `:within`): controls deterministic (random=false) quantile grid
-  - `:within`: sample quantiles only inside `[qlo,qhi]` so values stay in `[min,max]` independent of `N`.
-  - `:full`: classic grid `[1/N, …, 1−1/N]` (can go outside `[min,max]` for large `N`).
-  - `:clip`: sample full grid, then clamp quantiles into `[qlo,qhi]`.
+Here `independent` is the quantity's own draw, so efficiency is conditionally
+lognormal given outside income. The exponent controls one pathway linking the
+two. Exit thresholds and impact potentials are then **derived for each actor**,
+not sampled independently afterward.
 
-- `random_bounds::Symbol` (default `:none`): controls random (random=true) draws
-  - `:none`: draw from the full LogNormal; tails outside `[min,max]` occur with probability `1−(qhi−qlo)`.
-  - `:truncate`: approximate truncation by rejecting/replacing samples outside `[min,max]`.
+The numerical constants are illustrative and carry no empirical calibration.
+For a causal application, use context-specific data to identify which
+attributes affect outside opportunities, catchability, and available time.
 
-- `enforce_after_deps::Symbol` (default `:none`): post‑dependency enforcement on final values
-  - `:none`: do nothing.
-  - `:clamp`/`:truncate`: clamp final values into `[min,max]`.
+## Observed Data and Julia Functions
 
-Applicability
+Use `dist(data=values)` to retain observed actor records. Use `@dependent`
+when a Julia expression is clearer than a string:
 
-- These options affect the LogNormal(min,max) path. For other distributions (Uniform, Bernoulli, Dirac), they do not change sampling and are ignored with a notice.
+```julia
+thresholds = dist(dependency=@dependent (aio, q) -> aio ./ q)
+```
+
+This example assumes `price=Kdim=1`; include those terms explicitly when they
+differ. The macro infers the named dependencies. A population with dependent
+variables preserves their actor identities when policies are compared.
+
+## Ordered Quantiles or Random Draws?
+
+- `sample!(population; random=false)` uses deterministic ordered quantiles.
+  This gives smooth comparative geometry without finite-sample noise.
+- `sample!(population; random=true)` uses random draws. Set and report the RNG
+  seed before sampling.
+- Sample **once** before making policy scenarios. Resampling a policy scenario
+  would confound population differences with policy effects.
+
+For `LogNormal`, `median` and `sigma` describe the median and log-scale spread.
+When `min` and `max` are used instead, they specify quantile anchors, not an
+automatic hard truncation. The default anchors are the 0.01 and 0.99 quantiles;
+deterministic `:within` sampling stays between them, while random `:none`
+sampling can reach the tails. `determ_bounds`, `random_bounds`, and
+`bounds_quantiles` make these choices explicit.
+
+`normalize=true` rescales a realized quantity to sum to one. Use it only when
+that normalization is part of the study design. In particular, **do not
+normalize empirical exit thresholds to the resource plotting window**:
+thresholds above one are valid, and participation at `y=1` can remain below
+100%.
+
+For a full runnable example, see [Figure 2](../manuscript/figure2.jl).
+For the empirical interpretation, see Section S2 of the
+[supplement](../SupplementaryMaterial/SED_Supplementary_Material.pdf).

@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Explore how social heterogeneity and resource policies shape a shared resource, participation, and income. An interactive SED research companion.">
+  <meta name="theme-color" content="#f5f6f5">
+  <title>Distributional governance · SED research companion</title>
+  <link rel="stylesheet" href="companion.css">
+</head>
+<body>
+  <header class="masthead">
+    <div class="identity"><span class="brand-mark" aria-hidden="true"><i data-lucide="chart-network"></i></span><div><div class="eyebrow">SED / Interactive research companion</div><h1>Distributional governance</h1></div></div>
+    <div class="masthead-actions">
+      <button id="statusButton" class="run-status" aria-label="Simulation status and convergence details"><span class="status-dot"></span><span id="runStatus" role="status" aria-live="polite">Preparing population</span></button>
+      <button class="icon-button" id="methodsButton" title="Model, notation, and sources" aria-label="Model, notation, and sources"><i data-lucide="book-open"></i></button>
+      <button class="icon-button" id="shareButton" title="Copy a link to this scenario" aria-label="Copy a link to this scenario"><i data-lucide="link"></i></button>
+      <button class="icon-button" id="exportButton" title="Export scenario and actor outcomes" aria-label="Export scenario and actor outcomes"><i data-lucide="download"></i></button>
+      <button class="icon-button" id="themeButton" title="Switch color theme" aria-label="Switch to dark mode"><i data-lucide="moon"></i></button>
+    </div>
+  </header>
+
+  <div class="app-layout">
+    <aside class="sidebar" aria-label="Population and policy controls">
+      <nav class="explore-nav" aria-label="Examples and guided exploration">
+        <button id="examplesButton" class="nav-button" aria-expanded="false"><i data-lucide="sparkles"></i>Explore a question<i data-lucide="chevron-down"></i></button>
+        <button id="tourButton" class="icon-button" title="Guided tour" aria-label="Start the guided tour"><i data-lucide="compass"></i></button>
+      </nav>
+      <div id="examplesMenu" class="examples-menu" hidden></div>
+
+      <section class="control-section population-section" id="populationSection">
+        <div class="section-heading"><span class="section-number">01</span><h2>The population</h2><button id="settingsButton" class="icon-button" title="Population and solver settings" aria-label="Population and solver settings"><i data-lucide="settings-2"></i></button></div>
+        <div class="section-subline" id="populationModeLabel">Different actors. A shared resource.</div>
+
+        <div id="directControls">
+          <div class="control-group threshold-group">
+            <div class="group-heading"><h3>Exit thresholds <var>θ<sub>i</sub></var></h3><div class="sampling-switch" role="group" aria-label="Exit threshold sampling"><button data-sampling="thresholdSampling" data-value="ordered" aria-pressed="true">Ordered</button><button data-sampling="thresholdSampling" data-value="random" aria-pressed="false">Random</button></div></div>
+            <p class="group-caption">The resource level below which an actor exits.</p>
+            <label class="control"><span>Mean threshold</span><output for="meanTheta"></output><input id="meanTheta" data-param="meanTheta" type="range" min="0" max="2" step="0.01" value="0.45"></label>
+            <label class="control"><span>Heterogeneity</span><output for="thetaSpread"></output><input id="thetaSpread" data-param="thetaSpread" type="range" min="0" max="2.5" step="0.01" value="0.65"></label>
+          </div>
+          <div class="control-group impact-group">
+            <div class="group-heading"><h3>Impact potentials <var>ū<sub>i</sub></var></h3><div class="sampling-switch" role="group" aria-label="Impact potential sampling"><button data-sampling="impactSampling" data-value="ordered" aria-pressed="true">Ordered</button><button data-sampling="impactSampling" data-value="random" aria-pressed="false">Random</button></div></div>
+            <p class="group-caption">How much pressure each actor could exert.</p>
+            <label class="control"><span>Total potential</span><output for="totalImpact"></output><input id="totalImpact" data-param="totalImpact" type="range" min="0.05" max="4" step="0.01" value="1.35"></label>
+            <label class="control"><span>Inequality of potential</span><output for="impactSpread"></output><input id="impactSpread" data-param="impactSpread" type="range" min="0" max="2.5" step="0.01" value="0.8"></label>
+          </div>
+          <div class="control-group pairing-group">
+            <div class="group-heading"><h3>Who has the impact?</h3><button class="inline-info" id="pairingHelp" title="About dependence and copulas" aria-label="About dependence and copulas"><i data-lucide="info"></i></button></div>
+            <label class="control"><span>Threshold–impact pairing</span><output for="correlation"></output><input id="correlation" data-param="correlation" type="range" min="-0.95" max="0.95" step="0.01" value="-0.3"></label>
+            <div class="range-endpoints"><span>High impact, low thresholds</span><span>High impact, high thresholds</span></div>
+          </div>
+        </div>
+        <div id="derivedPopulation" class="derived-population" hidden><i data-lucide="git-branch"></i><p>Thresholds and impacts are derived together from the same actor records.</p><button id="directButton" class="text-button">Return to direct distributions</button></div>
+        <button id="causalButton" class="causal-entry"><span class="causal-entry-icon"><i data-lucide="git-branch"></i></span><span><strong>What shapes these distributions?</strong><small>Health, care, access, and opportunity</small></span><i data-lucide="arrow-up-right"></i></button>
+      </section>
+
+      <section class="control-section policy-section" id="policySection">
+        <div class="section-heading"><span class="section-number">02</span><h2>The policy</h2><button id="policyHelp" class="icon-button" title="How this policy works" aria-label="How this policy works"><i data-lucide="circle-help"></i></button></div>
+        <label class="sr-only" for="policy">Policy instrument</label>
+        <select id="policy" data-param="policy"><option value="none">Open access</option><option value="access">Exclusive use rights</option><option value="rights">Tradable use rights</option><option value="pa">Protected area</option><option value="economic">Economic instruments</option></select>
+        <div id="policyMode" class="policy-mode" hidden><button id="instrumentButton" aria-pressed="true">Instrument</button><button id="scanButton" aria-pressed="false">Scan strength<i data-lucide="chart-no-axes-combined"></i></button></div>
+        <p id="policySummary" class="policy-summary">Actors choose between harvesting and their outside option.</p>
+        <div data-policy="access" hidden>
+          <label class="control scan-bound"><span>Share excluded</span><output for="exclusion"></output><input id="exclusion" data-param="exclusion" type="range" min="0" max="0.95" step="0.01" value="0.3"></label>
+          <label class="select-control"><span>Who loses access?</span><select id="selector" data-param="selector"><option value="high">Highest thresholds first</option><option value="low">Lowest thresholds first</option><option value="random">Random actors</option></select></label>
+        </div>
+        <div data-policy="rights" hidden>
+          <label class="control scan-bound"><span>Total quota</span><output for="quota"></output><input id="quota" data-param="quota" type="range" min="0.01" max="1" step="0.01" value="0.5"></label>
+          <label class="select-control"><span>What is capped?</span><select id="target" data-param="target"><option value="effort">Effort / use</option><option value="yield">Catch / yield</option></select></label>
+          <label class="check-control"><input id="historical" data-param="historical" type="checkbox"><span>Allocate only to historical users</span></label>
+          <div id="marketSummary" class="market-summary" hidden></div>
+        </div>
+        <div data-policy="pa" hidden>
+          <label class="control scan-bound"><span>Protected share</span><output for="protected"></output><input id="protected" data-param="protected" type="range" min="0" max="0.8" step="0.01" value="0.25"></label>
+          <label class="control"><span>Resource mobility / spillover</span><output for="mobility"></output><input id="mobility" data-param="mobility" type="range" min="0" max="1.5" step="0.01" value="0.3"></label>
+          <details class="secondary-options"><summary>Outside-income benefit</summary><label class="control"><span>Tourism effect on outside returns</span><output for="tourism"></output><input id="tourism" data-param="tourism" type="range" min="0" max="1" step="0.01" value="0"></label></details>
+        </div>
+        <div data-policy="economic" hidden>
+          <label class="select-control"><span>Dimensional mechanism</span><select id="economicMode" data-param="economicMode"><option value="royalty">Royalty / price support</option><option value="gear">Gear / harvesting efficiency</option><option value="effort">Available effort</option><option value="outside">Outside opportunities</option><option value="combined">Combine mechanisms</option></select></label>
+          <label class="control" data-economic="royalty"><span>Royalty (+) / price support (−)</span><output for="royalty"></output><input id="royalty" data-param="royalty" type="range" min="-0.5" max="0.8" step="0.01" value="0.2"></label>
+          <label class="control" data-economic="gear"><span>Efficiency change, q</span><output for="gear"></output><input id="gear" data-param="gear" type="range" min="-0.8" max="1.5" step="0.01" value="0"></label>
+          <label class="control" data-economic="effort"><span>Effort-endowment change</span><output for="effort"></output><input id="effort" data-param="effort" type="range" min="-0.9" max="1.5" step="0.01" value="0"></label>
+          <label class="control" data-economic="outside"><span>Outside-return change</span><output for="outside"></output><input id="outside" data-param="outside" type="range" min="-0.9" max="1.5" step="0.01" value="0"></label>
+        </div>
+        <details id="scanOptions" class="secondary-options" hidden><summary>Scan resolution &amp; goals</summary><label class="control"><span>Scan points</span><output for="scanPoints"></output><input id="scanPoints" data-param="scanPoints" type="range" min="8" max="48" step="4" value="20"></label><div id="goalWeights"></div><p class="fine-print">Goal weights re-score the stored outcomes without running simulations again.</p></details>
+      </section>
+      <footer class="sidebar-footer"><button id="resetButton" class="text-button"><i data-lucide="rotate-ccw"></i>Reset</button><span id="populationCount">320 actors · ordered quantiles</span></footer>
+    </aside>
+
+    <main class="workspace">
+      <section class="figure-section phase-section" aria-labelledby="phaseTitle">
+        <div class="figure-heading"><div><div class="eyebrow figure-number">01 / The system</div><h2 id="phaseTitle">Where does the resource settle?</h2></div><div class="figure-tools"><div class="view-switch" aria-label="Plot view"><button data-view="balance" aria-pressed="true">Balance</button><button data-view="actors" aria-pressed="false">Actors</button></div><button id="phaseHelp" class="icon-button" aria-label="Read the resource balance plot" title="Read this plot"><i data-lucide="info"></i></button><button class="icon-button save-plot" data-canvas="phaseCanvas" title="Download this figure" aria-label="Download the resource balance figure"><i data-lucide="image-down"></i></button></div></div>
+        <div class="figure-options"><div class="curve-key"><span class="key-threshold">Participation</span><span class="key-impact">Sustainable participation</span><span id="baselineKey" class="key-baseline" hidden>Open access</span></div><div class="check-tools"><label><input id="densities" data-param="densities" type="checkbox">Distributions</label><label><input id="path" data-param="path" type="checkbox" checked>Path</label><button id="statsButton" class="text-button" aria-expanded="false" title="Distribution moments">Statistics<i data-lucide="chevron-down"></i></button></div></div>
+        <div id="distributionStats" class="distribution-stats" hidden></div>
+        <div class="canvas-wrap"><canvas id="phaseCanvas" role="img" aria-label="Participation and sustainable participation by resource density"></canvas><div id="phaseTooltip" class="plot-tooltip" hidden></div></div>
+        <div id="phaseTakeaway" class="figure-takeaway"><span class="takeaway-mark"></span><span>At the crossing, extraction and resource renewal balance.</span></div>
+      </section>
+      <section class="outcomes-section" aria-label="Model outcomes"><div class="outcomes-label"><span id="outcomesHeading">At the attractor</span><span id="comparisonLabel">Non-dimensional units</span></div><div id="metrics" class="metrics"></div></section>
+      <section class="figure-section income-section" aria-labelledby="incomeTitle">
+        <div class="figure-heading"><div><div class="eyebrow figure-number">02 / The people</div><h2 id="incomeTitle">Who harvests, and who gains?</h2></div><div class="figure-tools income-tools"><label class="sort-control">Order by<select id="incomeSort" data-param="incomeSort"><option value="total">Total income</option><option value="threshold">Exit threshold</option><option value="impact">Impact potential</option><option value="use">Resource use</option><option value="group">Social group</option></select></label><label class="compact-check"><input id="logIncome" data-param="logIncome" type="checkbox">Log scale</label><button class="icon-button save-plot" data-canvas="incomeCanvas" title="Download this figure" aria-label="Download the income distribution figure"><i data-lucide="image-down"></i></button></div></div>
+        <div id="incomeKey" class="income-key"><span class="key-rent">Resource surplus income</span><span class="key-opportunity">Opportunity cost</span><span class="key-alternative">Alternative income</span><span id="tradeKey" class="key-trade" hidden>Rights transfers</span></div>
+        <div class="canvas-wrap"><canvas id="incomeCanvas" role="img" aria-label="Actor incomes at the attractor"></canvas><div id="incomeTooltip" class="plot-tooltip" hidden></div></div>
+        <div id="incomeFootnote" class="income-footnote">The lighter part of a harvester's bar is the income they could earn outside the resource.</div>
+      </section>
+    </main>
+  </div>
+
+  <div id="drawerShade" class="drawer-shade" hidden></div>
+  <aside id="causalDrawer" class="causal-drawer" role="dialog" aria-modal="true" aria-labelledby="causalTitle" hidden>
+    <header class="drawer-header"><div><div class="eyebrow">A deeper layer / Population builder</div><h2 id="causalTitle">From social conditions<br>to resource outcomes.</h2></div><button id="closeCausal" class="icon-button" title="Close population builder" aria-label="Close population builder"><i data-lucide="x"></i></button></header>
+    <div class="drawer-content">
+      <p class="drawer-intro">Outside opportunities also depend on constraints. Health, gendered access, parental and other care obligations, and capital can jointly shape an actor's alternatives, efficiency, and available time.</p>
+      <div class="causal-flow" aria-label="Social conditions influence outside returns, efficiency, and feasible effort; these determine exit thresholds and impact potentials"><div class="flow-sources"><span>Health</span><span>Gendered access</span><span>Parental &amp; care duties</span><span>Capital &amp; networks</span></div><i data-lucide="arrow-right"></i><div class="flow-parameters"><span>Outside return <var>w<sub>i</sub></var></span><span>Efficiency <var>q<sub>i</sub></var></span><span>Effort endowment <var>ē<sub>i</sub></var></span></div><i data-lucide="arrow-right"></i><div class="flow-results"><span class="threshold-text"><var>θ<sub>i</sub> = w<sub>i</sub> / (pq<sub>i</sub>K)</var></span><span class="impact-text"><var>ū<sub>i</sub> = q<sub>i</sub>ē<sub>i</sub> / r</var></span></div></div>
+      <div class="builder-heading"><h3>Choose the pathways</h3><button id="resetCausal" class="text-button"><i data-lucide="rotate-ccw"></i>Reset example</button></div>
+      <p class="fine-print">Effects on log returns, efficiency, and effort. Positive values increase the quantity; negative values reduce it.</p>
+      <div id="pathwayTable" class="pathway-table"></div>
+      <details class="builder-details"><summary>Dimensional distributions &amp; system constants</summary><div id="causalConstants" class="constant-grid"></div></details>
+      <div class="builder-heading"><h3>A joint distribution emerges</h3><span id="causalCorrelation" class="stat-pill"></span></div>
+      <div class="builder-preview"><canvas id="causalCanvas" role="img" aria-label="Preview of the joint threshold and impact distribution"></canvas></div>
+      <div id="causalMoments" class="causal-moments"></div>
+      <p class="causal-explanation">This is the copula idea: preserve the same actors as their social conditions are translated into model quantities. Dependence emerges from shared causes; it need not be imposed as a separate correlation.</p>
+      <div class="context-note"><i data-lucide="flask-conical"></i><p><strong>An illustrative population.</strong> These coefficients are hypotheses, not empirical estimates or intrinsic effects of gender. In a study, replace them with context-specific evidence and justified relationships.</p></div>
+    </div>
+    <footer class="drawer-footer"><span>Applies the same actors to every policy.</span><button id="applyCausal" class="primary-button">Use this population<i data-lucide="arrow-right"></i></button></footer>
+  </aside>
+
+  <dialog id="infoDialog"><div class="dialog-heading"><div><div id="dialogEyebrow" class="eyebrow">Inside the model</div><h2 id="dialogTitle"></h2></div><button id="closeDialog" class="icon-button" aria-label="Close explanation"><i data-lucide="x"></i></button></div><div id="dialogBody" class="dialog-body"></div><div id="tourFooter" class="tour-footer" hidden></div></dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <input id="importFile" type="file" accept="application/json,.json" hidden>
+  <script src="vendor/lucide.min.js"></script>
+  <script src="model.js"></script>
+  <script src="plots.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

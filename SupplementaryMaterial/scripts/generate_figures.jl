@@ -217,149 +217,10 @@ function dynamics_figure()
     return fig
 end
 
-function rights_allocation_figure()
-    thresholds = collect(range(0.12, 0.78; length=12))
-    potentials = [0.07, 0.11, 0.06, 0.13, 0.09, 0.16,
-        0.08, 0.14, 0.10, 0.12, 0.07, 0.09]
-    N = length(thresholds)
-    actors = collect(1:N)
-    base_s = scenario((;
-        N,
-        α=0.08,
-        w̃=dist(data=thresholds),
-        ū=dist(data=potentials),
-        R=ones(N),
-    ))
-    sample!(base_s)
-
-    exclusive_s = scenario(base_s; policy=ExclusiveUseRights(:top, false))
-    exclusive_p = exclusive_s.regulate(exclusive_s, 0.33)
-    exclusion_mask = exclusive_p.R
-    right_fraction = [0.65, 0.75, 0.55, 0.70, 0.60, 0.80,
-        0.65, 0.55, 0.0, 0.0, 0.0, 0.0]
-    exclusive_rights = (1 .- exclusion_mask) .* right_fraction .* potentials
-    exclusive_use = [0.040, 0.090, 0.030, 0.080, 0.060, 0.120,
-        0.040, 0.100, 0.020, 0.000, 0.030, 0.000]
-    excluded = findall(>(0.5), exclusion_mask)
-    sanctioned = exclusive_use .> exclusive_rights .+ 1e-8
-
-    regulation = 0.60
-    equal_s = scenario(base_s;
-        policy=TradableUseRights(:effort, 0.08, 0.0, false))
-    historical_s = scenario(base_s;
-        policy=TradableUseRights(:effort, 0.08, 0.0, true))
-    equal_p = equal_s.regulate(equal_s, regulation)
-    historical_p = historical_s.regulate(historical_s, regulation)
-    equal_sol = sim(equal_s; regulation, t_end=5000.0)
-    historical_sol = sim(historical_s; regulation, t_end=5000.0)
-    equal_use = equal_sol[1:N, end - 2]
-    historical_use = historical_sol[1:N, end - 2]
-    equal_price = equal_sol[N + 2, end - 2]
-    historical_price = historical_sol[N + 2, end - 2]
-    equal_transfer = (equal_p.R .- equal_use) .* equal_price
-    historical_transfer = (historical_p.R .- historical_use) .* historical_price
-    quota = sum(equal_p.R)
-    ystar = 0.5 * (equal_sol[N + 1, end - 2] + historical_sol[N + 1, end - 2])
-    @assert isapprox(sum(equal_p.R), sum(historical_p.R); atol=1e-10)
-    @assert maximum(abs.(equal_use .- historical_use)) < 5e-4
-    @assert abs(sum(equal_transfer)) < 1e-4
-    @assert abs(sum(historical_transfer)) < 1e-4
-
-    exclusive_fig = with_theme(paper_theme()) do
-        Figure(size=(1900, 760), backgroundcolor=:white)
-    end
-    tradable_fig = with_theme(paper_theme()) do
-        Figure(size=(1900, 760), backgroundcolor=:white)
-    end
-
-    ymax = 1.22 * maximum(potentials)
-    actor_ticks = ([1, N], ["low θᵢ", "high θᵢ"])
-
-    ax1 = Axis(exclusive_fig[1, 1], title="Exclusive rights: assign a sanctioned-use threshold",
-        xlabel="actors ordered by exit threshold",
-        ylabel="activity units", limits=(0.3, N + 0.7, 0, ymax),
-        xticks=actor_ticks)
-    barplot!(ax1, actors, potentials; color=Makie.RGBAf(GRAY, 0.34),
-        strokecolor=GRAY, strokewidth=1.3, width=0.72)
-    barplot!(ax1, actors, exclusive_rights; color=Makie.RGBAf(BLUE, 0.88),
-        width=0.48)
-    scatter!(ax1, excluded, fill(0.008, length(excluded)); marker=:xcross,
-        color=RED, markersize=23, strokewidth=3)
-    text!(ax1, 8.15, 0.188;
-        text="gray = impact potential  ūᵢ\nblue = assigned right  Rᵢ",
-        color=DARK, fontsize=21, align=(:left, :top))
-    text!(ax1, 10.5, 0.045; text="excluded\nRᵢ = 0", color=RED,
-        fontsize=21, font=:bold, align=(:center, :bottom))
-    text!(ax1, 3.7, 0.185; text="right holder:  0 < Rᵢ ≤ ūᵢ", color=BLUE,
-        fontsize=22, font=:bold, align=(:center, :bottom))
-    panel_label!(exclusive_fig[1, 1], "A")
-
-    ax2 = Axis(exclusive_fig[1, 2], title="Sanction applies whenever realized use exceeds Rᵢ",
-        xlabel="same actors",
-        ylabel="activity units", limits=(0.3, N + 0.7, 0, ymax),
-        xticks=actor_ticks)
-    barplot!(ax2, actors, potentials; color=Makie.RGBAf(GRAY, 0.22),
-        strokecolor=GRAY, strokewidth=1.1, width=0.72)
-    use_colors = [sanctioned[i] ? RED : ORANGE for i in actors]
-    barplot!(ax2, actors, exclusive_use; color=use_colors, width=0.44)
-    right_segments = Point2f[]
-    for i in actors
-        push!(right_segments, Point2f(i - 0.31, exclusive_rights[i]))
-        push!(right_segments, Point2f(i + 0.31, exclusive_rights[i]))
-    end
-    linesegments!(ax2, right_segments; color=BLUE, linewidth=4)
-    text!(ax2, 1.0, 0.188;
-        text="blue tick = assigned right  Rᵢ\norange = uᵢ ≤ Rᵢ; red = uᵢ > Rᵢ",
-        color=DARK, fontsize=21, align=(:left, :top))
-    text!(ax2, 8.7, 0.158;
-        text="sanction applies even when\nRᵢ < uᵢ ≤ ūᵢ",
-        color=RED, fontsize=21, font=:bold, align=(:center, :top))
-    text!(ax2, 6.5, 0.018; text="uᵢ > Rᵢ  ⇒  −Sᵢuᵢ", color=DARK,
-        fontsize=24, font=:bold, align=(:center, :bottom))
-    panel_label!(exclusive_fig[1, 2], "B")
-
-    ax3 = Axis(tradable_fig[1, 1], title="Tradable rights: two initial allocations of the same quota",
-        xlabel="actors ordered by exit threshold",
-        ylabel="initial right, Rᵢ", limits=(0.3, N + 0.7, 0, 0.105),
-        xticks=actor_ticks)
-    barplot!(ax3, actors .- 0.19, equal_p.R; color=BLUE, width=0.34)
-    barplot!(ax3, actors .+ 0.19, historical_p.R; color=ORANGE, width=0.34)
-    text!(ax3, 1.0, 0.099;
-        text="blue = equal use rights\norange = historical use rights",
-        color=DARK, fontsize=21, align=(:left, :top))
-    text!(ax3, 7.1, 0.099;
-        text="ΣRᵢ = Q = $(round(quota, digits=2))\nfor both allocations",
-        color=DARK, fontsize=22, font=:bold, align=(:left, :top))
-    panel_label!(tradable_fig[1, 1], "A")
-
-    transfer_lim = 1.28 * maximum(abs, [equal_transfer; historical_transfer])
-    ax4 = Axis(tradable_fig[1, 2], title="Same final use, different rent transfers",
-        xlabel="same actors", ylabel=L"\mathrm{transfer},\ (R_i-u_i)\phi",
-        limits=(0.3, N + 0.7, -transfer_lim, transfer_lim),
-        xticks=actor_ticks)
-    hlines!(ax4, [0.0], color=DARK, linewidth=1.6)
-    barplot!(ax4, actors .- 0.19, equal_transfer; color=BLUE, width=0.34)
-    barplot!(ax4, actors .+ 0.19, historical_transfer; color=ORANGE, width=0.34)
-    text!(ax4, 1.0, 0.90transfer_lim;
-        text="positive: net seller receives rent", color=GREEN,
-        fontsize=21, align=(:left, :top))
-    text!(ax4, 1.0, -0.90transfer_lim;
-        text="negative: net buyer pays for use", color=RED,
-        fontsize=21, align=(:left, :bottom))
-    text!(ax4, 7.05, 0.90transfer_lim;
-        text="same uᵢ and y* = $(round(ystar, digits=2))\nΣ(Rᵢ-uᵢ)ϕ ≈ 0",
-        color=DARK, fontsize=22, font=:bold, align=(:left, :top))
-    panel_label!(tradable_fig[1, 2], "B")
-
-    colgap!(exclusive_fig.layout, 70)
-    colgap!(tradable_fig.layout, 70)
-    save_figure(exclusive_fig, "figureS3_exclusive_rights_allocation")
-    save_figure(tradable_fig, "figureS4_tradable_rights_allocation")
-    return exclusive_fig, tradable_fig
-end
 
 function incentive_switch_figure()
     w = exp.(range(log(0.45), log(2.6); length=240))
+    N = length(w)
     η_no = 0.65
     η_switch = 1.35
     q_no = w .^ η_no
@@ -367,14 +228,63 @@ function incentive_switch_figure()
     q_no ./= median(q_no)
     q_switch ./= median(q_switch)
     pK = 3.0
-    ebar_over_r = 0.16
+    ebar_over_r = 1.15 / N
     theta_no = w ./ (pK .* q_no)
     theta_switch = w ./ (pK .* q_switch)
     potential_no = ebar_over_r .* q_no
     potential_switch = ebar_over_r .* q_switch
 
+    function switch_solution(theta, potential, title)
+        s = scenario(base(N=N);
+            α=0.08,
+            w̃=dist(data=theta),
+            ū=dist(data=potential),
+            opportunities=dist(data=w),
+            title)
+        sample!(s; force=true)
+        return sim(s; t_end=1800.0)
+    end
+
+    sol_no = switch_solution(theta_no, potential_no, "outside opportunity dominates")
+    sol_switch = switch_solution(theta_switch, potential_switch, "efficiency dominates")
+
+    function income_components(sol)
+        x = sol.u[end - 2]
+        inc = incomes(x, sol.prob.p)
+        idx = sortperm(w)
+        return (;
+            alternative=inc.wages[idx],
+            resource=inc.resource[idx],
+            total=inc.wages[idx] .+ inc.resource[idx],
+        )
+    end
+
+    income_no = income_components(sol_no)
+    income_switch = income_components(sol_switch)
+    income_ylim = 1.16 * max(maximum(income_no.total), maximum(income_switch.total))
+
+    function income_axis!(ax, income, color, annotation; xlabel="")
+        actors = 1:N
+        barplot!(ax, actors, income.alternative;
+            color=Makie.RGBAf(0.72, 0.74, 0.77, 0.78), width=0.92)
+        barplot!(ax, actors, income.resource;
+            offset=income.alternative, color=color, width=0.92)
+        xlims!(ax, 0, N + 1)
+        ylims!(ax, 0, income_ylim)
+        ax.xticks = ([1, N], ["low", "high"])
+        ax.xlabel = xlabel
+        text!(ax, 0.02, 0.94; text=annotation, space=:relative,
+            color=color, fontsize=20, font=:bold, align=(:left, :top))
+        return ax
+    end
+
+    half = N ÷ 2
+    low_share = sum(income_no.resource[1:half]) / sum(income_no.resource)
+    high_share = sum(income_switch.resource[(half + 1):end]) /
+        sum(income_switch.resource)
+
     fig = with_theme(paper_theme()) do
-        Figure(size=(1800, 1420), backgroundcolor=:white)
+        Figure(size=(1900, 1540), backgroundcolor=:white)
     end
 
     ax1 = Axis(fig[1, 1], title="Efficiency relative to outside opportunity",
@@ -398,7 +308,7 @@ function incentive_switch_figure()
         color=ORANGE, fontsize=21, align=(:left, :top))
     panel_label!(fig[1, 2], "B")
 
-    ax3 = Axis(fig[2, 1:2], title="The resulting threshold-impact ordering",
+    ax3 = Axis(fig[2, 1], title="The resulting threshold-impact ordering",
         xlabel=L"\mathrm{exit\ threshold},\ \theta",
         ylabel=L"\mathrm{impact\ potential},\ \bar{u}")
     lines!(ax3, theta_no, potential_no, color=BLUE, linewidth=5)
@@ -410,18 +320,44 @@ function incentive_switch_figure()
         text="positive ordering", color=BLUE, fontsize=22)
     text!(ax3, quantile(theta_switch, 0.18), quantile(potential_switch, 0.78),
         text="reversed ordering", color=ORANGE, fontsize=22)
-    panel_label!(fig[2, 1:2], "C")
+    panel_label!(fig[2, 1], "C")
+
+    income_grid = GridLayout(fig[2, 2])
+    Label(income_grid[1, 1], "D  Who receives resource income at the attractor?";
+        fontsize=27, font=:bold, color=DARK, tellwidth=false, halign=:left)
+    ax4 = Axis(income_grid[2, 1],
+        title="Ordinary ordering: low-w actors remain active",
+        ylabel="income")
+    income_axis!(ax4, income_no, BLUE,
+        "$(round(Int, 100 * low_share))% of resource income\ngoes to the lower half of w")
+    ax5 = Axis(income_grid[3, 1],
+        title="Reversed ordering: high-w actors remain active",
+        xlabel="actors ordered by outside opportunity, w",
+        ylabel="income")
+    income_axis!(ax5, income_switch, ORANGE,
+        "$(round(Int, 100 * high_share))% of resource income\ngoes to the upper half of w";
+        xlabel="actors ordered by outside opportunity, w")
+    linkyaxes!(ax4, ax5)
+    rowgap!(income_grid, 10)
+    text!(ax4, 0.98, 0.94;
+        text="gray: alternative income\ncolor: resource income",
+        space=:relative, color=DARK, fontsize=18, align=(:right, :top))
 
     Label(fig[3, 1:2],
-        L"\mathrm{ordering\ switches\ when}\quad\frac{d\log q}{d\log w}>1",
+        L"\mathrm{ordering\ switches\ when}\quad\frac{d\log q}{d\log w}>1\quad\Rightarrow\quad\mathrm{resource\ income\ shifts\ toward\ actors\ with\ high}\ w",
         fontsize=29, tellheight=true, padding=(0, 0, 8, 0))
     colgap!(fig.layout, 55)
-    rowgap!(fig.layout, 55)
-    save_figure(fig, "figureS5_incentive_switch")
+    rowgap!(fig.layout, 45)
+    save_figure(fig, "figureS7_incentive_switch")
     return fig
 end
 
 attractor_construction_figure()
 dynamics_figure()
-rights_allocation_figure()
 incentive_switch_figure()
+
+include(joinpath(@__DIR__, "generate_empirical_mapping.jl"))
+EmpiricalMappingFigure.generate_empirical_mapping()
+
+include(joinpath(@__DIR__, "generate_policy_explainers.jl"))
+PolicyExplainers.generate_policy_explainers()
