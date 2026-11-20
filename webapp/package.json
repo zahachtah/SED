@@ -5,7 +5,10 @@
   "description": "Development-only browser checks for the self-contained SED companion",
   "scripts": {
     "build": "node build.mjs",
-    "test": "node test/model.test.cjs && node test/plots.test.cjs",
+    "build:pages": "node build.mjs --pages",
+    "check:publication": "node test/publication.test.cjs",
+    "test": "node test/model.test.cjs && node test/solver.test.cjs && node test/runner.test.cjs && node test/plots.test.cjs",
+    "benchmark": "node test/benchmark.cjs",
     "test:browser": "node test/ui.test.cjs",
     "capture": "node test/ui.test.cjs --update-readme"
   },

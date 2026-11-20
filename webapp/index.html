@@ -59,7 +59,7 @@
         <div class="section-heading"><span class="section-number">02</span><h2>The policy</h2><button id="policyHelp" class="icon-button" title="How this policy works" aria-label="How this policy works"><i data-lucide="circle-help"></i></button></div>
         <label class="sr-only" for="policy">Policy instrument</label>
         <select id="policy" data-param="policy"><option value="none">Open access</option><option value="access">Exclusive use rights</option><option value="rights">Tradable use rights</option><option value="pa">Protected area</option><option value="economic">Economic instruments</option></select>
-        <div id="policyMode" class="policy-mode" hidden><button id="instrumentButton" aria-pressed="true">Instrument</button><button id="scanButton" aria-pressed="false">Scan strength<i data-lucide="chart-no-axes-combined"></i></button></div>
+        <div id="policyMode" class="policy-mode" hidden><button id="instrumentButton" aria-pressed="true">Instrument</button><button id="scanButton" aria-pressed="false">Scan policy<i data-lucide="chart-no-axes-combined"></i></button></div>
         <p id="policySummary" class="policy-summary">Actors choose between harvesting and their outside option.</p>
         <div data-policy="access" hidden>
           <label class="control scan-bound"><span>Share excluded</span><output for="exclusion"></output><input id="exclusion" data-param="exclusion" type="range" min="0" max="0.95" step="0.01" value="0.3"></label>
@@ -98,10 +98,11 @@
       </section>
       <section class="outcomes-section" aria-label="Model outcomes"><div class="outcomes-label"><span id="outcomesHeading">At the attractor</span><span id="comparisonLabel">Non-dimensional units</span></div><div id="metrics" class="metrics"></div></section>
       <section class="figure-section income-section" aria-labelledby="incomeTitle">
-        <div class="figure-heading"><div><div class="eyebrow figure-number">02 / The people</div><h2 id="incomeTitle">Who harvests, and who gains?</h2></div><div class="figure-tools income-tools"><label class="sort-control">Order by<select id="incomeSort" data-param="incomeSort"><option value="total">Total income</option><option value="threshold">Exit threshold</option><option value="impact">Impact potential</option><option value="use">Resource use</option><option value="group">Social group</option></select></label><label class="compact-check"><input id="logIncome" data-param="logIncome" type="checkbox">Log scale</label><button class="icon-button save-plot" data-canvas="incomeCanvas" title="Download this figure" aria-label="Download the income distribution figure"><i data-lucide="image-down"></i></button></div></div>
-        <div id="incomeKey" class="income-key"><span class="key-rent">Resource surplus income</span><span class="key-opportunity">Opportunity cost</span><span class="key-alternative">Alternative income</span><span id="tradeKey" class="key-trade" hidden>Rights transfers</span></div>
+        <div class="figure-heading"><div><div class="eyebrow figure-number">02 / The people</div><h2 id="incomeTitle">Who harvests, and who gains?</h2></div><div class="figure-tools income-tools"><div class="view-switch income-view-switch" role="group" aria-label="Income plot"><button data-income-view="levels" aria-pressed="true" title="Income distribution">Income</button><button data-income-view="change" aria-pressed="false" title="Income change from open access">Change</button></div><label class="sort-control">Order by<select id="incomeSort" data-param="incomeSort"><option value="total">Total income</option><option value="threshold">Exit threshold</option><option value="impact">Impact potential</option><option value="use">Resource use</option><option value="group">Social group</option></select></label><label class="compact-check"><input id="logIncome" data-param="logIncome" type="checkbox">Log scale</label><button class="icon-button save-plot" data-canvas="incomeCanvas" title="Download this figure" aria-label="Download the income distribution figure"><i data-lucide="image-down"></i></button></div></div>
+        <div id="incomeKey" class="income-key"><span class="key-rent">Resource rent</span><span class="key-opportunity">Opportunity cost</span><span class="key-alternative">Alternative income</span><span id="tradeKey" class="key-trade" hidden>Rights transfers</span></div>
+        <div id="incomeChangeKey" class="income-key" hidden><span class="key-gain">Gain</span><span class="key-loss">Loss</span><span class="key-zero">Open access = 0</span></div>
         <div class="canvas-wrap"><canvas id="incomeCanvas" role="img" aria-label="Actor incomes at the attractor"></canvas><div id="incomeTooltip" class="plot-tooltip" hidden></div></div>
-        <div id="incomeFootnote" class="income-footnote">The lighter part of a harvester's bar is the income they could earn outside the resource.</div>
+        <div id="incomeFootnote" class="income-footnote">Resource rent is retained harvest revenue minus opportunity cost. Grey bars are actual outside earnings.</div>
       </section>
     </main>
   </div>
@@ -130,6 +131,7 @@
   <input id="importFile" type="file" accept="application/json,.json" hidden>
   <script src="vendor/lucide.min.js"></script>
   <script src="model.js"></script>
+  <script src="runner.js"></script>
   <script src="plots.js"></script>
   <script src="app.js"></script>
 </body>

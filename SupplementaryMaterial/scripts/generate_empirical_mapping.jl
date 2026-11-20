@@ -39,42 +39,51 @@ function generate_empirical_mapping(; outdir=normpath(joinpath(@__DIR__, "..", "
     data = illustrative_population()
     vars = [:gender, :health, :parental, :time, :efficiency, :opportunities, :ū, :w̃]
     labels = [
-        "Gender", "Health", "Parental status", "Available effort",
-        "Efficiency", "Outside opportunity", "Impact potential", "Exit threshold",
+        "Gender", "Health", "Parental\nstatus", "Available\neffort",
+        "Efficiency", "Outside\noption", "Impact\npotential", "Exit\nthreshold",
     ]
 
     fig = distribution_plot(data, vars;
         labels,
         corr=:spearman,
-        cellsize=(185, 185),
+        cellsize=(205, 205),
         markersize=3,
-        fontsize=13,
-        labelsize=16,
+        fontsize=19,
+        labelsize=24,
         cmap=:coolwarm,
         reverse_cmap=true,
         dep_range=(1:4, 5:8),
-        dep_title="Illustrative dependency map",
-        dep_titlesize=21,
-        dependency_fontsize=16)
+        dep_title="One possible dependency structure",
+        dep_titlesize=27,
+        dependency_fontsize=23)
+    dependency_axis = only(filter(x -> x isa Axis &&
+        x.title[] == "One possible dependency structure", fig.content))
+    xlims!(dependency_axis, -0.08, 1.08)
+
+    Label(fig[0, 1:8], "Social attributes → dimensional quantities → model inputs";
+        fontsize=30, font=:bold, tellwidth=false, padding=(0, 0, 10, 5))
 
     ax = Axis(fig[5:6, 7:8];
-        title="Joint relational positions",
+        title="Derived actor pairs",
         xlabel="exit threshold, θᵢ",
         ylabel="impact potential, ūᵢ",
-        titlesize=20,
-        xlabelsize=17,
-        ylabelsize=17,
-        xticklabelsize=14,
-        yticklabelsize=14)
+        titlesize=25,
+        xlabelsize=22,
+        ylabelsize=22,
+        xticklabelsize=19,
+        yticklabelsize=19)
     scatter!(ax, data.w̃, data.ū; color=(DARK, 0.54), markersize=5)
     r = cor(data.w̃, data.ū)
     text!(ax, 0.04, 0.94;
         text="corr(θᵢ, ūᵢ) = $(round(r, digits=2))",
-        space=:relative, align=(:left, :top), fontsize=17, font=:bold, color=DARK)
+        space=:relative, align=(:left, :top), fontsize=23, font=:bold, color=DARK)
 
     text!(fig[1:4, 5:8], 0.02, 0.02;
-        text="observed attributes  →  dimensional pathways  →  model quantities",
-        space=:relative, align=(:left, :bottom), fontsize=16, color=:gray35)
+        text="Illustrative pathways, not universal causal effects",
+        space=:relative, align=(:left, :bottom), fontsize=21, color=:gray35)
+    Label(fig[10, 1:8],
+        "Blue: positive association   Orange: negative association   Numbers: squared rank correlation";
+        fontsize=23, tellwidth=false, padding=(0, 0, 5, 10))
 
     mkpath(outdir)
     save(joinpath(outdir, "figure_empirical_mapping.pdf"), fig)

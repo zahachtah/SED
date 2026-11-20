@@ -96,6 +96,27 @@ check("a literal gear change transforms both thresholds and impact potential", (
     const q = { ...p, policy: "economic", gear: .4, royalty: 0 }, a = M.transform(M.population(p), q);
     a.forEach(a => { close(a.cost, a.theta / 1.4, 1e-12); close(a.limit, a.potential * 1.4, 1e-12); close(a.endowment * a.wageCost, a.potential * a.theta, 1e-12); });
 });
+check("income decompositions preserve revenue, rent, outside earnings, and receipts", () => {
+    for (const change of [{}, {policy:"economic",royalty:.3}, {policy:"economic",gear:.5,royalty:0},
+        {policy:"economic",gear:-.3,effort:.2,outside:.3}, {policy:"pa",protected:.4,tourism:.2},
+        {policy:"rights",quota:.4}, {policy:"rights",target:"yield",quota:.18,historical:true}]) {
+        const q={...p,...change}, run=M.run(q), r=run.policy;
+        for (const a of r.actors) {
+            close(a.resourceRent,a.resource-a.opportunityCost,1e-12);
+            close(a.wages,a.outsideOnly-a.opportunityCost,1e-12);
+            close(a.total,a.outsideOnly+a.resourceRent+a.trade,1e-12);
+            close(a.grossResourceRevenue,a.resource+a.stateRevenue,1e-12);
+            close(a.netResourceRent,a.resourceRent+a.trade,1e-12);
+        }
+        close(r.resourceRent,r.actors.reduce((s,a)=>s+a.resourceRent,0),1e-12);
+        close(r.total+r.stateRevenue,r.grossResourceRevenue+r.outsideIncome+r.transferBalance,1e-12);
+        if(q.policy==="economic"&&q.gear) {
+            const expected=r.actors.reduce((s,a,i)=>s+Math.min(a.limit,(1+q.gear)*run.open.state[i]),0);
+            close(r.path[0].pressure,expected,1e-12);
+            close(r.path[0].y,run.open.y,1e-12);
+        }
+    }
+});
 check("causal quantities are derived actor by actor without marginal renormalization", () => {
     const c = structuredClone(M.causalDefaults), a = M.causalPopulation(p, c);
     a.forEach(a => { close(a.theta, a.w / (c.p * a.q * c.K), 1e-12); close(a.potential, a.q * a.e / c.r, 1e-12); });
@@ -134,21 +155,35 @@ if (process.env.JULIA) {
         const cases = { none: {}, access: { policy: "access", selector: "low", exclusion: .375 },
             rights: { policy: "rights", quota: .5 }, rights_historical: { policy: "rights", quota: .5, historical: true },
             catch: { policy: "rights", target: "yield", quota: .18 }, pa: { policy: "pa", protected: .3, mobility: .3 },
-            economic: { policy: "economic", royalty: .2, gear: .35 } };
+            economic: { policy: "economic", royalty: .2, gear: .35 },
+            royalty: {policy:"economic",royalty:.3}, gear: {policy:"economic",royalty:0,gear:.5},
+            effort: {policy:"economic",royalty:0,effort:-.3}, outside: {policy:"economic",royalty:0,outside:.4} };
         const seen = new Set();
+        const results = new Map();
         for (const line of run.stdout.trim().split("\n").filter(s => Object.keys(cases).some(k => s.startsWith(k + ",")))) {
             const [name, ...values] = line.split(","), expected = values.map(Number), params = { ...q, ...cases[name] };
             seen.add(name);
             const result = M.run(params).policy;
-            const observed = [result.y, result.participation, result.pressure, result.resource, result.total, result.price];
+            results.set(name,result);
+            const observed = [result.y, result.participation, result.pressure, result.resource, result.total, result.price,
+                result.resourceRent,result.opportunityCost,result.outsideIncome,result.outsideIncome0,result.stateRevenue,result.grossResourceRevenue];
             const curve = M.curves(result, params);
             // Compare away from threshold jumps, whose two valid boundaries
             // can differ by one actor under tiny price rounding differences.
             for (const level of [.21, .51, .81]) { const point = curve[Math.round(level * 400)]; observed.push(point.participation, point.required); }
-            expected.forEach((v, i) => { if (Number.isNaN(v)) assert.ok(Number.isNaN(observed[i])); else close(observed[i], v, i < 6 ? 4e-4 : 6e-4); });
+            expected.forEach((v, i) => { if (Number.isNaN(v)) assert.ok(Number.isNaN(observed[i])); else close(observed[i], v, i < 12 ? 4e-4 : 6e-4); });
             console.log(`  Julia parity: ${name}`);
         }
         assert.deepEqual([...seen].sort(), Object.keys(cases).sort(), "every Julia reference case must be compared");
+        let actorChecks=0;
+        for(const line of run.stdout.split("\n").filter(s=>s.startsWith("actor,"))) {
+            const [,name,id,...values]=line.split(","), a=results.get(name).actors[Number(id)];
+            const observed=[a.resource,a.resourceRent,a.opportunityCost,a.wages,a.outsideOnly,a.trade,a.stateRevenue,a.total,a.grossResourceRevenue];
+            values.map(Number).forEach((v,i)=>close(observed[i],v,4e-4));
+            actorChecks++;
+        }
+        assert.equal(actorChecks,n*Object.keys(cases).length);
+        console.log(`  Actor-component parity: ${actorChecks} actor/scenario comparisons`);
     });
 }
 console.log(`${checks} model checks passed.`);

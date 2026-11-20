@@ -150,18 +150,28 @@ const SEDPlots = (() => {
         }
         models.set(canvas,{type:"scatter",f,actors});
     }
-    function income(canvas,data,p) {
-        const {ctx,width,height}=setup(canvas);
+    function incomeRows(data,p) {
         const key={threshold:"effectiveTheta",impact:"potential",use:"physicalUse",group:"group",total:"total"}[p.incomeSort];
-        const rows=data.policy.actors.slice().sort((a,b)=>typeof a[key]==="string"?a[key].localeCompare(b[key])||a.total-b.total:a[key]-b[key]||a.total-b.total);
+        const openMap=new Map(data.open.actors.map(a=>[a.id,a]));
+        return data.policy.actors.map(a=> {
+            const baseline=openMap.get(a.id);
+            if(!baseline)throw Error(`Missing open-access income for actor ${a.id}.`);
+            return {...a,openTotal:baseline.total,incomeChange:a.total-baseline.total};
+        }).sort((a,b)=>typeof a[key]==="string"?a[key].localeCompare(b[key])||a.total-b.total:a[key]-b[key]||a.total-b.total);
+    }
+    function income(canvas,data,p) {
+        const {ctx,width,height}=setup(canvas),change=p.incomeView==="change";
+        const rows=incomeRows(data,p);
         const openMap=new Map(data.open.actors.map(a=>[a.id,a]));
         const baseline=p.incomeSort==="total"?data.open.actors.slice().sort((a,b)=>a.total-b.total):rows.map(a=>openMap.get(a.id));
-        const extrema=rows.flatMap(a=>[a.total,Math.min(0,a.trade),a.resource+a.wages+Math.max(0,a.trade)]).concat(baseline.map(a=>a.total));
-        const lo=Math.min(0,...extrema),hi=Math.max(1e-5,...extrema),pad=(hi-lo)*.08;
-        const scale=Math.max(1e-9,hi/60),symlog=x=>Math.sign(x)*Math.log1p(Math.abs(x)/scale);
+        const extrema=change?rows.map(a=>a.incomeChange):rows.flatMap(a=>[a.total,Math.min(0,a.trade),Math.min(0,a.trade)+a.outsideOnly,a.resource+a.wages+Math.max(0,a.trade)]).concat(baseline.map(a=>a.total));
+        const extent=Math.max(1e-5,...extrema.map(Math.abs));
+        const lo=change?-extent:Math.min(0,...extrema),hi=change?extent:Math.max(1e-5,...extrema),pad=(hi-lo)*.08;
+        const scale=Math.max(1e-9,(change?extent:hi)/60),symlog=x=>Math.sign(x)*Math.log1p(Math.abs(x)/scale);
         const f=frame(width,height,1,hi+pad,lo<0?lo-pad:0,p.logIncome?symlog:x=>x);
         const ticks=p.logIncome?niceTicks(0,hi,3).concat(lo<0?niceTicks(lo,0,2):[]):niceTicks(f.yMin,f.yMax);
-        axes(ctx,f,`Actors ordered by ${{threshold:"exit threshold",impact:"impact potential",use:"resource use",group:"social group",total:"total income"}[p.incomeSort]}`,p.logIncome?"Income (symmetric log scale)":"Income (non-dimensional)",{actorAxis:true,noVerticalGrid:true,yTicks:ticks});
+        const yLabel=change?(p.logIncome?"Income change (symlog)":"Income change"):(p.logIncome?"Income (symmetric log scale)":"Income (non-dimensional)");
+        axes(ctx,f,`Actors ordered by ${{threshold:"exit threshold",impact:"impact potential",use:"resource use",group:"social group",total:"total income"}[p.incomeSort]}`,yLabel,{actorAxis:true,noVerticalGrid:true,yTicks:ticks});
         const w=(f.x1-f.x0)/rows.length;
         const bar=(i,from,to,ink,opacity=1)=> {
             ctx.globalAlpha=opacity;ctx.fillStyle=ink;
@@ -169,19 +179,36 @@ const SEDPlots = (() => {
         };
         clip(ctx,f);
         rows.forEach((a,i)=> {
+            if(change) {bar(i,0,a.incomeChange,color(a.incomeChange>=0?"impact":"red"),.9);return;}
             const neg=Math.min(0,a.trade),gross=a.resource+a.wages;
             if(neg<0)bar(i,0,neg,color("transfer"),.85);
-            const active=a.fraction>.001;
-            const opportunity=Math.min(gross,a.outsideOnly);
-            bar(i,neg,neg+(active?opportunity:gross),active?color("opportunity"):color("alternative"),.85);
-            if(active && gross>opportunity)bar(i,neg+opportunity,neg+gross,color("rent"),.95);
+            bar(i,neg,neg+a.wages,color("alternative"),.85);
+            bar(i,neg+a.wages,neg+a.outsideOnly,color("opportunity"),.85);
+            bar(i,neg+a.outsideOnly,neg+gross,color("rent"),.95);
             if(a.trade>0)bar(i,neg+gross,a.total,color("transfer"),.8);
         });ctx.globalAlpha=1;
-        if(p.policy!=="none")line(ctx,baseline.map((a,i)=>[f.x0+(i+.5)*w,f.y(a.total)]),color("baseline"),1.3,[],.8);
+        if(!change&&p.policy!=="none")line(ctx,baseline.map((a,i)=>[f.x0+(i+.5)*w,f.y(a.total)]),color("baseline"),1.3,[],.8);
         ctx.restore();
         if(lo<0)line(ctx,[[f.x0,f.y(0)],[f.x1,f.y(0)]],color("axis"),.8);
-        label(ctx,f,f.x1-4,f.y0+10,`Gini ${data.policy.inequality===null?"undefined":data.policy.inequality.toFixed(2)}`,color("muted"),"right");
+        const gini=data.policy.inequality,openGini=data.open.inequality;
+        const deltaGini=gini===null||openGini===null?"undefined":signed(gini-openGini);
+        label(ctx,f,f.x1-4,f.y0+10,`Gini ${gini===null?"undefined":gini.toFixed(2)}${change?` · Δ ${deltaGini}`:""}`,color("muted"),"right");
         models.set(canvas,{type:"income",f,rows,w,data,p});
+    }
+    function scanExtremum(rows,values,minimize=false) {
+        const valid=values.map((v,i)=>Number.isFinite(v)&&rows[i].result.converged?i:-1).filter(i=>i>=0);
+        if(!valid.length)return null;
+        const value=(minimize?Math.min:Math.max)(...valid.map(i=>values[i]));
+        const tolerance=1e-10*Math.max(1,Math.abs(value));
+        const indices=valid.filter(i=>Math.abs(values[i]-value)<=tolerance);
+        return {value,indices,flat:indices.length===rows.length};
+    }
+    function scanLocation(extremum,rows) {
+        if(extremum.flat)return "All sampled strengths";
+        const ids=extremum.indices,percent=i=>`${Math.round(100*rows[i].strength)}%`;
+        if(ids.length===1)return percent(ids[0]);
+        if(ids.every((id,i)=>i===0||id===ids[i-1]+1))return `${Math.round(100*rows[ids[0]].strength)}-${percent(ids.at(-1))}`;
+        return `${ids.length} tied strengths`;
     }
     function scan(canvas,data,p,indicators=false) {
         const {ctx,width,height}=setup(canvas),rows=data.scan;
@@ -196,18 +223,40 @@ const SEDPlots = (() => {
             }));ctx.globalAlpha=1;
             models.set(canvas,{type:"scan",f,rows});
         }else {
-            const specs=[["y","Resource density",color("ecology")],["participation","Participation",color("threshold")],["resource","Resource income",color("impact")],["total","Total income",color("ink")],["inequality","Gini",color("red")],["score","Weighted goal",color("policy")]];
-            const scores=SEDModel.scoreRows(rows,p.weights),cols=width>650?3:2,nr=Math.ceil(specs.length/cols);
+            const specs=[["y","Resource density",color("ecology")],["participation","Participation",color("threshold")],["resourceRent","Resource rent",color("impact")],["total","Total income",color("ink")],["inequality","Gini",color("red")],["score","Weighted goal",color("policy")]];
+            const scores=SEDModel.scoreRows(rows,p.weights),cols=width>650?3:2,nr=Math.ceil(specs.length/cols),panels=[];
             specs.forEach(([key,title,ink],i)=> {
-                const cellW=width/cols,cellH=height/nr;
-                const x0=i%cols*cellW+36,y0=Math.floor(i/cols)*cellH+22,x1=(i%cols+1)*cellW-15,y1=(Math.floor(i/cols)+1)*cellH-20;
-                const vals=key==="score"?scores:rows.map(r=>r.result[key]??0),hi=Math.max(...vals,1e-9)*1.06;
-                ctx.fillStyle=color("muted");ctx.font="10px -apple-system,sans-serif";ctx.fillText(title,x0,y0-9);
+                const cellW=width/cols,cellH=height/nr,left=i%cols*cellW,top=Math.floor(i/cols)*cellH;
+                const x0=left+36,y0=top+37,x1=left+cellW-15,y1=top+cellH-20;
+                const vals=key==="score"?scores:rows.map(r=>r.result[key]);
+                const finite=vals.filter(Number.isFinite),bottom=Math.min(0,...finite),upper=Math.max(0,...finite);
+                const pad=Math.max(upper-bottom,1e-9)*.08,lo=bottom<0?bottom-pad:0,hi=upper+pad;
+                const f={x0,y0,x1,y1,x:s=>x0+s*(x1-x0),y:v=>y1-(v-lo)/(hi-lo)*(y1-y0)};
+                const minimize=key==="inequality",extremum=scanExtremum(rows,vals,minimize);
+                const summary=!extremum?"No converged points":extremum.flat?`Constant ${fmt(extremum.value)}`:
+                    `${minimize?"Min":"Max"} ${fmt(extremum.value)} · ${scanLocation(extremum,rows)}`;
+                ctx.textAlign="left";ctx.textBaseline="alphabetic";
+                ctx.fillStyle=color("muted");ctx.font="10px -apple-system,sans-serif";ctx.fillText(title,left+12,top+12);
+                ctx.fillStyle=extremum?ink:color("muted");ctx.font="500 9px -apple-system,sans-serif";ctx.fillText(summary,left+12,top+26);
                 line(ctx,[[x0,y0],[x0,y1],[x1,y1]],color("axis"),.7);
-                ctx.textAlign="right";ctx.fillText(fmt(hi/1.06),x0-4,y0+4);ctx.fillText("0",x0-4,y1);ctx.textAlign="left";
-                line(ctx,vals.map((v,j)=>[x0+j/(rows.length-1)*(x1-x0),y1-v/hi*(y1-y0)]),ink,1.8);
+                ctx.font="9px -apple-system,sans-serif";ctx.fillStyle=color("muted");ctx.textAlign="right";
+                ctx.fillText(fmt(upper),x0-4,f.y(upper)+3);ctx.fillText(fmt(bottom),x0-4,f.y(bottom)+3);ctx.fillText("100%",x1,y1+13);
+                ctx.textAlign="left";ctx.fillText("0%",x0,y1+13);
+                line(ctx,vals.map((v,j)=>[f.x(rows[j].strength),Number.isFinite(v)?f.y(v):NaN]),ink,1.8);
+                if(extremum) {
+                    if(extremum.indices.length===1) {
+                        const x=f.x(rows[extremum.indices[0]].strength),y=f.y(extremum.value);
+                        line(ctx,[[x,y],[x,y1]],ink,.8,[2,3],.4);
+                    }
+                    ctx.save();ctx.fillStyle=ink;ctx.strokeStyle=color("surface");ctx.lineWidth=1.5;
+                    for(const index of extremum.indices) {
+                        ctx.beginPath();ctx.arc(f.x(rows[index].strength),f.y(vals[index]),extremum.indices.length===1?3.8:2.5,0,2*Math.PI);ctx.fill();ctx.stroke();
+                    }
+                    ctx.restore();
+                }
+                panels.push({key,title,vals,extremum,minimize,f});
             });
-            models.set(canvas,{type:"indicators",rows});
+            models.set(canvas,{type:"indicators",rows,panels});
         }
     }
     function render(data,p) {
@@ -215,8 +264,18 @@ const SEDPlots = (() => {
         if(p.scan&&data.scan) {scan(phase,data,p);scan(inc,data,p,true);}
         else { if(p.view==="actors")scatter(phase,data.policy.actors,{result:data.policy});else balance(phase,data,p); income(inc,data,p); }
     }
-    function hit(canvas,x) {
-        const m=models.get(canvas);if(!m?.f || x<m.f.x0 || x>m.f.x1)return null;
+    function hit(canvas,x,y) {
+        const m=models.get(canvas);
+        if(m?.type==="indicators") {
+            const panel=m.panels.find(a=>x>=a.f.x0&&x<=a.f.x1&&y>=a.f.y0&&y<=a.f.y1);
+            if(!panel)return null;
+            const strength=(x-panel.f.x0)/(panel.f.x1-panel.f.x0);
+            const index=m.rows.reduce((best,r,i)=>Math.abs(r.strength-strength)<Math.abs(m.rows[best].strength-strength)?i:best,0);
+            return {title:panel.title,values:[["Policy strength",`${Math.round(100*m.rows[index].strength)}%`],["Value",fmt(panel.vals[index])],
+                ["Converged",m.rows[index].result.converged?"Yes":"No"],...(panel.extremum?[
+                    [panel.minimize?"Minimum sampled":"Maximum sampled",fmt(panel.extremum.value)],["At policy strength",scanLocation(panel.extremum,m.rows)]]:[])]};
+        }
+        if(!m?.f || x<m.f.x0 || x>m.f.x1)return null;
         const t=(x-m.f.x0)/(m.f.x1-m.f.x0);
         if(m.type==="balance") {
             const c=m.data.curves.policy[Math.round(t*(m.data.curves.policy.length-1))];
@@ -224,7 +283,8 @@ const SEDPlots = (() => {
         }
         if(m.type==="income") {
             const a=m.rows[Math.min(m.rows.length-1,Math.floor(t*m.rows.length))];
-            return {title:`Actor ${a.id+1} · ${a.fraction>.001?"harvesting":"outside resource"}`,values:[["Exit threshold",fmt(a.effectiveTheta)],["Impact potential",fmt(a.potential)],["Resource income",fmt(a.resource)],["Outside income",fmt(a.wages)],...(m.p.policy==="rights"?[["Rights transfer",fmt(a.trade)]]:[]),["Total income",fmt(a.total)]]};
+            if(m.p.incomeView==="change")return {title:`Actor ${a.id+1} · ${a.fraction>.001?"harvesting":"outside resource"}`,values:[["Open-access income",fmt(a.openTotal)],["Policy income",fmt(a.total)],["Income change",signed(a.incomeChange)],["Exit threshold",fmt(a.effectiveTheta)]]};
+            return {title:`Actor ${a.id+1} · ${a.fraction>.001?"harvesting":"outside resource"}`,values:[["Exit threshold",fmt(a.effectiveTheta)],["Impact potential",fmt(a.potential)],["Resource rent",fmt(a.resourceRent)],["Retained revenue",fmt(a.resource)],["Opportunity cost",fmt(a.opportunityCost)],["Outside income",fmt(a.wages)],...(m.p.policy==="rights"?[["Rights transfer",fmt(a.trade)]]:[]),...(a.stateRevenue?[["State receipts",fmt(a.stateRevenue)]]:[]),["Total income",fmt(a.total)]]};
         }
         if(m.type==="scan") {
             const r=m.rows[Math.min(m.rows.length-1,Math.floor(t*m.rows.length))];
@@ -232,5 +292,6 @@ const SEDPlots = (() => {
         }
         return null;
     }
-    return {render,scatter,hit,fmt,color};
+    function signed(value) {return Math.abs(value)<1e-12?"0":`${value>0?"+":""}${fmt(value)}`;}
+    return {render,scatter,hit,fmt,color,incomeRows,scanExtremum};
 })();

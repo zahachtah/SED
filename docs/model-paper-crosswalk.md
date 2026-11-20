@@ -119,12 +119,31 @@ policies with additional dynamic states or resource-dependent limits.
 
 The implementation returns:
 
-- resource income: `u_i y`, optionally multiplied by a policy access factor;
-- outside-option income: `(\bar u_i-u_i)\theta_i`;
-- policy transfer: policy-specific extra income, including rights-market rent;
-- total income: the sum of these components.
+- `resource_revenue` (legacy alias `resource`): retained harvest revenue,
+  including access and retained-price factors;
+- `opportunity_cost`: physical use times the actual outside-return coefficient;
+- `resource_rent`: retained revenue minus opportunity cost, before rights transfers;
+- `outside_income` (alias `wages`): earnings from effort not used for harvesting;
+- `outside_income_0` (alias `wages_0`): outside earnings at zero harvesting;
+- `rights_transfer`: net receipts/payments in a tradable-rights market;
+- `other_income`: explicitly supplied non-rights income;
+- `state_revenue`: explicit government receipts, excluded from actor income;
+- `gross_resource_revenue`: retained revenue plus government receipts;
+- `net_resource_rent`: resource rent plus net rights transfers;
+- `total`: retained revenue plus actual outside earnings plus `extra`, also
+  equal to `outside_income_0 + resource_rent + extra`.
+
+Legacy `trade` remains an alias for `extra`, which can be non-market income in
+a custom policy. New analyses should use `rights_transfer` for rights income.
+Opportunity cost is a decomposition of revenue, not an extra payment to actors.
+No component is clipped to hide transient losses. Generic `EconomicIncentives`
+transforms are reduced-form changes to returns/endowments unless the study
+provides explicit income hooks for a literal intervention.
 
 With `dimensional=true`, components are multiplied by scenario field `rpk`.
+`income_state_fun(x,p,t)` records government receipts without adding them to
+actor income. All income hooks receive the requested time `t`; evaluating an
+ODE solution uses its final saved time.
 The paper's exact dimensional interpretation therefore depends on how the
 scenario constructs `w̃`, `ū`, and `rpk`.
 

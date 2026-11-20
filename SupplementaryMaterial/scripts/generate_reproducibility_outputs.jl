@@ -20,7 +20,7 @@ const RESULTS_DIR = normpath(joinpath(@__DIR__, "..", "results"))
 
 steady_index(sol) = max(1, length(sol.t) - 2)
 
-function diagnostics(figure, panel, scenario, sol; sampling, seed="")
+function diagnostics(figure, panel, scenario, sol; sampling, seed="", baseline=nothing)
     p = sol.prob.p
     i = steady_index(sol)
     x = sol.u[i]
@@ -29,6 +29,7 @@ function diagnostics(figure, panel, scenario, sol; sampling, seed="")
     limits = p.limit(x, p, t)
     participation = mean(clamp.(x[1:p.N] ./ max.(limits, eps()), 0.0, 1.0))
     inc = incomes(x, p)
+    change = isnothing(baseline) ? nothing : Figure4Data.income_changes(sol, baseline)
     resource_residual = abs(1.0 - y - sum(x[1:p.N]))
 
     market = if p.policy isa TradableUseRights
@@ -44,8 +45,22 @@ function diagnostics(figure, panel, scenario, sol; sampling, seed="")
         total_pressure=sum(x[1:p.N]),
         resource_balance_residual=resource_residual,
         resource_income=sum(inc.resource),
+        resource_revenue=sum(inc.resource_revenue),
+        gross_resource_revenue=sum(inc.gross_resource_revenue),
+        resource_rent=sum(inc.resource_rent),
+        opportunity_cost=sum(inc.opportunity_cost),
+        outside_income=sum(inc.outside_income),
+        outside_income_0=sum(inc.outside_income_0),
+        rights_transfer=sum(inc.rights_transfer),
+        income_identity_residual=maximum(abs.(inc.total .- inc.outside_income_0 .- inc.resource_rent .- inc.extra)),
         total_income=sum(inc.total),
         gini=inc.gini,
+        gini_change=isnothing(change) ? missing : change.gini_change,
+        state_revenue=Figure4Data.public_revenue(sol),
+        income_change=isnothing(change) ? missing : change.total_change,
+        winner_share=isnothing(change) ? missing : change.winner_share,
+        loser_share=isnothing(change) ? missing : change.loser_share,
+        unchanged_share=isnothing(change) ? missing : change.unchanged_share,
         quota=market === nothing ? missing : market.quota,
         quota_use=market === nothing ? missing : market.quota_use,
         excess_use=market === nothing ? missing : market.excess_use,
@@ -112,13 +127,38 @@ end
 function figure4_rows()
     rows, oa = Figure4Data.policy_rows()
     output = NamedTuple[
-        diagnostics("4", "baseline", "open access", oa; sampling="ordered")
+        diagnostics("4", "baseline", "open access", oa; sampling="ordered", baseline=oa)
     ]
+    actors = NamedTuple[]
     for (panel, row) in enumerate(rows), variant in row.variants
         push!(output, diagnostics("4", string(panel), variant.label, variant.sol;
-            sampling="ordered"))
+            sampling="ordered", baseline=oa))
+        change = Figure4Data.income_changes(variant.sol, oa)
+        theta = Figure4Data.distdata(oa.prob.p.w̃)
+        potential = Figure4Data.distdata(oa.prob.p.ū)
+        state = Figure4Data.steady_state(variant.sol)
+        parameters = variant.sol.prob.p
+        effective_threshold = parameters.cost(state, parameters, Figure4Data.steady_time(variant.sol))
+        effective_potential = parameters.limit(state, parameters, Figure4Data.steady_time(variant.sol))
+        for (rank, actor) in enumerate(change.order)
+            push!(actors, (;
+                policy=row.title, scenario=variant.label, actor, rank,
+                baseline_exit_threshold=theta[actor],
+                baseline_impact_potential=potential[actor],
+                policy_exit_threshold=effective_threshold[actor],
+                policy_impact_potential=effective_potential[actor],
+                open_access_income=change.baseline.total[actor],
+                policy_income=change.current.total[actor],
+                income_change=change.delta[actor],
+                resource_income_change=change.current.resource[actor] - change.baseline.resource[actor],
+                resource_rent_change=change.current.resource_rent[actor] - change.baseline.resource_rent[actor],
+                opportunity_cost_change=change.current.opportunity_cost[actor] - change.baseline.opportunity_cost[actor],
+                outside_income_change=change.current.wages[actor] - change.baseline.wages[actor],
+                transfer_change=change.current.trade[actor] - change.baseline.trade[actor],
+                classification=change.winners[actor] ? "gain" : change.losers[actor] ? "loss" : "unchanged"))
+        end
     end
-    return output
+    return (; scenarios=output, actors)
 end
 
 function csv_value(value)
@@ -149,18 +189,17 @@ function write_figure4_table(path, rows)
     open(path, "w") do io
         println(io, "\\begin{table}[htbp]")
         println(io, "\\centering")
-        println(io, "\\caption{Numerical verification of the Figure 4 scenarios. Residuals are evaluated at the reported final state.}")
+        println(io, "\\caption{Numerical verification of Figure 4. Resource rent is retained harvest revenue minus forgone outside earnings, before rights transfers. Actor income excludes unrecycled royalty receipts, reported under State. Revenue, opportunity costs, outside earnings, transfers, and accounting and convergence residuals are recorded separately in the accompanying CSV.}")
         println(io, "\\label{tab:figure4_verification_sm}")
         println(io, "\\small")
         println(io, "\\begin{tabular}{@{}llrrrrr@{}}")
         println(io, "\\toprule")
-        println(io, "Scenario & \$y^*\$ & \$P^*\$ & Resource income & Total income & Gini & Excess use \\\\")
+        println(io, "Scenario & \$y^*\$ & \$P^*\$ & Rent & Actor income & State & Gini \\\\")
         println(io, "\\midrule")
         for row in selected
-            excess = row.excess_use === missing ? "--" : @sprintf("%.2e", row.excess_use)
-            @printf(io, "%s & %.3f & %.3f & %.3f & %.3f & %.3f & %s \\\\\n",
+            @printf(io, "%s & %.3f & %.3f & %.3f & %.3f & %.3f & %.3f \\\\\n",
                 latex_escape(row.scenario), row.resource, row.participation,
-                row.resource_income, row.total_income, row.gini, excess)
+                row.resource_rent, row.total_income, row.state_revenue, row.gini)
         end
         println(io, "\\bottomrule")
         println(io, "\\end{tabular}")
@@ -170,8 +209,10 @@ end
 
 function main()
     mkpath(RESULTS_DIR)
-    rows = vcat(figure2_rows(), figure3_rows(), figure4_rows())
+    policies = figure4_rows()
+    rows = vcat(figure2_rows(), figure3_rows(), policies.scenarios)
     write_csv(joinpath(RESULTS_DIR, "main_figure_verification.csv"), rows)
+    write_csv(joinpath(RESULTS_DIR, "figure4_income_changes.csv"), policies.actors)
     write_figure4_table(joinpath(RESULTS_DIR, "figure4_verification_table.tex"), rows)
     println("Wrote reproducibility outputs to ", RESULTS_DIR)
 end

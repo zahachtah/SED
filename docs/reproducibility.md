@@ -27,17 +27,10 @@ Each script can also be run independently with `julia --project=.`.
 Shared typography is in `manuscript/helpers/figure_style.jl`; Figure 3 also
 exposes its panel-specific sizes as constants at the top of its script.
 
-To refresh embedded images in the editable manuscript, use a Python environment
-with the declared dependencies. This is optional for model and figure use:
-
-```sh
-python3 -m pip install -r manuscript/requirements.txt
-python3 manuscript/update_figure_embeds.py
-```
-
-That script updates the current DOCX. Exporting the DOCX to PDF is a separate
-Word-compatible typesetting step; regenerating images alone does not update
-`manuscript/Science_MS_compact.pdf`.
+The submission manuscript, `manuscript/Science_MS_compact.pdf`, is the author's
+typeset export. Figure generation does not rewrite that PDF or update its prose.
+Word drafts and authoring utilities are kept separately from the public
+reproduction workflow so an older draft cannot be mistaken for the paper.
 
 ## 3. Rebuild the Supplement and Numerical Records
 
@@ -60,12 +53,12 @@ Node.js 22 or newer is sufficient for the build and numerical checks:
 
 ```sh
 node webapp/build.mjs
-node webapp/test/model.test.cjs
-node webapp/test/plots.test.cjs
+npm test --prefix webapp
+node webapp/test/publication.test.cjs
 JULIA="$(command -v julia)" node webapp/test/model.test.cjs
 ```
 
-The last command additionally compares seven fixed-population browser cases
+The last command additionally compares eleven fixed-population browser cases
 against the local Julia package. For real browser checks:
 
 ```sh
@@ -85,9 +78,13 @@ and browser checks on a clean GitHub runner.
 - Record `git rev-parse HEAD`, `git status --short`, Julia version, and seeds.
 - Verify resource balance, projected actor derivatives, and market convergence.
 - Inspect all final PDFs at their intended publication size.
-- Resolve the Figure 4 impact-only "gear subsidy" interpretation before citing
-  it as a literal efficiency intervention. The supplement explains the
-  distinction; the companion applies the coupled dimensional transformation.
+- Figure 4 uses the coupled dimensional gear transformation and correct
+  royalty accounting. The main-text values, captions, and embedded Figures 2
+  and 4 were synchronized with the verification table on 10 November 2026.
+  Repeat that check after any change to the population or policy parameters;
+  figure builds do not automatically update manuscript prose or embeds.
+- Use the latest author-approved typeset manuscript export. Do not substitute
+  an earlier Word draft or an export containing unrendered LaTeX expressions.
 - Commit the complete sources and outputs, then tag the exact submission
   release and archive it. Do not cite an earlier commit for uncommitted work.
 - Add the final paper citation and archived software DOI to `CITATION.cff`.

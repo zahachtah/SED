@@ -113,15 +113,54 @@ same_point(a, b; atol=1e-3) = all(abs.(a .- b) .<= atol)
 
 run_variant(s; regulation, t_end=1000.0) = sim(s; regulation, t_end, start_from_OA=true)
 
+function income_changes(sol, open_access; atol=1e-7, rtol=1e-6)
+    p, p0 = sol.prob.p, open_access.prob.p
+    p.N == p0.N || throw(ArgumentError("income changes require the same actor population"))
+    current = incomes(steady_state(sol), p)
+    baseline = incomes(steady_state(open_access), p0)
+    # Sort the original actor identities once, never the two income arrays separately.
+    order = sortperm(distdata(p0.w̃))
+    delta = current.total .- baseline.total
+    tolerance = atol .+ rtol .* max.(abs.(current.total), abs.(baseline.total))
+    winners = delta .> tolerance
+    losers = delta .< .-tolerance
+    unchanged = .!(winners .| losers)
+    return (; current, baseline, order, delta, tolerance, winners, losers, unchanged,
+        winner_share=mean(winners), loser_share=mean(losers),
+        unchanged_share=mean(unchanged), total_change=sum(delta),
+        gini_change=current.gini - baseline.gini)
+end
+
+function public_revenue(sol)
+    return sum(incomes(steady_state(sol), sol.prob.p; t=steady_time(sol)).state_revenue)
+end
+
 function policy_rows()
     base_s, thresholds, _ = figure_population()
     tourism_s = scenario(base_s;
         w̃=dist(data=thresholds .* 1.2), opportunities=dist(data=thresholds .* 1.2))
     oa_sol = sim(base_s; regulation=0.0, t_end=1000.0)
+    royalty_multiplier = 3.47216785
+    royalty_rate = 1 - inv(royalty_multiplier)
+    royalty_s = scenario(base_s; policy="Economic Incentives",
+        policy_target=:cost, policy_method=:taxation, royalty_rate,
+        income_cost_fun=(x, p, t) -> distdata(p.w̃),
+        income_state_fun=(x, p, t) -> (1 - inv(1 + p.regulation)) .* x[1:p.N] .* x[p.N+1],
+        resource_factor_fun=(x, p, t) -> inv(1 + p.regulation))
+
+    # Literal catchability support: the same physical effort earns the same
+    # outside income, while its impact increases and its exit threshold falls.
+    gear_factor = 1.5
+    gear_s = scenario(base_s; policy="Economic Incentives",
+        policy_target=:limit, policy_method=:taxation,
+        cost=(x, p, t) -> distdata(p.w̃) ./ (1 + p.regulation))
+    oa_state = steady_state(oa_sol)
+    gear_sol = sim(gear_s; regulation=gear_factor - 1,
+        u0=gear_factor .* oa_state[1:base_s.N], y0=oa_state[base_s.N+1], t_end=1000.0)
     rows = [
         (;
             title="Exclusive use rights",
-            note="A fixed share of users is excluded; selection determines which part of the distribution remains active. Rᵢ is the assigned use right and S is the fine.",
+            note="High-threshold exclusion removes 109/140 actors; low-threshold exclusion removes 50/140. Rᵢ is the use right; S penalizes excess use.",
             variants=[
                 (label="High θᵢ exclusion", color=BLUE,
                     sol=run_variant(scenario(base_s; policy="Exclusive Use Rights", selector=:top);
@@ -159,16 +198,12 @@ function policy_rows()
         ),
         (;
             title="Economic policy outcomes",
-            note="Royalty shifts exit thresholds; gear subsidies change impact potentials.",
+            note="ρ is the royalty; g multiplies catchability. Royalty: g=1; gear: ρ=0, g=1.5. Outside earnings are unchanged.",
             variants=[
                 (label="Tax / royalty", color=BLUE,
-                    sol=run_variant(scenario(base_s; policy="Economic Incentives",
-                        policy_target=:cost, policy_method=:taxation);
-                        regulation=2.47216785)),
+                    sol=run_variant(royalty_s; regulation=royalty_multiplier - 1)),
                 (label="Gear subsidy", color=ORANGE,
-                    sol=run_variant(scenario(base_s; policy="Economic Incentives",
-                        policy_target=:limit, policy_method=:taxation);
-                        regulation=0.50)),
+                    sol=gear_sol),
             ],
         ),
     ]

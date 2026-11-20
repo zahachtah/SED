@@ -101,7 +101,7 @@ function x_at_curve_level(xs, ys, level)
     return xs[finite[argmin(abs.(ys[finite] .- level))]]
 end
 
-function curve_point_slope(xs, ys, x)
+function curve_point(xs, ys, x)
     i = clamp(searchsortedlast(xs, x), 1, length(xs) - 1)
     finite_segments = findall(j ->
         all(isfinite, (xs[j], xs[j+1], ys[j], ys[j+1])),
@@ -116,99 +116,20 @@ function curve_point_slope(xs, ys, x)
     denom = max(x1 - x0, eps())
     x_eval = clamp(x, x0, x1)
     t = clamp((x_eval - x0) / denom, 0.0, 1.0)
-    y = y0 + t * (y1 - y0)
-    return Point2f(x_eval, y), (y1 - y0) / denom
-end
-
-function normal_towards(slope, from, to)
-    n = Vec2f(-slope, 1.0)
-    n = n / max(sqrt(n[1]^2 + n[2]^2), eps())
-    d = to - from
-    (n[1] * d[1] + n[2] * d[2]) < 0 && (n = -n)
-    return n
-end
-
-function arc_angle_deg(center, point)
-    v = point - center
-    return 180 * atan(v[1], v[2]) / π
-end
-
-function short_arc_stop_angle(start_angle, stop_angle)
-    Δ = mod(stop_angle - start_angle + 180, 360) - 180
-    return start_angle + Δ
-end
-
-function normal_line_intersection(p0, slope0, p1, slope1)
-    n0 = Vec2f(-slope0, 1.0)
-    n1 = Vec2f(-slope1, 1.0)
-    n0 = n0 / max(sqrt(n0[1]^2 + n0[2]^2), eps())
-    n1 = n1 / max(sqrt(n1[1]^2 + n1[2]^2), eps())
-    det = n0[1] * n1[2] - n0[2] * n1[1]
-    abs(det) < 1e-5 && return nothing
-    d = p1 - p0
-    λ = (d[1] * n1[2] - d[2] * n1[1]) / det
-    return p0 + λ * n0
-end
-
-function chord_arch_center(start, stop; bow=0.16, side=1.0)
-    d = stop - start
-    chord = max(sqrt(d[1]^2 + d[2]^2), eps())
-    n = Vec2f(-d[2], d[1]) / chord
-    sagitta = clamp(bow * chord, 0.035, 0.22)
-    radius = chord^2 / (8 * sagitta) + sagitta / 2
-    midpoint = 0.5 * (start + stop)
-    return midpoint - side * n * (radius - sagitta)
-end
-
-function tangent_circle_center(start, stop, slope; anchor=:start)
-    anchor_point = anchor == :start ? start : stop
-    other_point = anchor == :start ? stop : start
-    tangent = Vec2f(1.0, slope)
-    tangent = tangent / max(sqrt(tangent[1]^2 + tangent[2]^2), eps())
-    d = other_point - anchor_point
-    denom = 2 * (tangent[1] * d[1] + tangent[2] * d[2])
-    abs(denom) < 1e-5 && return nothing
-    return anchor_point + ((d[1]^2 + d[2]^2) / denom) * tangent
-end
-
-function draw_arc_between_points!(ax, start, stop, color, figstyle;
-        center=nothing, bow=0.16, side=1.0, linewidth=1.6)
-    c = isnothing(center) ? chord_arch_center(start, stop; bow, side) : center
-    radius = sqrt((start[1] - c[1])^2 + (start[2] - c[2])^2)
-    if !isfinite(radius) || radius < 0.025 || radius > 2.0
-        c = chord_arch_center(start, stop; bow, side)
-        radius = sqrt((start[1] - c[1])^2 + (start[2] - c[2])^2)
-    end
-    start_angle = arc_angle_deg(c, start)
-    stop_angle = short_arc_stop_angle(start_angle, arc_angle_deg(c, stop))
-    arrow_arc_deg!(ax, c, radius, start_angle, stop_angle;
-        color, linewidth=pt(figstyle, linewidth), linestyle=nothing)
-    θ = stop_angle * π / 180
-    direction = Vec2f(cos(θ), -sin(θ))
-    stop_angle < start_angle && (direction = -direction)
-    head_len = 0.026
-    arrows2d!(ax, [stop - direction * head_len], [direction * head_len];
-        color, shaftwidth=0.08, tipwidth=8.5, tiplength=9.5)
-    return c
+    return Point2f(x_eval, y0 + t * (y1 - y0))
 end
 
 function draw_curve_transfer_arrow!(ax, xs0, ys0, xs1, ys1, x_start, x_stop, color;
-        linewidth=1.6, figstyle=paper_figure_style(), use_normals=true,
-        bow=0.16, side=1.0, tangent=:none)
-    start, slope_start = curve_point_slope(xs0, ys0, x_start)
-    stop, slope_stop = curve_point_slope(xs1, ys1, x_stop)
-    center = if tangent == :start
-        tangent_circle_center(start, stop, slope_start; anchor=:start)
-    elseif tangent == :stop
-        tangent_circle_center(start, stop, slope_stop; anchor=:stop)
-    elseif use_normals
-        normal_line_intersection(start, slope_start, stop, slope_stop)
-    else
-        nothing
-    end
-    draw_arc_between_points!(ax, start, stop, color, figstyle;
-        center, bow, side, linewidth)
-    return start, stop
+        bend=0.0, linewidth=1.6, figstyle=paper_figure_style())
+    start = curve_point(xs0, ys0, x_start)
+    stop = curve_point(xs1, ys1, x_stop)
+    start == stop && throw(ArgumentError("policy arrow endpoints coincide"))
+    width = pt(figstyle, linewidth)
+    path = iszero(bend) ? Makie.Ann.Paths.Line() : Makie.Ann.Paths.Arc(height=bend)
+    return annotation!(ax, start[1], start[2], stop[1], stop[2];
+        text="", labelspace=:data, shrink=(0, 0), path,
+        style=Makie.Ann.Styles.LineArrow(head=Makie.Ann.Arrows.Head(length=4width)),
+        color, linewidth=width)
 end
 
 function draw_number_badge!(ax, x, y, j, color, figstyle; marker=:circle)
@@ -256,10 +177,10 @@ function policy_value_rows(row)
         (L"\theta_i^{\mathrm{PA+tourism}}=1.2\theta_i^{\mathrm{PA}}", true),
     ]
     row.title == "Economic policy outcomes" && return [
-        (L"u_i y", false),
-        (L"+(\bar{u}_i^{*}-u_i)\theta_i^{*}", true),
-        (L"\theta_i^{*}=w_i/(p(1-\rho)q_iK)", true),
-        (L"\bar{u}_i^{*}=q_i^{*}\bar{e}_i/r", true),
+        (L"(1-\rho)u_i y", true),
+        (L"+(g\bar{u}_i-u_i)\theta_i/g", true),
+        (L"\theta_i^{*}=\theta_i/[g(1-\rho)]", true),
+        (L"\bar{u}_i^{*}=g\bar{u}_i", true),
     ]
     return [(L"v_i", true)]
 end
@@ -293,16 +214,16 @@ function draw_value_function!(ax, row, figstyle)
     end
 
     if row.title == "Economic policy outcomes"
-        text!(ax, 0.275, y_start; text=L"u_i y",
-            color=dimmed_equation_color(), fontsize=math_term_size(figstyle),
+        text!(ax, 0.275, y_start; text=L"(1-\rho)u_i y",
+            color=withalpha(RENT_RED, 0.98), fontsize=math_term_size(figstyle),
             align=(:left, :top))
         term_y = y_start - line_gap
-        text!(ax, 0.275, term_y; text=L"+(\bar{u}_i^{*}-u_i)\theta_i^{*}",
+        text!(ax, 0.275, term_y; text=L"+(g\bar{u}_i-u_i)\theta_i/g",
             color=withalpha(DARK, 0.98), fontsize=math_term_size(figstyle),
             align=(:left, :top))
         economic_rows = [
-            (L"\theta_i^{*}=w_i/(p(1-\rho)q_iK)", withalpha(RENT_RED, 0.98)),
-            (L"\bar{u}_i^{*}=q_i^{*}\bar{e}_i/r", withalpha(SPILLOVER_GREEN, 0.98)),
+            (L"\theta_i^{*}=\theta_i/[g(1-\rho)]", withalpha(RENT_RED, 0.98)),
+            (L"\bar{u}_i^{*}=g\bar{u}_i", withalpha(SPILLOVER_GREEN, 0.98)),
         ]
         for (j, (equation, color)) in enumerate(economic_rows)
             text!(ax, 0.275, y_start - (j + 1) * line_gap; text=equation,
@@ -441,6 +362,10 @@ function draw_phase_pairing!(ax, row, oa_sol, style, figstyle; show_xlabel=true)
             ytext = clamp(pp - 0.006, 0.08, 0.92)
             label_align = (:left, :center)
         end
+        if is_economic_row && j == 2
+            xtext, ytext = 0.96, 0.96
+            label_align = (:right, :top)
+        end
         if style == :cards
             text!(ax, xtext, ytext; text=label_text,
                 color=withalpha(color, 0.98), fontsize=pt(figstyle, 10.8), font=:bold,
@@ -463,7 +388,7 @@ function draw_phase_pairing!(ax, row, oa_sol, style, figstyle; show_xlabel=true)
         lines!(ax, y0, Φ0; color=withalpha(GRAY, 0.60), linewidth=2.9, linestyle=:dash)
         scatter!(ax, [yo], [po]; color=withalpha(GRAY, 0.96), markersize=pt(figstyle, 13),
             strokecolor=:white, strokewidth=1.0)
-        text!(ax, clamp(yo + 0.035, 0.05, 0.78), clamp(po + 0.045, 0.08, 0.92);
+        text!(ax, 0.69, 0.86;
             text="open access", color=withalpha(GRAY, 0.98),
             fontsize=pt(figstyle, 10.4), font=:bold, align=(:left, :center))
     end
@@ -475,10 +400,11 @@ function draw_phase_pairing!(ax, row, oa_sol, style, figstyle; show_xlabel=true)
         if x_policy > x_open + 0.015
             arrow_y = 0.54
             arrow_color = withalpha(RENT_RED, 0.95)
-            arrows2d!(ax, [Point2f(x_open, arrow_y)],
-                [Vec2f(x_policy - x_open, 0.0)];
-                color=arrow_color, shaftwidth=3.0,
-                tipwidth=12, tiplength=13)
+            width = pt(figstyle, 1.6)
+            annotation!(ax, x_open, arrow_y, x_policy, arrow_y;
+                text="", labelspace=:data, shrink=(0, 0),
+                style=Makie.Ann.Styles.LineArrow(head=Makie.Ann.Arrows.Head(length=4width)),
+                color=arrow_color, linewidth=width)
             text!(ax, 0.5 * (x_open + x_policy), arrow_y + 0.045;
                 text="ϕ", color=arrow_color, fontsize=pt(figstyle, 15.6),
                 font=:bold, align=(:center, :bottom))
@@ -489,19 +415,15 @@ function draw_phase_pairing!(ax, row, oa_sol, style, figstyle; show_xlabel=true)
         v1 = variant_curves[1]
         spill_color = withalpha(SPILLOVER_GREEN, 0.94)
         access_color = withalpha(RENT_RED, 0.90)
-        _, spill_stop = draw_curve_transfer_arrow!(ax, y0, Φ0, v1.y, v1.Φ,
-            0.065, 0.305, spill_color; linewidth=1.02, figstyle,
-            use_normals=false, bow=0.18, side=1.0, tangent=:start)
-        text!(ax, 0.09, 0.76;
+        draw_curve_transfer_arrow!(ax, y0, Φ0, v1.y, v1.Φ,
+            0.065, 0.325, spill_color; bend=0.38, figstyle)
+        text!(ax, 0.04, 0.86;
             text="spillover\neffect", color=spill_color,
             fontsize=pt(figstyle, 11.4), font=:bold, align=(:left, :center))
 
-        access_start_x = 0.355
-        access_stop_x = x_at_curve_level(v1.y, v1.Γ, 0.55)
-        _, access_stop = draw_curve_transfer_arrow!(ax, y0, Γ0, v1.y, v1.Γ,
-            access_start_x, access_stop_x, access_color; linewidth=1.02, figstyle,
-            use_normals=false, bow=0.16, side=1.0, tangent=:none)
-        text!(ax, 0.405, 0.705;
+        draw_curve_transfer_arrow!(ax, y0, Γ0, v1.y, v1.Γ,
+            0.355, 0.55, access_color; bend=0.08, figstyle)
+        text!(ax, 0.49, 0.82;
             text="exclusion\neffect", color=access_color,
             fontsize=pt(figstyle, 10.8), font=:bold, align=(:left, :center))
     end
@@ -512,28 +434,20 @@ function draw_phase_pairing!(ax, row, oa_sol, style, figstyle; show_xlabel=true)
         tax_color = withalpha(RENT_RED, 0.94)
         gear_color = withalpha(SPILLOVER_GREEN, 0.94)
 
-        tax_start, _ = curve_point_slope(y0, Γ0, 0.45)
-        tax_stop, _ = curve_point_slope(tax_curve.y, tax_curve.Γ, 0.60)
-        arrows2d!(ax, [tax_start],
-            [tax_stop - tax_start];
-            color=tax_color, shaftwidth=2.7, tipwidth=12, tiplength=14)
-        tax_label_x = 0.5 * (tax_start[1] + tax_stop[1])
-        tax_label_y = 0.5 * (tax_start[2] + tax_stop[2]) + 0.055
-        text!(ax, tax_label_x, tax_label_y;
+        draw_curve_transfer_arrow!(ax, y0, Γ0, tax_curve.y, tax_curve.Γ,
+            0.30, 0.65, tax_color; bend=0.08, figstyle)
+        text!(ax, 0.50, 0.66;
             text="royalty", color=tax_color,
             fontsize=pt(figstyle, 10.6), font=:bold,
             align=(:center, :bottom), lineheight=0.82)
-        text!(ax, tax_label_x, tax_label_y - 0.045;
+        text!(ax, 0.50, 0.615;
             text=L"p(1-\rho)", color=tax_color,
             fontsize=pt(figstyle, 10.6), font=:bold,
             align=(:center, :bottom))
 
-        x_imp = 0.115
-        start, _ = curve_point_slope(y0, Φ0, x_imp)
-        stop, _ = curve_point_slope(gear_curve.y, gear_curve.Φ, x_imp)
-        arrows2d!(ax, [start], [stop - start];
-            color=gear_color, shaftwidth=2.6, tipwidth=12, tiplength=14)
-        text!(ax, x_imp + 0.015, max(start[2], stop[2]) + 0.075;
+        draw_curve_transfer_arrow!(ax, y0, Φ0, gear_curve.y, gear_curve.Φ,
+            0.30, 0.24, gear_color; figstyle)
+        text!(ax, 0.32, 0.42;
             text="gear\nsubsidy", color=gear_color,
             fontsize=pt(figstyle, 10.6), font=:bold,
             align=(:left, :bottom), lineheight=0.82)
@@ -617,21 +531,14 @@ function draw_income_scenario_panel!(ax, sol, label, color, j, style, figstyle;
         inactive_color=withalpha(GRAY, 0.66),
         show_active=false, state=x, time=steady_time(sol),
         annotate_rent_reallocation=is_tradable,
-        rent_arrow_scale=is_tradable && j == 1 ? 0.55 : 1.0)
+        rent_arrow_scale=1.0)
     if is_tradable && j == 1
         neg_ids = findall(<(0.0), trade_neg)
         pos_ids = findall(>(0.0), trade_pos)
         if !isempty(neg_ids) && !isempty(pos_ids)
-            neg_i = neg_ids[cld(length(neg_ids), 2)]
             pos_i = pos_ids[cld(length(pos_ids), 2)]
-            start = Point2f(neg_i, 0.50 * trade_neg[neg_i])
             added_base = trade_neg[pos_i] + inc.wages[idx][pos_i] + inc.resource[idx][pos_i]
             stop = Point2f(pos_i, added_base + 0.50 * trade_pos[pos_i])
-            lift = max(abs(stop[2] - start[2]), maximum(trade_pos) - minimum(trade_neg), eps()) * 0.22
-            control = Point2f(0.50 * (start[1] + stop[1]), min(start[2], stop[2]) - lift)
-            t = 0.56
-            xy = Point2f((1 - t)^2 * start[1] + 2 * (1 - t) * t * control[1] + t^2 * stop[1],
-                (1 - t)^2 * start[2] + 2 * (1 - t) * t * control[2] + t^2 * stop[2])
             yrange = ymax_plot - ymin_plot
             label_x = clamp(stop[1] - 0.07 * p.N, 0.52 * p.N, 0.78 * p.N)
             label_y = clamp(stop[2] - 0.28 * yrange, ymin_plot, ymax_plot)
@@ -643,11 +550,11 @@ function draw_income_scenario_panel!(ax, sol, label, color, j, style, figstyle;
     hlines!(ax, [0.0]; color=RGBAf(0.12, 0.16, 0.20, 0.24), linewidth=0.8)
 
     badge = style == :badges ? (j == 1 ? "● 1" : "◆ 2") : string(j)
-    metric = @sprintf("%s  %s\nResource rent: %.2f  Total income: %.2f\nGini: %.2f",
-        badge, scenario_label(label), sum(inc.resource), sum(inc.total), inc.gini)
-    ax.title = metric
-    ax.titlecolor = color
-    ax.titlesize = pt(figstyle, style == :cards ? 10.2 : 10.4)
+    summary = @sprintf("Res. rent %.2f  ·  Total inc. %.2f\nGini %.2f",
+        sum(inc.resource_rent), sum(inc.total), inc.gini)
+    income_panel_heading!(ax, "$badge  $(scenario_label(label))", summary;
+        color, summary_color=MUTED,
+        fontsize=pt(figstyle, 11.6))
     ax.xlabelvisible = show_xlabel
     ax.xlabel = "actors ordered by exit threshold θᵢ"
     ax.xlabelsize = pt(figstyle, 12.2)
@@ -658,13 +565,24 @@ function draw_income_scenario_panel!(ax, sol, label, color, j, style, figstyle;
     return ax
 end
 
-function draw_income_pair_option!(layout, row, style, figstyle; annotate=false,
-        show_xlabel=false)
-    panel_limits = income_panel_limits.(getproperty.(row.variants, :sol))
-    shared_ylims = (
+function shared_income_limits(rows)
+    panel_limits = [income_panel_limits(v.sol) for row in rows for v in row.variants]
+    return (
         minimum(first.(panel_limits)),
         maximum(last.(panel_limits)),
     )
+end
+
+function draw_income_pair_option!(layout, row, style, figstyle; annotate=false,
+        show_xlabel=false, shared_ylims=nothing)
+    pair_only = isnothing(shared_ylims)
+    pair_only && (shared_ylims = shared_income_limits([row]))
+    if pair_only && row.title == "Tradable use rights"
+        # Transfers span the full width, so keep the inset above their positive bars.
+        lo, hi = shared_ylims
+        shared_ylims = (lo, hi + 0.30 * (hi - lo))
+    end
+    axes = Axis[]
     for (j, v) in enumerate(row.variants)
         ax = Axis(layout[j, 1])
         color = option_colors(style, j, v)
@@ -672,8 +590,10 @@ function draw_income_pair_option!(layout, row, style, figstyle; annotate=false,
             annotate=annotate && j == 1,
             show_xlabel=show_xlabel && j == length(row.variants),
             shared_ylims)
+        push!(axes, ax)
     end
     rowgap!(layout, style == :cards ? 6 : 2)
+    return axes
 end
 
 function option_title(style)
@@ -690,10 +610,14 @@ function option_subtitle(style)
     return "Each scenario is treated as a colored card; the phase labels and stacked income panels use matching cards."
 end
 
+"""Render policy comparisons with income_scale=:all (or :policy for row-wise scales)."""
 function figure4(; outdir=joinpath(@__DIR__, "figures"),
-        save_outputs=true, figstyle=paper_figure_style(px_per_unit=3))
+        save_outputs=true, figstyle=paper_figure_style(px_per_unit=3), income_scale=:all)
+    income_scale in (:all, :policy) || throw(ArgumentError("income_scale must be :all or :policy"))
     style = :fixed_hues
     rows, oa_sol = policy_rows()
+    shared_ylims = income_scale == :all ? shared_income_limits(rows) : nothing
+    income_axes = Axis[]
     fig = Figure(size=figsize(figstyle), backgroundcolor=:white, fontsize=pt(figstyle, 13))
 
     Label(fig[0, 1:3], option_title(style); fontsize=pt(figstyle, 24), font=:bold,
@@ -717,8 +641,14 @@ function figure4(; outdir=joinpath(@__DIR__, "figures"),
             show_xlabel=is_bottom_row)
 
         income_grid = GridLayout(fig[r + 2, 3])
-        draw_income_pair_option!(income_grid, row, style, figstyle;
-            annotate=r == 1, show_xlabel=is_bottom_row)
+        axes = draw_income_pair_option!(income_grid, row, style, figstyle;
+            annotate=r == 1, show_xlabel=is_bottom_row, shared_ylims)
+        append!(income_axes, axes)
+    end
+
+    if income_scale == :all
+        linkyaxes!(income_axes...)
+        ylims!(first(income_axes), shared_ylims...)
     end
 
     rowsize!(fig.layout, 0, Auto(0.26))

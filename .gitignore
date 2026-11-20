@@ -6,9 +6,14 @@ Thumbs.db
 # Local editor and IDE state
 /.vscode/
 /.idea/
+/.agents/
+/.codex/
 *.swp
 *.swo
 *~
+.env
+.env.*
+!.env.example
 
 # Julia scratch and machine-local preferences
 *.cov

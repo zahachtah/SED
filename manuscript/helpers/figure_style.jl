@@ -13,3 +13,11 @@ paper_figure_style(; size=(1040, 1500), font_scale=1.22, px_per_unit=2) =
 figsize(style::ManuscriptFigureStyle) = style.size
 pt(style::ManuscriptFigureStyle, value) = Float64(value) * style.font_scale
 px_per_unit(style::ManuscriptFigureStyle) = style.px_per_unit
+
+function income_panel_heading!(ax, title, summary; color, summary_color, fontsize)
+    ax.title = ""
+    heading = isempty(title) ? rich(summary; color=summary_color) :
+        rich(rich(title; color, font=:bold), rich("\n" * summary; color=summary_color))
+    return text!(ax, 0.98, 0.97; text=heading, space=:relative,
+        align=(:right, :top), fontsize, lineheight=1.15)
+end

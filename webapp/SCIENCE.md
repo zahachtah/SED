@@ -25,8 +25,9 @@ The following discrepancies were resolved against `src/` and the supplement:
 | Convergence | Check projected derivatives and the per-capita resource balance, rather than declaring convergence from a small difference between adaptive steps. Nonconverged runs are identified in the interface. |
 
 Changing an actor's efficiency is a step change in the effective model
-parameters. The companion keeps the same initial normalized use state for
-economic transformations, as in the package's parameter-change workflow; the
+parameters. For a catchability multiplier `g`, normalized use at intervention
+is multiplied by `g` to preserve physical initial effort, then projected into
+the new feasible endowment. This matches the paper's gear transition; the
 trajectory is not a dimensional transition model of gear acquisition. The
 behavioral response rate is held fixed at the selected actor-specific constant
 (default 0.05 for every actor).
@@ -60,6 +61,15 @@ separate task from constructing the two static relational distributions.
 
 ## Plot Interpretation
 
+Resource rent is retained harvest revenue minus forgone outside earnings,
+before rights transfers. Each actor obeys
+`total = resource + wages + trade = outsideOnly + resourceRent + trade`.
+The legacy `resource` field remains retained revenue. `stateRevenue` is
+reported separately and is not recycled into actor income. Rent may be
+negative during adjustment and is not truncated. Income bars split actual
+outside earnings (grey), opportunity cost (lighter shading), resource rent
+(darker shading), and rights transfers. Scan resource objectives use rent.
+
 - The phase diagram is bounded by `[0,1]` on both axes. The point is the
   simulated endpoint; the curves are computed from that run's parameters and
   market price.
@@ -84,6 +94,15 @@ separate task from constructing the two static relational distributions.
   rerunning the model.
 
 ## Verification
+
+The optimized RK23 implementation uses first-same-as-last derivative reuse
+after projection, retains the initial derivative on rejected steps, and uses
+the same floating-point operation order and convergence thresholds as before.
+`test/solver.test.cjs` compares complete outputs, actor states, trajectories,
+step counts, and income accounting against the frozen pre-optimization
+integrator. Worker reuse changes scheduling and caching, not model equations;
+`test/runner.test.cjs` runs the production worker source and checks cancellation,
+cache invalidation, stale-message rejection, and the non-worker fallback.
 
 `test/model.test.cjs` checks invariants, policy accounting, zero-regulation
 limits, sampling, derived dependence, path sampling, and reweighting. When

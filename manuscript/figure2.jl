@@ -297,8 +297,8 @@ function draw_phase!(ax, ex, figstyle)
 end
 
 function income_outcomes_label(ex)
-    @sprintf("Resource income = %.2f   Total income = %.2f   Gini = %.2f",
-        sum(ex.inc.resource), sum(ex.inc.total), ex.inc.gini)
+    @sprintf("Rent %.2f  ·  Total %.2f  ·  Gini %.2f",
+        sum(ex.inc.resource_rent), sum(ex.inc.total), ex.inc.gini)
 end
 
 function draw_income_component_legend!(ax, xmin, ymax, yrange, figstyle)
@@ -307,9 +307,9 @@ function draw_income_component_legend!(ax, xmin, ymax, yrange, figstyle)
     sw = 4.8
     sh = 0.026 * yrange
     entries = [
-        (withalpha(RED, 0.86), "color = resource surplus income (rent)"),
-        (withalpha(PINK, 0.70), "lighter shading = opportunity cost"),
-        (withalpha(GRAY, 0.72), "gray = alternative incomes"),
+        (withalpha(RED, 0.86), "Resource rent"),
+        (withalpha(PINK, 0.70), "Opportunity cost"),
+        (withalpha(GRAY, 0.72), "Alternative income"),
     ]
     for (y, (color, label)) in zip(ys, entries)
         poly!(ax, Rect2f(x0, y - sh / 2, sw, sh); color, strokecolor=:transparent)
@@ -362,31 +362,20 @@ function draw_income_order_axis!(ax, ex, figstyle; orderby::Symbol, xlabel, show
 end
 
 function draw_income_comparison!(layout, ex, figstyle; letter="D", show_title=true)
-    top_row = 1
-    if show_title
-        Label(layout[1, 1], "$letter. Income distribution at the attractor";
-            fontsize=pt(figstyle, 21.0), font=:bold, color=DARK,
-            tellwidth=false, halign=:left)
-        top_row = 2
-    end
-    bottom_row = top_row + 1
+    show_title && panel_title!(layout, "$letter) Income distribution at the attractor", figstyle)
+    top_row = show_title ? 2 : 1
     ax_top = Axis(layout[top_row, 1])
-    ax_bottom = Axis(layout[bottom_row, 1])
+    ax_bottom = Axis(layout[top_row + 1, 1])
     draw_income_order_axis!(ax_top, ex, figstyle; orderby=:threshold,
         xlabel="Same actors ordered by exit threshold θᵢ", show_legend=true)
     draw_income_order_axis!(ax_bottom, ex, figstyle; orderby=:total,
         xlabel="Same actors ordered by total income")
-    text!(ax_bottom, 0.025, 0.965; text=income_outcomes_label(ex),
-        space=:relative, align=(:left, :top), color=MUTED,
-        fontsize=pt(figstyle, 15.4), font=:bold)
-    if show_title
-        rowsize!(layout, 1, Auto(0.10))
-        rowsize!(layout, 2, Relative(0.46))
-        rowsize!(layout, 3, Relative(0.44))
-    else
-        rowsize!(layout, 1, Relative(0.46))
-        rowsize!(layout, 2, Relative(0.44))
-    end
+    income_panel_heading!(ax_top, "", income_outcomes_label(ex);
+        color=DARK, summary_color=MUTED, fontsize=pt(figstyle, 17.0))
+    income_panel_heading!(ax_bottom, "", income_outcomes_label(ex);
+        color=DARK, summary_color=MUTED, fontsize=pt(figstyle, 17.0))
+    rowsize!(layout, top_row, Relative(0.50))
+    rowsize!(layout, top_row + 1, Relative(0.50))
     rowgap!(layout, 10)
     return layout
 end

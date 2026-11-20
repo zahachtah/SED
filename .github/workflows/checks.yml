@@ -39,7 +39,10 @@ jobs:
         run: |
           node webapp/build.mjs --check
           node webapp/test/model.test.cjs
+          node webapp/test/solver.test.cjs
+          node webapp/test/runner.test.cjs
           node webapp/test/plots.test.cjs
+          node webapp/test/publication.test.cjs
       - name: Install browser-check dependencies
         working-directory: webapp
         run: |

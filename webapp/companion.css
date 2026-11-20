@@ -115,12 +115,16 @@ summary { cursor: pointer; }
 .text-button:hover { color: var(--ecology); }
 .text-button svg { width: 13px; height: 13px; }
 .workspace { min-width: 0; min-height: 0; padding: 22px 28px 14px; display: grid; grid-template-rows: minmax(250px,1.25fr) auto minmax(200px,.8fr); gap: 15px; }
+.workspace.is-scanning { grid-template-rows: minmax(250px,1.05fr) auto minmax(300px,1fr); }
 .figure-section { background: var(--surface); padding: 18px 20px 10px; min-width: 0; min-height: 0; display: flex; flex-direction: column; border-radius: 6px; }
 .figure-heading { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-shrink: 0; }
 .figure-heading h2 { font: 19px/1.3 Georgia,serif; margin: 2px 0 3px; }
 .figure-number { font-size: 9px; }
 .figure-tools { display: flex; gap: 5px; align-items: center; }
 .view-switch button { font-size: 10px; padding: 5px 10px; color: var(--muted); }
+.income-tools { flex-wrap: wrap; justify-content: flex-end; }
+.income-view-switch { flex-shrink: 0; white-space: nowrap; }
+.income-section .figure-heading > div:first-child { min-width: 0; }
 .figure-options { display: flex; justify-content: space-between; gap: 8px; align-items: center; margin-top: 10px; }
 .curve-key, .income-key { display: flex; align-items: center; gap: 16px; font-size: 10px; color: var(--muted); flex-wrap: wrap; }
 .curve-key span, .income-key span { display: inline-flex; align-items: center; gap: 5px; }
@@ -157,6 +161,9 @@ canvas { display: block; height: 100%; width: 100%; }
 .income-key .key-opportunity::before { background: var(--opportunity); }
 .income-key .key-alternative::before { background: var(--alternative); }
 .income-key .key-trade::before { background: var(--transfer); }
+.income-key .key-gain::before { background: var(--impact); }
+.income-key .key-loss::before { background: var(--red); }
+.income-key .key-zero::before { height: 0; border-top: 1px solid var(--axis); background: none; }
 .sort-control { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--muted); }
 .sort-control select { padding: 4px 6px; font-size: 10px; }
 .compact-check { font-size: 10px; color: var(--muted); margin-left: 8px; white-space: nowrap; }

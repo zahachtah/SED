@@ -1,11 +1,16 @@
 # Manuscript and Main Figures
 
-- [Current manuscript PDF](Science_MS_compact.pdf)
-- [Editable manuscript](Science_MS_compact.docx)
+- [Submission manuscript](Science_MS_compact.pdf)
+- [Manuscript and supplementary material together](Norberg_Anderies_Manuscript_and_Supplement.pdf)
+- [Standalone supplementary material](../SupplementaryMaterial/SED_Supplementary_Material.pdf)
 
-There is one maintained script and one numbered PDF/PNG pair per main figure.
+The manuscript PDF is the author's typeset export of 19 November 2026. It is
+the paper's scientific reference. Earlier Word drafts and editorial worklists
+are retained in the local ignored archive, not distributed as competing versions.
 
-| Figure | Script | Output |
+## Reproduce the Figures
+
+| Figure | Script | PDF |
 | --- | --- | --- |
 | 1: Exit readiness | [figure1.jl](figure1.jl) | [figure1.pdf](figures/figure1.pdf) |
 | 2: From heterogeneity to outcomes | [figure2.jl](figure2.jl) | [figure2.pdf](figures/figure2.pdf) |
@@ -18,10 +23,42 @@ From the repository root:
 bash manuscript/generate_figures.sh
 ```
 
-The `helpers/` directory holds shared figure typography and the fixed policy
-populations used by Figure 4 and the numerical verification tables. It is not
-a second model implementation: population curves call the Julia package.
+Each script also runs independently with `julia --project=.` and writes a
+PDF/PNG pair to `figures/`. Shared typography is in
+[`helpers/figure_style.jl`](helpers/figure_style.jl); Figure 4 populations and
+geometry are in [`helpers/policy_scenarios.jl`](helpers/policy_scenarios.jl).
+These helpers use the Julia package rather than a separate numerical model.
 
-See the [reproduction guide](../docs/reproducibility.md) for environment setup,
-optional DOCX image updates, and supplementary figures. Superseded drafts and
-visual alternatives are not part of the public tree.
+Generating figures does not rewrite the manuscript PDF or its prose.
+The [reproduction guide](../docs/reproducibility.md) explains the software
+environment and numerical verification records.
+
+## Figure 4 Accounting
+
+The primary Figure 4 shows income levels, with all eight income panels using
+one vertical scale, including negative rights payments. Actors are ordered by
+their exit thresholds. `figure4(income_scale=:policy)` instead links scales
+within each policy row.
+
+Resource rent is retained harvest revenue minus forgone outside earnings,
+before rights transfers. Total actor income includes outside earnings and net
+rights transfers but excludes government royalty receipts. Literal gear support
+changes both impact potentials and exit thresholds. Income components and
+solver/market diagnostics are recorded in
+[`main_figure_verification.csv`](../SupplementaryMaterial/results/main_figure_verification.csv).
+
+## Income-Change Alternative
+
+The retained alternative does not overwrite the primary Figure 4:
+
+```sh
+julia --project=. manuscript/incomedifferenceonlyFig4.jl
+```
+
+[`incomedifferenceonlyFig4.jl`](incomedifferenceonlyFig4.jl) writes
+[`figures/incomedifferenceonlyFig4.pdf`](figures/incomedifferenceonlyFig4.pdf)
+and its PNG. It shows each actor's policy-minus-open-access income in the
+original threshold order, on a shared symmetric scale. Blue marks gains and red
+losses. Gini changes are calculated from the two income-level distributions,
+not from signed income changes. Full component differences are saved in
+[`figure4_income_changes.csv`](../SupplementaryMaterial/results/figure4_income_changes.csv).

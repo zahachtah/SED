@@ -14,7 +14,7 @@ function createSEDModel() {
         protected: 0.25, mobility: 0.3, tourism: 0,
         economicMode: "royalty", royalty: 0.2, gear: 0, effort: 0, outside: 0,
         view: "balance", densities: false, path: true, incomeSort: "total",
-        logIncome: false, scan: false, scanPoints: 20,
+        incomeView: "levels", logIncome: false, scan: false, scanPoints: 20,
         weights: { resource: 0.5, total: 1, gini: -0.2, ecology: 0, impact: 0 }
     };
     const causalDefaults = {
@@ -187,26 +187,29 @@ function createSEDModel() {
 
     function solve(base, p, open = null, onProgress = null) {
         const actors = transform(base, p, open), n = actors.length, d = n + 2;
+        const costs = Float64Array.from(actors, a => a.cost), limits = Float64Array.from(actors, a => a.limit);
         const active = policyActive(p), isPA = active && p.policy === "pa", isRights = active && p.policy === "rights";
         const depletionPossible = !isPA && sum(actors.filter(a => a.cost === 0).map(a => a.limit)) >= 1;
         let state = new Float64Array(d), next = new Float64Array(d);
         const initial = open ? open.state : null;
         state[n] = initial ? initial[n] : 1;
-        for (let i = 0; i < n; i++) state[i] = initial ? initial[i] : 0;
+        const initialGear = active && p.policy === "economic" ? 1 + p.gear : 1;
+        for (let i = 0; i < n; i++) state[i] = initial ? initial[i] * initialGear : 0;
         if (isPA && initial) {
             const scale = pressureScale(state[n], p.protected, p.mobility);
             for (let i = 0; i < n; i++) state[i] *= scale;
         }
-        const k1 = new Float64Array(d), k2 = new Float64Array(d), k3 = new Float64Array(d), k4 = new Float64Array(d);
+        let k1 = new Float64Array(d), k4 = new Float64Array(d);
+        const k2 = new Float64Array(d), k3 = new Float64Array(d);
         const stage = new Float64Array(d), second = new Float64Array(d);
-        const maxTime = 6000, minTime = 35, alpha = p.alpha || 0.05;
+        const maxTime = 6000, minTime = 35, alpha = p.alpha || 0.05, euler = p.solver === "euler";
         let time = 0, h = 0.03, steps = 0, converged = false, residual = Infinity;
         const path = [];
         const project = s => {
             s[n] = clamp(s[n], 0, 1);
             s[n + 1] = Math.max(0, s[n + 1]);
             const scale = isPA ? pressureScale(s[n], p.protected, p.mobility) : 1;
-            for (let i = 0; i < n; i++) s[i] = clamp(s[i], 0, actors[i].limit * scale);
+            for (let i = 0; i < n; i++) s[i] = clamp(s[i], 0, limits[i] * scale);
         };
         const derivative = (s, out) => {
             const y = s[n], price = s[n + 1];
@@ -215,8 +218,8 @@ function createSEDModel() {
             let use = 0;
             for (let i = 0; i < n; i++) {
                 use += s[i];
-                let du = alpha * (y - actors[i].cost - wedge);
-                if ((s[i] <= 0 && du < 0) || (s[i] >= actors[i].limit * scale && du > 0)) du = 0;
+                let du = alpha * (y - costs[i] - wedge);
+                if ((s[i] <= 0 && du < 0) || (s[i] >= limits[i] * scale && du > 0)) du = 0;
                 out[i] = du;
             }
             out[n] = y * (1 - y - use);
@@ -228,7 +231,7 @@ function createSEDModel() {
             let participation = 0, pressure = 0;
             for (let i = 0; i < n; i++) {
                 pressure += s[i];
-                participation += actors[i].limit * scale > 0 ? s[i] / (actors[i].limit * scale) : 0;
+                participation += limits[i] * scale > 0 ? s[i] / (limits[i] * scale) : 0;
             }
             return { y: s[n], participation: participation / n, pressure, price: s[n + 1], t: time };
         };
@@ -238,10 +241,11 @@ function createSEDModel() {
         };
         project(state);
         addPoint(true);
+        if (!euler) derivative(state, k1);
         for (let attempt = 0; attempt < 450000 && time < maxTime; attempt++) {
             h = Math.min(h, maxTime - time);
-            derivative(state, k1);
-            if (p.solver === "euler") {
+            if (euler) {
+                derivative(state, k1);
                 h = 0.005;
                 for (let j = 0; j < d; j++) next[j] = state[j] + h * k1[j];
                 project(next);
@@ -263,16 +267,24 @@ function createSEDModel() {
                 if (error > 1 && h > 1.001e-5) { h = newH; continue; }
                 const usedH = h; h = newH; time += usedH;
             }
-            if (p.solver === "euler") time += h;
-            [state, next] = [next, state];
+            if (euler) time += h;
+            const previous = state; state = next; next = previous;
+            // RK23's last stage is the derivative of the accepted, projected state.
+            // Rejected attempts leave k1 valid; accepted steps reuse k4 as k1.
+            if (!euler) { const first = k1; k1 = k4; k4 = first; }
             steps++;
             if (steps % 2 === 0) addPoint(false);
             if (time > minTime && steps % 8 === 0) {
-                derivative(state, k1);
-                const pressure = sum(Array.from(state.slice(0, n)));
+                if (euler) derivative(state, k1);
+                let pressure = 0;
+                residual = 0;
+                for (let j = 0; j < d; j++) {
+                    residual = Math.max(residual, Math.abs(k1[j]));
+                    if (j < n) pressure += state[j];
+                }
                 // A tiny stock can have a tiny dy without being near balance.
                 const atBoundary = depletionPossible && state[n] < 1e-8;
-                residual = Math.max(...k1.map(Math.abs), atBoundary ? 0 : Math.abs(1 - state[n] - pressure));
+                residual = Math.max(residual, atBoundary ? 0 : Math.abs(1 - state[n] - pressure));
                 if (residual < 8e-8) { converged = true; break; }
             }
             if (steps % 8000 === 0 && onProgress) onProgress({ stage: "integrating", time, steps });
@@ -287,16 +299,27 @@ function createSEDModel() {
             a.resource = a.physicalUse * y * a.factor;
             a.wages = Math.max(0, a.endowment - a.physicalUse) * a.wageCost;
             a.outsideOnly = a.endowment * a.wageCost;
+            a.opportunityCost = a.physicalUse * a.wageCost;
+            a.resourceRent = a.resource - a.opportunityCost;
+            a.stateRevenue = active && p.policy === "economic" ? a.physicalUse * y * p.royalty : 0;
+            a.grossResourceRevenue = a.resource + a.stateRevenue;
             const quotaUse = p.target === "yield" ? a.use * y : a.use;
             a.trade = isRights ? (a.right - quotaUse) * price : 0;
+            a.netResourceRent = a.resourceRent + a.trade;
             a.total = a.resource + a.wages + a.trade;
             a.effectiveTheta = a.cost + (isRights ? (p.target === "yield" ? y * price : price) : 0);
             a.effectivePotential = a.limit * scale;
         });
-        const pressure = sum(Array.from(state.slice(0, n)));
+        let pressure = 0;
+        for (let i = 0; i < n; i++) pressure += state[i];
         const quotaUse = isRights ? pressure * (p.target === "yield" ? y : 1) : 0;
         const result = { actors, state: Array.from(state), y, pressure, price, participation: mean(actors.map(a => a.fraction)),
             resource: sum(actors.map(a => a.resource)), total: sum(actors.map(a => a.total)),
+            resourceRent: sum(actors.map(a => a.resourceRent)),
+            opportunityCost: sum(actors.map(a => a.opportunityCost)),
+            outsideIncome: sum(actors.map(a => a.wages)), outsideIncome0: sum(actors.map(a => a.outsideOnly)),
+            stateRevenue: sum(actors.map(a => a.stateRevenue)),
+            grossResourceRevenue: sum(actors.map(a => a.grossResourceRevenue)),
             inequality: gini(actors.map(a => a.total)), time, steps, converged, residual, path,
             boundary: depletionPossible && y < 1e-8,
             quotaUse, quotaResidual: isRights ? quotaUse - p.quota : 0,
@@ -361,7 +384,7 @@ function createSEDModel() {
 
     function scoreRows(rows, weights) {
         const scores = rows.map(r => Object.entries(weights).reduce((s, [k, w]) => {
-            const v = k === "gini" ? r.result.inequality : k === "ecology" ? r.result.y : k === "impact" ? r.result.policyImpact : r.result[k];
+            const v = k === "gini" ? r.result.inequality : k === "ecology" ? r.result.y : k === "impact" ? r.result.policyImpact : k === "resource" ? r.result.resourceRent : r.result[k];
             return s + w * Math.log(Math.max(1e-12, v ?? 0));
         }, 0));
         const max = Math.max(...scores);
@@ -374,7 +397,8 @@ function createSEDModel() {
         const open = cachedOpen || solve(base, openParams, null, onProgress);
         onProgress?.({ stage: "policy" });
         const policy = p.policy === "none" ? open : solve(base, p, open, onProgress);
-        const data = { base, open, policy, params: p, curves: { open: curves(open, openParams), policy: curves(policy, p) } };
+        const openCurves = curves(open, openParams);
+        const data = { base, open, policy, params: p, curves: { open: openCurves, policy: policy === open ? openCurves : curves(policy, p) } };
         if (p.scan && p.policy !== "none") {
             data.scan = [];
             const n = Math.max(8, Math.min(64, p.scanPoints));
@@ -388,8 +412,24 @@ function createSEDModel() {
         return data;
     }
 
+    function populationKey(p) {
+        return JSON.stringify([p.n,p.seed,p.alpha,p.solver,p.thresholdSampling,p.impactSampling,p.meanTheta,
+            p.thetaSpread,p.totalImpact,p.impactSpread,p.correlation,p.populationMode,p.causal,p.records]);
+    }
+
+    function createSession() {
+        let key = null, open = null;
+        return { run(p, cachedOpen = null, onProgress = null) {
+            const nextKey = populationKey(p);
+            const data = run(p, cachedOpen || (nextKey === key ? open : null), onProgress);
+            key = nextKey;
+            open = data.open;
+            return data;
+        } };
+    }
+
     return { defaults, causalDefaults, population, causalPopulation, transform, pressureScale, protectedStock,
-        solve, curves, run, moments, correlation, resamplePath, scoreRows, scanParams, policyActive, rng, normalQuantile };
+        solve, curves, run, createSession, populationKey, moments, correlation, resamplePath, scoreRows, scanParams, policyActive, rng, normalQuantile };
 }
 
 const SEDModel = createSEDModel();

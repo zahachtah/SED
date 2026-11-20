@@ -5,7 +5,7 @@ const root = new URL("./", import.meta.url);
 let html = await readFile(new URL("index.html", root), "utf8");
 const css = await readFile(new URL("companion.css", root), "utf8");
 html = html.replace('<link rel="stylesheet" href="companion.css">', `<style>\n${css}\n</style>`);
-for (const path of ["vendor/lucide.min.js", "model.js", "plots.js", "app.js"]) {
+for (const path of ["vendor/lucide.min.js", "model.js", "runner.js", "plots.js", "app.js"]) {
     const source = (await readFile(new URL(path, root), "utf8")).replace(/\/\/# sourceMappingURL=.*$/gm, "");
     html = html.replace(`<script src="${path}"></script>`, () => `<script>\n${source}\n</script>`);
 }

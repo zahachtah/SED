@@ -1,8 +1,9 @@
 using Statistics
 
-function regulation_scan(p; m=100, kR=0.5, kT=1.0, kG=-0.2, kE=0.0, kI=0.0, warmstart::Symbol=:chain)
+function regulation_scan(p; m=100, kR=0.5, kRent=0.0, kT=1.0, kG=-0.2, kE=0.0, kI=0.0, warmstart::Symbol=:chain)
     r = range(0.0, stop=1.0 - 1.0 / m, length=m)
     RR = zeros(m)
+    Rent = zeros(m)
     WR = zeros(m)
     TR = zeros(m)
     ToR = zeros(m)
@@ -69,8 +70,9 @@ function regulation_scan(p; m=100, kR=0.5, kT=1.0, kG=-0.2, kE=0.0, kI=0.0, warm
         if j == 1
             oau = sol[1:p.N, end-1]
         end
-        inc = incomes(sol.u[end-1], sol.prob.p)
+        inc = incomes(sol.u[end-1], sol.prob.p; t=sol.t[end-1])
         RR[j] = sum(inc.resource)
+        Rent[j] = sum(inc.resource_rent)
         WR[j] = sum(inc.wages)
         TR[j] = sum(inc.trade)
         ToR[j] = sum(inc.total)
@@ -87,7 +89,7 @@ function regulation_scan(p; m=100, kR=0.5, kT=1.0, kG=-0.2, kE=0.0, kI=0.0, warm
         Isum = RI[j]
         # Safe power for nonnegative inputs (avoid complex/NaN from negatives or zeros)
         _sp(x, k) = (max(x, eps())^k)
-        Gov[j] = _sp(Rsum, kR) * _sp(Tsum, kT) * _sp(Gval, kG) * _sp(Eval, kE) * _sp(Isum, kI)
+        Gov[j] = _sp(Rsum, kR) * _sp(Rent[j], kRent) * _sp(Tsum, kT) * _sp(Gval, kG) * _sp(Eval, kE) * _sp(Isum, kI)
 
         # Sort by w̃ (opportunity cost) for visualization if available
         w_data = hasproperty(p, :w̃) ? (hasproperty(p.w̃, :data) ? p.w̃.data : p.w̃) : nothing
@@ -102,6 +104,7 @@ function regulation_scan(p; m=100, kR=0.5, kT=1.0, kG=-0.2, kE=0.0, kI=0.0, warm
         resources[j] = sol.u[end-1][p.N+1]
     end
     oRR = argmax(RR)
+    oRent = argmax(Rent)
     oWR = argmax(WR)
     oTR = argmax(TR)
     oToR = argmax(ToR)
@@ -109,7 +112,7 @@ function regulation_scan(p; m=100, kR=0.5, kT=1.0, kG=-0.2, kE=0.0, kI=0.0, warm
     oEH = argmax(EH)
     oRI = argmax(RI)
     oGov = argmax(Gov)
-    return (; RR, WR, TR, ToR, GI, EH, RI, Gov=Gov ./ 100.0, r, oRR, oWR, oTR, oToR, oGI, oEH, oRI, oGov, sols, incdist, resources)
+    return (; RR, Rent, WR, TR, ToR, GI, EH, RI, Gov=Gov ./ 100.0, r, oRR, oRent, oWR, oTR, oToR, oGI, oEH, oRI, oGov, sols, incdist, resources)
 end
 
 function _metric_state(p, y)
@@ -200,7 +203,17 @@ function tradable_market_diagnostics(sol; index=max(1, length(sol.t) - 2))
     )
 end
 
-function incomes(x, p; summarize=false, dimensional::Bool=false)
+"""
+    incomes(x, p; summarize=false, dimensional=false, t=0.0)
+
+Decompose actor income in the common baseline numeraire. `resource_revenue`
+is retained harvest revenue; `resource_rent` subtracts forgone outside earnings
+(`opportunity_cost`). Rights transfers and state receipts are separate.
+Legacy `resource`, `wages`, `wages_0`, and `trade` fields remain available.
+Generic economic transformations describe changed outside returns/endowments
+unless explicit income hooks specify a different dimensional mechanism.
+"""
+function incomes(x, p; summarize=false, dimensional::Bool=false, t=0.0)
     # unpack state and parameters
     y = x[p.N+1]
     u_model = x[1:p.N]
@@ -217,8 +230,8 @@ function incomes(x, p; summarize=false, dimensional::Bool=false)
         u_model
     end
 
-    # resource income with optional policy-provided factor
-    rf = hasproperty(p, :resource_factor_fun) ? p.resource_factor_fun(x, p, 0.0) : 1.0
+    # Retained harvest revenue, before subtracting the opportunity cost.
+    rf = hasproperty(p, :resource_factor_fun) ? p.resource_factor_fun(x, p, t) : 1.0
     resource_factor = rf isa Number ? fill(rf, p.N) : rf
     resource_nd = u .* y .* resource_factor
 
@@ -227,23 +240,27 @@ function incomes(x, p; summarize=false, dimensional::Bool=false)
     # and keep market-related revenue in the extra (trade) component.
     μ = pol isa ProtectedArea ?
         (hasproperty(p.ū, :data) ? p.ū.data : p.ū) :
-        p.limit(x, p, 0.0)
+        p.limit(x, p, t)
 
     use_baseline_cost = (pol isa TradableUseRights) ||
                         (pol isa ExclusiveUseRights) ||
                         (pol isa ProtectedArea) ||
                         (pol isa ProtectedAreaTwoPop)
 
-    γw = if use_baseline_cost && hasproperty(p, :w̃)
+    # A decision wedge (for example a royalty) need not change outside earnings.
+    γw = if hasproperty(p, :income_cost_fun)
+        p.income_cost_fun(x, p, t)
+    elseif use_baseline_cost && hasproperty(p, :w̃)
         hasproperty(p.w̃, :data) ? p.w̃.data : p.w̃
     else
-        p.cost(x, p, 0.0)
+        p.cost(x, p, t)
     end
     wages_nd = (μ .- u) .* γw
     wages_0_nd = μ .* γw
 
     # optional additional income component provided by policy
-    extra_nd = hasproperty(p, :income_extra_fun) ? p.income_extra_fun(x, p, 0.0) : zeros(p.N)
+    extra_nd = hasproperty(p, :income_extra_fun) ? p.income_extra_fun(x, p, t) : zeros(p.N)
+    state_nd = hasproperty(p, :income_state_fun) ? p.income_state_fun(x, p, t) : zeros(p.N)
 
     total_nd = resource_nd .+ wages_nd .+ extra_nd
     g = gini(total_nd)
@@ -260,11 +277,20 @@ function incomes(x, p; summarize=false, dimensional::Bool=false)
         resource, wages, wages_0, extra, total = resource_nd, wages_nd, wages_0_nd, extra_nd, total_nd
     end
 
-    out = (; resource, wages, extra, trade=extra, total, gini=g, ecological, wages_0)
+    state_revenue = state_nd .* (dimensional ? p.rpk : 1.0)
+    opportunity_cost = u .* γw .* (dimensional ? p.rpk : 1.0)
+    resource_rent = resource .- opportunity_cost
+    rights_transfer = pol isa TradableUseRights ? extra : zeros(p.N)
+    other_income = pol isa TradableUseRights ? zeros(p.N) : extra
+    out = (; resource, wages, extra, trade=extra, total, gini=g, ecological, wages_0,
+        resource_revenue=resource, gross_resource_revenue=resource .+ state_revenue,
+        resource_rent, opportunity_cost, outside_income=wages, outside_income_0=wages_0,
+        rights_transfer, other_income, state_revenue,
+        net_resource_rent=resource_rent .+ rights_transfer)
     return summarize ? merge(out, (; g=g, ecological=ecological)) : out
 end
 
-incomes(sol::ODESolution) = incomes(sol.u[end], sol.prob.p)
+incomes(sol::ODESolution; t=sol.t[end], kwargs...) = incomes(sol.u[end], sol.prob.p; t, kwargs...)
 
 function gini(x)
     sum([abs(x[i] - x[j]) for i in 1:length(x), j in 1:length(x)]) / (2 * length(x) * sum(x))

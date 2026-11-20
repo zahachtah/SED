@@ -6,7 +6,7 @@ Policies are Julia types that subtype `AbstractPolicy`. A policy can transform:
 - `limit`: the actor impact-potential vector.
 - `dynamics`: additional state equations, such as a rights price.
 - `regulate`: scenario parameters at a policy intensity `f`.
-- income hooks: resource-income factors or transfers.
+- income hooks: resource-income factors, outside returns, or transfers.
 
 For every policy, regulation level `f=0` is the mathematical open-access
 boundary: policy transformations and any auxiliary coupling to the baseline
@@ -123,6 +123,19 @@ EconomicIncentives([:cost], :additive)
 EconomicIncentives([:limit], :multiplicative)
 ```
 
+`incomes` uses `income_cost_fun(x, p, t)`, when supplied, as the outside-return
+coefficient instead of the decision threshold. For example, a proportional
+royalty can raise the decision threshold while keeping this coefficient equal
+to the original `w̃`; `resource_factor_fun` then applies the retained-price
+factor `1 - rho`. State receipts are not implicitly returned to actors.
+Record receipts with `income_state_fun(x,p,t)`; the function returns one
+non-dimensional receipt per actor. `incomes` exposes retained revenue,
+opportunity cost, resource rent, outside earnings, rights transfers, and state
+receipts separately. Its legacy `resource` field is revenue, not rent.
+The Figure 4 scenarios implement and test this explicit accounting. A literal
+efficiency increase jointly lowers thresholds and raises impact potentials,
+preserving zero-harvest outside income when physical effort is unchanged.
+
 Targets can include `:cost`/`:incentives` or `:limit`/`:impact`. Methods are
 generic additive or multiplicative transformations, with `:taxation` using the
 opposite multiplicative direction.
@@ -131,6 +144,11 @@ This policy is a reduced-form geometry tool. It does not, by itself, guarantee
 the exact dimensional identities for a proportional royalty, gear subsidy, or
 outside-income intervention. Derive a study-specific policy type when the
 causal interpretation matters.
+
+In `regulation_scan`, `RR` and the legacy weight `kR` still refer to retained
+revenue for compatibility. `Rent` and `oRent` expose resource rent and its
+sampled maximum. Set `kR=0` and `kRent` to the desired exponent to weight rent.
+The browser's resource objective and indicator use resource rent.
 
 ## Experimental Policies
 
@@ -158,9 +176,11 @@ Warm starts:
 - `:oa_once`: initialize every policy point from one open-access solution.
 - any other value: cold starts.
 
-The governance score is a Cobb-Douglas product of resource income, total
-income, Gini, ecology, and behavioral policy impact. Exponents are analysis
-choices, not model parameters, and should be reported.
+The governance score is a Cobb-Douglas product of retained harvest revenue
+(`kR`), resource rent (`kRent`), total income, Gini, ecology, and behavioral
+policy impact. Choose revenue or rent explicitly rather than treating them
+as synonyms. Exponents are analysis choices, not model parameters, and should
+be reported.
 
 ## Adding a Policy
 

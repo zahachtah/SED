@@ -4,12 +4,13 @@
     const $ = id => document.getElementById(id);
     const copy = x => JSON.parse(JSON.stringify(x));
     let p = copy(SEDModel.defaults), draft = copy(SEDModel.causalDefaults);
-    let data = null, worker = null, timer = null, lastKey = "", openKey = "", job = 0, toastTimer, tourStep = -1;
+    const runner = createSEDRunner();
+    let data = null, timer = null, lastKey = "", openKey = "", job = 0, toastTimer, tourStep = -1;
     let lastFocus = null;
     const escape = s => String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
     const number = x => Number.isFinite(x) ? (Math.abs(x)>0&&Math.abs(x)<.01?x.toPrecision(2):x.toFixed(2)) : "—";
     const percentKeys = new Set(["exclusion","protected","tourism","royalty","gear","effort","outside"]);
-    const displayKeys = new Set(["spacing","view","densities","path","incomeSort","logIncome","weights"]);
+    const displayKeys = new Set(["spacing","view","densities","path","incomeSort","incomeView","logIncome","weights"]);
     const policyNames = {none:"Open access",access:"Exclusive use rights",rights:"Tradable use rights",pa:"Protected area",economic:"Economic instruments"};
 
     const examples = {
@@ -32,7 +33,7 @@
         access: `<p>A use right R<sub>i</sub> is a permitted amount of use, distinct from physical impact potential ū<sub>i</sub>. Sanctions apply to use exceeding that right.</p><div class="equation">v<sub>i</sub> = u<sub>i</sub>y + (ū<sub>i</sub> − u<sub>i</sub>)θ<sub>i</sub><br>− S max(0, u<sub>i</sub> − R<sub>i</sub>)</div><p>This companion shows the paper's <strong>binary, strong-sanction case</strong>: selected actors have R<sub>i</sub> = 0, while others may use their full potential. With S = 1 and nonnegative thresholds, excluded actors cannot gain from harvesting on 0 ≤ y ≤ 1. Numerically their threshold is shifted by one.</p><p>Excluding the same number of high-threshold or low-threshold actors need not remove the same amount of impact. Both curves are calculated from the adjusted population, with all actors retained in the participation denominator.</p>`,
         rights: `<p>The total quota Q is preallocated as use rights R<sub>i</sub>. It can cap <strong>effort</strong> z<sub>i</sub> = u<sub>i</sub> or <strong>catch</strong> z<sub>i</sub> = yu<sub>i</sub>. Users who need additional rights pay; holders of unused rights receive income.</p><div class="equation">v<sub>i</sub> = u<sub>i</sub>y + (ū<sub>i</sub> − u<sub>i</sub>)θ<sub>i</sub><br>+ (R<sub>i</sub> − z<sub>i</sub>)φ<br><small>∑R<sub>i</sub> = Q, &nbsp; dφ/dτ = 0.05(∑z<sub>i</sub> − Q), &nbsp; φ ≥ 0</small></div><p>For effort rights the price adds φ to exit thresholds. For catch rights the marginal return is y(1 − φ) − θ<sub>i</sub>. The market price is an integrated state variable, not a fitted shift or a precomputed equilibrium price.</p><h3>Who initially owns the rights?</h3><p>Equal allocation gives Q/N to every actor. Historical allocation gives Q/n<sup>OA</sup> equally to actors with positive open-access use, and zero to others. History determines eligibility, not the size of each recipient's allocation.</p><p>At a binding equilibrium, total rights use equals Q and transfers sum to zero. Open the convergence details to inspect both residuals. The maximum displayed quota is the unregulated boundary, so the equations reduce to open access there.</p>`,
         pa: `<p>A protected share f reduces access to harvesting. Mobility m allows resource spillover from the protected area into the exploited area. A tourism benefit can additionally raise outside returns.</p><div class="equation">θ<sub>i</sub><sup>PA</sup> = (1 + t)θ<sub>i</sub> / (1 − f)<br><small>y<sub>p</sub> = [(1 − m) + √((1 − m)² + 4my)] / 2<br>h(y) = [f/(1 − f)] m(y<sub>p</sub> − y)/y<br>κ(y) = (1 − y) / [1 − y + h(y)]<br>ū<sub>i</sub><sup>PA</sup>(y) = κ(y)ū<sub>i</sub></small></div><p>The one-resource model uses ecological-equivalent use, scaled by κ, to reproduce the equilibrium balance of the protected/exploited-patch model. <strong>Income uses physical effort and the original effort endowment.</strong> The ecological scaling does not destroy an actor's time or gear.</p><p>At f = 0 the policy becomes open access. This is the tested quasi-steady spatial reduction; the explicit two-patch transient model remains in the Julia package.</p>`,
-        economic: `<p>Dimensional mechanisms must be transformed together. A royalty ρ reduces retained price; gear support changes harvesting efficiency q; time or seasonal constraints change feasible effort; outside opportunities also include outside constraints.</p><div class="equation">θ<sub>i</sub><sup>*</sup> = θ<sub>i</sub> (1 + w) / [(1 − ρ)(1 + g)]<br>ū<sub>i</sub><sup>*</sup> = ū<sub>i</sub> (1 + g)(1 + e)</div><p>Here g is the proportional change in efficiency, e the change in effort endowment, and w the change in feasible outside returns. A literal efficiency increase <strong>lowers thresholds and raises impact potential simultaneously</strong>. An effort change isolates the impact channel.</p><p>Income is reported in the original common numeraire pKr: resource income is (1 − ρ)u<sub>i</sub>y, and outside income uses θ<sub>i</sub>(1 + w)/(1 + g). Royalty proceeds leave actor income and are not silently redistributed. The behavioral response rate is held at the selected α<sub>i</sub>.</p>`
+        economic: `<p>Dimensional mechanisms must be transformed together. A royalty ρ reduces retained price; gear support changes harvesting efficiency q; time or seasonal constraints change feasible effort; outside opportunities also include outside constraints.</p><div class="equation">θ<sub>i</sub><sup>*</sup> = θ<sub>i</sub> (1 + w) / [(1 − ρ)(1 + g)]<br>ū<sub>i</sub><sup>*</sup> = ū<sub>i</sub> (1 + g)(1 + e)</div><p>Here g is the proportional change in efficiency, e the change in effort endowment, and w the change in feasible outside returns. A literal efficiency increase <strong>lowers thresholds and raises impact potential simultaneously</strong>. An effort change isolates the impact channel.</p><p>Income is reported in the original common numeraire pKr. Retained harvest revenue is (1 − ρ)u<sub>i</sub>y; resource rent subtracts forgone outside earnings, u<sub>i</sub>θ<sub>i</sub>(1 + w)/(1 + g). Actual outside earnings use the remaining effort and that same outside-return coefficient. Royalty proceeds leave actor income and are not silently redistributed. The behavioral response rate is held at the selected α<sub>i</sub>.</p>`
     };
 
     const tours = [
@@ -40,14 +41,14 @@
         ["populationSection","The pairing matters","The two marginal distributions are not the whole population. Pairing determines whether high-impact actors have low thresholds and remain active in a depleted resource, or high thresholds and exit sooner.","Move the pairing control between negative and positive values, then switch the plot to Actors."],
         ["phaseCanvas","Find the balance","Orange counts willing actors. Dashed blue asks how many actors, ordered by threshold, would supply the pressure that balances renewal. Their crossing predicts the attractor; the point is the numerical simulation endpoint.","Hover over the balance plot to compare the two shares at any resource density."],
         ["policySection","Introduce a policy","Each intervention is simulated from the same population's open-access attractor. Grey curves retain the baseline. The outcome strip reports policy values, with signed changes relative to open access.","Choose tradable use rights and change the quota, then change who initially holds the rights."],
-        ["incomeCanvas","Follow the income","Active actors have a lighter outside-opportunity component and a darker resource surplus. Exited actors earn alternative income, shown in grey. Rights transfers can add income or create a negative payment.","Order by exit threshold to connect activity with actor position, or by total income to read inequality."],
+        ["incomeCanvas","Follow the income","Darker bars show resource rent: retained harvest revenue minus forgone outside earnings. Lighter bars show that opportunity cost; grey shows actual outside earnings, including for partially active actors. Rights transfers are separate payments or receipts.","Order by exit threshold to connect activity with actor position, or by total income to read inequality."],
         ["causalButton","Build the distributions from social conditions","The joint threshold–impact distribution can be derived rather than imposed. Health, gendered access, care responsibilities, and capital affect w, q, and feasible effort for the same actors.","Open the population builder. Change one pathway, inspect the joint distribution, then use that population in the simulation."]
     ];
 
     function icons() { window.lucide?.createIcons(); }
     function status(text, state="ready") { $("runStatus").textContent=text;$("statusButton").dataset.state=state; }
     function toast(text) {$("toast").textContent=text;$("toast").hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$("toast").hidden=true,3500);}
-    function populationKey(q) { return JSON.stringify([q.n,q.seed,q.alpha,q.solver,q.thresholdSampling,q.impactSampling,q.meanTheta,q.thetaSpread,q.totalImpact,q.impactSpread,q.correlation,q.populationMode,q.causal,q.records]); }
+    const populationKey = SEDModel.populationKey;
     function physicsKey(q) {return JSON.stringify(Object.fromEntries(Object.entries(q).filter(([key])=>!displayKeys.has(key))));}
     function controls() {
         for(const node of document.querySelectorAll("[data-param]")) {
@@ -62,9 +63,11 @@
         }
         document.querySelectorAll("[data-sampling]").forEach(b=>b.setAttribute("aria-pressed",String(p[b.dataset.sampling]===b.dataset.value)));
         document.querySelectorAll("[data-view]").forEach(b=>b.setAttribute("aria-pressed",String(p.view===b.dataset.view)));
+        document.querySelectorAll("[data-income-view]").forEach(b=>b.setAttribute("aria-pressed",String(p.incomeView===b.dataset.incomeView)));
         document.querySelectorAll("[data-policy]").forEach(n=>n.hidden=n.dataset.policy!==p.policy);
         document.querySelectorAll("[data-economic]").forEach(n=>n.hidden=p.economicMode!=="combined"&&n.dataset.economic!==p.economicMode);
         $("policyMode").hidden=p.policy==="none";$("scanOptions").hidden=!p.scan;
+        document.querySelector(".workspace").classList.toggle("is-scanning",p.scan);
         $("instrumentButton").setAttribute("aria-pressed",String(!p.scan));$("scanButton").setAttribute("aria-pressed",String(p.scan));
         document.querySelectorAll(".scan-bound").forEach(n=>n.hidden=p.scan);
         $("quota").max=p.target==="yield"?.5:1;
@@ -75,67 +78,64 @@
         $("populationCount").textContent=`${p.populationMode==="imported"?p.records.length:p.n} actors · ${p.populationMode==="direct"?(p.thresholdSampling===p.impactSampling?p.thresholdSampling:"mixed"):p.populationMode}`;
         $("baselineKey").hidden=p.policy==="none"||p.scan;
         $("tradeKey").hidden=p.policy!=="rights"||p.scan;
-        $("incomeKey").hidden=p.scan;
+        $("incomeKey").hidden=p.scan||p.incomeView==="change";
+        $("incomeChangeKey").hidden=p.scan||p.incomeView!=="change";
         document.querySelector(".income-tools").hidden=p.scan;
         document.querySelector(".check-tools").hidden=p.scan;
-        document.querySelector(".view-switch").hidden=p.scan;
+        document.querySelector(".phase-section .view-switch").hidden=p.scan;
     }
 
     function render() {
         controls(); if(!data)return;
         const scan=p.scan&&data.scan;
+        const incomeChange=p.incomeView==="change";
         $("phaseTitle").textContent=scan?"Who stays as policy changes?":p.view==="actors"?"The actors behind the curves":"Where does the resource settle?";
-        $("incomeTitle").textContent=scan?"How do the outcomes compare?":"Who harvests, and who gains?";
-        $("incomeFootnote").textContent=scan?"Every scan point starts from the same open-access attractor. Goals use the stored outcomes.":p.policy!=="none"?"The grey income line is open access. In threshold order it follows the same actor identities.":"The lighter part of a harvester's bar is the income they could earn outside the resource.";
+        $("incomeTitle").textContent=scan?"How do the outcomes compare?":incomeChange?"Who gains, and who loses?":"Who harvests, and who gains?";
+        $("incomeFootnote").textContent=scan?"Every scan point starts from the same open-access attractor. Goals use the stored outcomes.":incomeChange?(p.policy==="none"?"Open access is the reference: every actor's income change is zero.":"Each bar is the same actor's total income minus their open-access income."):"Resource rent is retained harvest revenue minus opportunity cost. Grey bars are actual outside earnings."+(p.policy!=="none"?" The grey line is open access.":"");
+        $("incomeCanvas").setAttribute("aria-label",scan?"Outcomes across policy strength":incomeChange?"Actor income changes relative to open access":"Actor incomes at the attractor");
+        document.querySelector('[data-canvas="incomeCanvas"]').setAttribute("aria-label",scan?"Download the policy outcomes figure":incomeChange?"Download the income change figure":"Download the income distribution figure");
         $("phaseCanvas").setAttribute("aria-label",scan?"Participation across policy strength":p.view==="actors"?"Individual actors by exit threshold and impact potential":"Participation and sustainable participation by resource density");
         const r=data.policy;
         const takeaway=scan?`${data.scan.filter(x=>x.result.converged).length} of ${data.scan.length} scan points met the convergence criterion.`:p.view==="actors"?"Each point is an actor. Its position preserves the pairing of exit threshold and impact potential.":`At ${r.converged?"equilibrium":"the current endpoint"}, resource density is ${r.y.toFixed(2)} and ${(r.participation*100).toFixed(0)}% of full-use actor equivalents participate.`;
         $("phaseTakeaway").lastElementChild.textContent=r.boundary&&!scan?"The trajectory approaches a depleted-resource boundary; an interior curve crossing does not describe this case.":takeaway+(!scan&&p.view==="balance"&&p.densities?" Bars: threshold shares (orange), impact mass by ordered actor rank (blue).":"");
         $("outcomesHeading").textContent=scan?"Policy scan":p.policy==="none"?"At the attractor":"Policy outcome · change from open access";
-        $("comparisonLabel").textContent=scan?"Goal maximum highlighted":"Non-dimensional units";
-        const metrics=[["Resource density","y"],["Participation","participation"],["Total pressure","pressure"],["Resource income","resource"],["Total income","total"],["Income Gini","inequality"],["Policy impact","policyImpact"]];
+        $("comparisonLabel").textContent=scan?"At the weighted-goal maximum":"Non-dimensional units";
+        const metrics=[["Resource density","y"],["Participation","participation"],["Total pressure","pressure"],["Resource rent","resourceRent"],["Total income","total"],["Income Gini","inequality"],["Policy impact","policyImpact"]];
         const best=scan?data.scan[SEDModel.scoreRows(data.scan,p.weights).indexOf(1)].result:r;
         $("metrics").innerHTML=metrics.map(([title,key])=> {
             const v=best[key],open=data.open[key],diff=(v??0)-(open??0),isShare=key==="participation";
             const value=v===null?"—":isShare?`${Math.round(v*100)}%`:number(v);
             const delta=p.policy!=="none"?`<span class="metric-delta ${diff>1e-6?"positive":diff< -1e-6?"negative":"zero"}">(${diff>=0?"+":""}${isShare?`${Math.round(100*diff)}pp`:number(diff)})</span>`:"";
-            return `<div class="metric" title="${escape(title)}${key==="participation"?": full-use equivalents as a share of all actors":key==="policyImpact"?": sum of absolute use changes relative to open access":""}"><div class="metric-label">${title}</div><div class="metric-value">${value}${delta}</div></div>`;
+            return `<div class="metric" title="${escape(title)}${key==="participation"?": full-use equivalents as a share of all actors":key==="policyImpact"?": sum of absolute use changes relative to open access":key==="resourceRent"?": retained harvest revenue minus forgone outside earnings, before rights transfers":""}"><div class="metric-label">${title}</div><div class="metric-value">${value}${delta}</div></div>`;
         }).join("");
         const mTheta=SEDModel.moments(r.actors.map(a=>a.effectiveTheta)),mImpact=SEDModel.moments(r.actors.map(a=>a.effectivePotential));
         $("distributionStats").innerHTML=`<span class="threshold-text">Threshold mean / median / variance &nbsp; ${number(mTheta.mean)} / ${number(mTheta.median)} / ${number(mTheta.variance)}</span><span class="impact-text">Impact mean / median / variance &nbsp; ${number(mImpact.mean)} / ${number(mImpact.median)} / ${number(mImpact.variance)}</span>`;
-        $("marketSummary").hidden=p.policy!=="rights";
-        $("marketSummary").textContent=`Rights price φ = ${number(r.price)} · Quota used ${number(r.quotaUse)} / ${number(p.quota)}`;
+        $("marketSummary").hidden=p.policy!=="rights"&&!(p.policy==="economic"&&p.royalty>0);
+        $("marketSummary").textContent=p.policy==="rights"?`Rights price φ = ${number(r.price)} · Quota used ${number(r.quotaUse)} / ${number(p.quota)}`:`State receipts ${number(r.stateRevenue)} · Not redistributed to actors`;
         SEDPlots.render(data,p);
         window.__lastModelResult=data;
     }
 
     function simulate() {
         controls();const key=physicsKey(p);
-        if(data&&key===lastKey) {render();return;}
-        clearTimeout(timer);const id=++job;status("Updating simulation","running");
-        timer=setTimeout(()=> {
-            worker?.terminate();const current=copy(p),pk=populationKey(current);
+        clearTimeout(timer);const id=++job;runner.cancel();
+        const completed=result=> {
+            const complete=result.open.converged&&result.policy.converged&&(!result.scan||result.scan.every(r=>r.result.converged));
+            status(complete?(result.policy.boundary?"Resource depleted":"Equilibrium reached"):"Convergence details",complete?"ready":"warning");render();
+        };
+        if(data&&key===lastKey) {completed(data);return;}
+        status("Updating simulation","running");
+        timer=setTimeout(async()=> {
+            const current=copy(p),pk=populationKey(current);
             const cached=data&&pk===openKey?data.open:null;
-            const completed=result=> {
-                if(id!==job)return;
-                data=result;lastKey=key;openKey=pk;
-                const complete=result.open.converged&&result.policy.converged&&(!result.scan||result.scan.every(r=>r.result.converged));
-                status(complete?(result.policy.boundary?"Resource depleted":"Equilibrium reached"):"Convergence details",complete?"ready":"warning");render();
-            };
             try {
-                const source=`const M=(${createSEDModel.toString()})();onmessage=e=>{try{const data=M.run(e.data.p,e.data.open,s=>postMessage({progress:s}));postMessage({data});}catch(error){postMessage({error:error.message});}};`;
-                const url=URL.createObjectURL(new Blob([source],{type:"application/javascript"}));
-                worker=new Worker(url);URL.revokeObjectURL(url);
-                worker.onmessage=e=> {
+                const result=await runner.run(current,cached,s=> {
                     if(id!==job)return;
-                    if(e.data.error){status("Simulation needs attention","error");toast(e.data.error);return;}
-                    if(e.data.progress) {
-                        const s=e.data.progress;status(s.stage==="scan"?`Scanning ${s.completed} / ${s.total}`:s.stage==="open"?"Finding open access":"Applying policy","running");
-                    }else if(e.data.data)completed(e.data.data);
-                };
-                worker.onerror=()=>{if(id===job){status("Running on main thread","running");setTimeout(()=>completed(SEDModel.run(current,cached)),0);}};
-                worker.postMessage({p:current,open:cached});
-            }catch(error) {completed(SEDModel.run(current,cached));}
+                    status(s.stage==="fallback"?"Running on main thread":s.stage==="scan"?`Scanning ${s.completed} / ${s.total}`:s.stage==="open"?"Finding open access":"Applying policy","running");
+                });
+                if(!result||id!==job)return;
+                data=result;lastKey=key;openKey=pk;completed(result);
+            }catch(error) {if(id===job){status("Simulation needs attention","error");toast(error.message);}}
         },50);
     }
 
@@ -221,6 +221,7 @@
         }
         for(const node of document.querySelectorAll("select[data-param]"))if(![...node.options].some(o=>o.value===merged[node.dataset.param]))throw Error(`Unknown ${node.dataset.param}.`);
         for(const key of ["thresholdSampling","impactSampling"])if(!["ordered","random"].includes(merged[key]))throw Error("Unknown sampling mode.");
+        if(!["levels","change"].includes(merged.incomeView))throw Error("Unknown income view.");
         if(!["direct","causal","imported"].includes(merged.populationMode))throw Error("Unknown population mode.");
         if(merged.causal) {
             const c=merged.causal;
@@ -251,6 +252,7 @@
     document.querySelectorAll("[data-param]").forEach(node=>node.addEventListener("input",()=>change(node.dataset.param,node.type==="checkbox"?node.checked:node.tagName==="SELECT"?node.value:Number(node.value))));
     document.querySelectorAll("[data-sampling]").forEach(node=>node.onclick=()=>change(node.dataset.sampling,node.dataset.value));
     document.querySelectorAll("[data-view]").forEach(node=>node.onclick=()=>change("view",node.dataset.view));
+    document.querySelectorAll("[data-income-view]").forEach(node=>node.onclick=()=>change("incomeView",node.dataset.incomeView));
     $("examplesMenu").innerHTML=Object.entries(examples).map(([key,ex])=>`<button class="example-choice" data-example="${key}"><strong>${ex.title}</strong><span>${ex.subtitle}</span></button>`).join("");
     document.querySelectorAll("[data-example]").forEach(b=>b.onclick=()=>loadExample(b.dataset.example));
     $("examplesButton").onclick=()=>{const open=$("examplesMenu").hidden;$("examplesMenu").hidden=!open;$("examplesButton").setAttribute("aria-expanded",String(open));};
@@ -281,13 +283,13 @@
     $("resetButton").onclick=()=>{p=copy(SEDModel.defaults);history.replaceState(null,"",location.pathname+location.search);simulate();toast("Restored the initial population and open access");};
     $("exportButton").onclick=()=>{dialog("Keep the experiment",`<p>Save a reproducible scenario or the complete actor outcomes. Everything is generated locally in your browser.</p><div class="action-list"><button id="downloadScenario"><i data-lucide="file-json"></i>Scenario, parameters &amp; realized population (JSON)</button><button id="downloadActors"><i data-lucide="table-2"></i>Actor records &amp; income components (CSV)</button><button id="uploadScenario"><i data-lucide="upload"></i>Import a saved scenario or actor population</button></div>`);$("downloadScenario").onclick=exportScenario;$("downloadActors").onclick=exportActors;$("uploadScenario").onclick=()=>$("importFile").click();};
     $("importFile").onchange=async e=>{try{const doc=JSON.parse(await e.target.files[0].text());const parameters=doc.parameters||doc;p=validate(doc.realizedPopulation?{...parameters,records:doc.realizedPopulation,populationMode:"imported"}:parameters);closeDialog();simulate();toast("Scenario imported with its realized actor population");}catch(error){toast(`Could not import: ${error.message}`);}e.target.value="";};
-    document.querySelectorAll(".save-plot").forEach(b=>b.onclick=()=>{const c=$(b.dataset.canvas),a=document.createElement("a");a.download=`SED_${b.dataset.canvas==="phaseCanvas"?"resource_balance":"income_distribution"}.png`;a.href=c.toDataURL("image/png");a.click();});
-    const goals={resource:"Resource income",total:"Total income",gini:"Gini",ecology:"Resource density",impact:"Policy impact"};
+    document.querySelectorAll(".save-plot").forEach(b=>b.onclick=()=>{const c=$(b.dataset.canvas),a=document.createElement("a");a.download=`SED_${b.dataset.canvas==="phaseCanvas"?"resource_balance":p.incomeView==="change"?"income_change":"income_distribution"}.png`;a.href=c.toDataURL("image/png");a.click();});
+    const goals={resource:"Resource rent",total:"Total income",gini:"Gini",ecology:"Resource density",impact:"Policy impact"};
     $("goalWeights").innerHTML=Object.entries(goals).map(([k,label])=>`<label class="control"><span>${label} exponent</span><output id="weight-${k}-value">${p.weights[k].toFixed(2)}</output><input data-weight="${k}" type="range" min="-2" max="2" step="0.05" value="${p.weights[k]}"></label>`).join("");
     document.querySelectorAll("[data-weight]").forEach(n=>n.oninput=()=>{p.weights[n.dataset.weight]=+n.value;$("weight-"+n.dataset.weight+"-value").textContent=(+n.value).toFixed(2);n.style.setProperty("--progress",`${100*(+n.value+2)/4}%`);if(data)render();});
     for(const [canvasId,tooltipId]of [["phaseCanvas","phaseTooltip"],["incomeCanvas","incomeTooltip"]]) {
         const canvas=$(canvasId),tooltip=$(tooltipId);
-        canvas.onpointermove=e=>{const rect=canvas.getBoundingClientRect(),x=e.clientX-rect.left,y=e.clientY-rect.top,hit=SEDPlots.hit(canvas,x);if(!hit){tooltip.hidden=true;return;}tooltip.innerHTML=`<strong>${escape(hit.title)}</strong>`+hit.values.map(([k,v])=>`<p><span>${escape(k)}</span><b>${escape(v)}</b></p>`).join("");tooltip.hidden=false;tooltip.style.left=`${Math.max(0,Math.min(rect.width-tooltip.offsetWidth,x+15))}px`;tooltip.style.top=`${Math.max(0,Math.min(rect.height-tooltip.offsetHeight,y+8))}px`;};
+        canvas.onpointermove=e=>{const rect=canvas.getBoundingClientRect(),x=e.clientX-rect.left,y=e.clientY-rect.top,hit=SEDPlots.hit(canvas,x,y);if(!hit){tooltip.hidden=true;return;}tooltip.innerHTML=`<strong>${escape(hit.title)}</strong>`+hit.values.map(([k,v])=>`<p><span>${escape(k)}</span><b>${escape(v)}</b></p>`).join("");tooltip.hidden=false;tooltip.style.left=`${Math.max(0,Math.min(rect.width-tooltip.offsetWidth,x+15))}px`;tooltip.style.top=`${Math.max(0,Math.min(rect.height-tooltip.offsetHeight,y+8))}px`;};
         canvas.onpointerleave=()=>tooltip.hidden=true;
     }
     document.addEventListener("keydown",e=>{

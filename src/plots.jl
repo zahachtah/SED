@@ -50,19 +50,13 @@ function _rent_reallocation_arrow!(ax, trade_neg, trade_pos, wages_sorted, resou
     start = Point2f(neg_i, 0.50 * trade_neg[neg_i])
     added_base = trade_neg[pos_i] + wages_sorted[pos_i] + resource_sorted[pos_i]
     stop = Point2f(pos_i, added_base + 0.50 * trade_pos[pos_i])
-    lift = max(abs(stop[2] - start[2]), maximum(trade_pos) - minimum(trade_neg), eps()) * 0.22
-    control = Point2f(0.50 * (start[1] + stop[1]), min(start[2], stop[2]) - lift)
-
-    ts = range(0.0, 1.0, length=42)
-    curve = [Point2f((1 - t)^2 * start[1] + 2 * (1 - t) * t * control[1] + t^2 * stop[1],
-        (1 - t)^2 * start[2] + 2 * (1 - t) * t * control[2] + t^2 * stop[2]) for t in ts]
     arrow_color = RGBAf(0.82, 0.12, 0.13, 0.92)
-    lines!(ax, curve; color=arrow_color, linewidth=3.0 * arrow_scale)
-    head_start = curve[max(1, length(curve) - 9)]
-    head_delta = Vec2f(stop[1] - head_start[1], stop[2] - head_start[2])
-    arrows2d!(ax, [head_start], [head_delta]; color=arrow_color,
-        shaftwidth=0.32 * arrow_scale, tipwidth=26 * arrow_scale,
-        tiplength=30 * arrow_scale)
+    width = 1.6 * arrow_scale
+    annotation!(ax, start[1], start[2], stop[1], stop[2];
+        text="", labelspace=:data, shrink=(0, 0),
+        path=Makie.Ann.Paths.Arc(height=-0.35),
+        style=Makie.Ann.Styles.LineArrow(head=Makie.Ann.Arrows.Head(length=4width)),
+        color=arrow_color, linewidth=width)
 
     return ax
 end
@@ -272,7 +266,7 @@ function incomes_plot!(ax, sol; order=false, sort_by_incentives=false, color=:da
     p = sol.prob.p
     x = state === nothing ? sol.u[end] : state
     t = time === nothing ? sol.t[end] : time
-    inc = incomes(x, p; dimensional)
+    inc = incomes(x, p; dimensional, t)
     res = inc.resource
     wage = inc.wages
     trd = inc.trade
@@ -290,7 +284,7 @@ function incomes_plot!(ax, sol; order=false, sort_by_incentives=false, color=:da
     end
 
     opportunity_color, net_color, _ = _income_bar_tints(color)
-    net_resource_income = total[idx] .- outside_only[idx]
+    net_resource_income = inc.resource_rent[idx]
     active = res .> 0.0
     show_rent_reallocation = rent_reallocation === nothing ? _tradable_policy(p) : rent_reallocation
 
@@ -306,19 +300,22 @@ function incomes_plot!(ax, sol; order=false, sort_by_incentives=false, color=:da
         trade_neg = min.(trade_sorted, 0.0)
         trade_pos = max.(trade_sorted, 0.0)
         wages_sorted = wage[idx]
-        resource_sorted = res[idx]
+        opportunity_sorted = inc.opportunity_cost[idx]
+        resource_sorted = inc.resource_rent[idx]
 
         barplot!(ax, trade_neg, color=trade_color, alpha=1.0)
-        barplot!(ax, wages_sorted, color=opportunity_colors, alpha=1.0,
+        barplot!(ax, wages_sorted, color=inactive_color, alpha=1.0,
             offset=trade_neg)
-        barplot!(ax, resource_sorted, color=net_colors, alpha=1.0,
+        barplot!(ax, opportunity_sorted, color=opportunity_colors, alpha=1.0,
             offset=trade_neg .+ wages_sorted)
+        barplot!(ax, resource_sorted, color=net_colors, alpha=1.0,
+            offset=trade_neg .+ wages_sorted .+ opportunity_sorted)
         barplot!(ax, trade_pos, color=trade_color, alpha=1.0,
-            offset=trade_neg .+ wages_sorted .+ resource_sorted)
+            offset=trade_neg .+ wages_sorted .+ opportunity_sorted .+ resource_sorted)
 
         if annotate_rent_reallocation
             _rent_reallocation_arrow!(ax, trade_neg, trade_pos, wages_sorted,
-                resource_sorted, trade_color; arrow_scale=rent_arrow_scale)
+                res[idx], trade_color; arrow_scale=rent_arrow_scale)
         end
         return ax
     end
@@ -335,10 +332,16 @@ function incomes_plot!(ax, sol; order=false, sort_by_incentives=false, color=:da
         net_colors = net_color
     end
 
-    barplot!(ax, outside_only[idx], color=opportunity_colors, alpha=1.0)
+    barplot!(ax, wage[idx], color=inactive_color, alpha=1.0)
+    barplot!(ax, inc.opportunity_cost[idx], color=opportunity_colors, alpha=1.0,
+        offset=wage[idx])
     if resource_incomes || any(abs.(net_resource_income) .> eps())
         barplot!(ax, net_resource_income, color=net_colors, alpha=1.0,
             offset=outside_only[idx])
+    end
+    if any(!iszero, inc.extra)
+        barplot!(ax, inc.extra[idx], color=trade_color, alpha=1.0,
+            offset=outside_only[idx] .+ net_resource_income)
     end
     if resource_incomes && show_active
         active_positions = findall(active[idx])
@@ -393,7 +396,8 @@ function dist_plot_compare(make::Function, N; title="", color=:steelblue)
 end
 
 function arrow_arc_deg!(ax, origin, radius, start_angle_deg, stop_angle_deg;
-    linewidth=1, color=:black, flip_arrow=false, linestyle=:dot, startarrow=false, space=:relative)
+    linewidth=1, color=:black, flip_arrow=false, linestyle=:dot, startarrow=false,
+    endarrow=true, space=:relative)
     deg2rad(θ_deg) = θ_deg * π / 180
     rad_start = deg2rad(90 - start_angle_deg)
     rad_stop = deg2rad(90 - stop_angle_deg)
@@ -420,7 +424,7 @@ function arrow_arc_deg!(ax, origin, radius, start_angle_deg, stop_angle_deg;
         color=color,
         shaftwidth=linewidth
     ) : nothing
-    arrows2d!(
+    endarrow && arrows2d!(
         ax,
         [point_on_circle_deg(stop_angle_deg)[1]],
         [point_on_circle_deg(stop_angle_deg)[2]],

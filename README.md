@@ -2,61 +2,75 @@
 
 ## Who exits, who extracts, who gains?
 
-Two communities can have the same average income and harvesting technology,
-yet very different resource futures. The difference can lie in **who has
-alternatives, who can exert the greatest impact, and how those advantages
-are paired**.
+**A distributional model of resource use and governance.**
 
-SED is a distributional social-ecological model for exploring that difference.
-It connects heterogeneous people to renewable-resource dynamics, policy
-outcomes, and the distribution of income.
+Two communities can have the same average incomes and harvesting technology,
+yet different resource futures. What matters is how outside opportunities and
+extraction potential are distributed, and **whether the actors with the greatest
+impact are the first to leave or the last to remain**.
 
-**[Explore the interactive companion](https://zahachtah.github.io/SED/)** ·
-[Read the manuscript](manuscript/Science_MS_compact.pdf) ·
-[Read the supplement](SupplementaryMaterial/SED_Supplementary_Material.pdf)
+SED connects those differences to resource dynamics and the distribution of
+policy costs and benefits. This repository contains the Julia model, an
+interactive browser companion, and the sources and numerical records for the
+accompanying theoretical paper.
 
-The companion also runs entirely offline: download or clone this repository
-and open [`index.html`](index.html) in your browser. No installation, account,
-or server is needed.
+### Explore the Model
+
+**[Launch the interactive companion](https://zahachtah.github.io/SED/)**
+
+[Manuscript](manuscript/Science_MS_compact.pdf) ·
+[Supplementary material](SupplementaryMaterial/SED_Supplementary_Material.pdf) ·
+[Combined PDF](manuscript/Norberg_Anderies_Manuscript_and_Supplement.pdf)
 
 <!-- companion-screenshot -->
 [![Interactive SED companion: resource balance, policy controls, and income distributions](docs/assets/companion.png)](https://zahachtah.github.io/SED/)
 
-### Start With a Question
+The companion runs in your browser. No account, installation, or server is
+needed. For offline use, download the repository and open `index.html`.
+It makes no requests to a numerical backend and includes its own scripts,
+styles, and icons.
 
-- **Does inequality change the resource outcome?** Change the spread of exit
-  thresholds while keeping their mean fixed.
-- **Does it matter who has the best technology?** Reverse the pairing between
-  exit thresholds and impact potentials without changing either marginal
-  distribution.
-- **Who gains from a policy?** Compare resource recovery, participation, and
-  income under exclusive rights, tradable rights, protected areas, and
-  economic instruments. Scan policy intensity to see the trade-offs.
-- **Where do these distributions come from?** Open the population builder to
-  explore illustrative pathways from health, gendered access, care obligations,
-  and capital to outside opportunities, available time, and efficiency.
+### Questions to Try
 
-The population builder is a place to investigate hypotheses, not a calibrated
-claim about any social group. Empirical applications require context-specific
+- **Same averages, different outcomes:** change threshold heterogeneity while
+  keeping the mean fixed.
+- **Who has the impact?** Reverse the threshold-impact pairing while retaining
+  both marginal distributions, then compare the resource attractors.
+- **Same resource recovery, different beneficiaries:** compare equal and
+  historical use rights, and switch between income levels and income changes.
+- **How much policy?** Scan an instrument to compare ecological, income, and
+  inequality outcomes across its strength.
+- **Where do the distributions come from?** Open the population builder to
+  explore illustrative links from health, gendered access, care obligations,
+  and capital to time, efficiency, and outside opportunities.
+
+The population builder illustrates possible mechanisms; it is not an empirical
+claim about any social group. Applying it to a particular context requires
 data and defensible causal assumptions.
 
-## The Model in One Minute
+## How It Works
 
-Each actor has an **exit threshold**: the resource density below which outside
-opportunities become more attractive than harvesting. Each also has an
-**impact potential**: the maximum extraction pressure they can exert relative
-to resource renewal.
+Each actor has two non-dimensional quantities:
 
-At any resource density, the joint distribution tells us who is willing to
-harvest and how much pressure those actors can supply. The participation curve
-and the sustainable-participation curve describe the balance between extraction
-and renewal. Their crossing identifies the equilibrium resource density,
-including a partially active marginal actor when needed.
+| Quantity | Interpretation |
+| --- | --- |
+| Exit threshold, `θᵢ` | The resource density below which harvesting is no longer worthwhile. Outside opportunities can include constraints and obligations. |
+| Impact potential, `ūᵢ` | Maximum extraction pressure relative to ecological renewal. |
 
-The Julia package simulates the bounded actor dynamics and the resource
-directly. Policies can change thresholds, impact potentials, access, or the
-allocation of rents. The same population can therefore reveal both ecological
-outcomes and **who receives resource income and who relies on alternatives**.
+Ordering actors by exit threshold produces a **participation curve** and a
+**sustainable-participation curve**. One describes participation driven by
+harvesting incentives; the other gives the participation needed to balance
+resource renewal, using that same actor order. Their crossing determines the
+resource attractor, including partial activity by a marginal actor when needed.
+
+Two comparisons motivate the framework: changing the pairing can change the
+attractor without changing either marginal distribution; policies with the
+same resource outcome can distribute income very differently.
+
+The Julia package integrates actor use and resource dynamics directly. Policies
+change thresholds, impact potentials, access, or rent allocation. See the
+[model-to-paper crosswalk](docs/model-paper-crosswalk.md) for equations,
+notation, and implementation details.
 
 ## Run a Study in Julia
 
@@ -70,22 +84,22 @@ julia --project=. -e 'using Pkg; Pkg.instantiate(); Pkg.test()'
 using SED
 
 population = base(N=300)
-sample!(population; random=false)  # deterministic quantiles
-
+sample!(population; random=false)
 open_access = sim(population)
+
 rights = scenario(population;
-    policy=TradableUseRights(:effort, 0.05, 0.0, false))
+    policy="Tradable Use Rights", policy_target=:effort)
 managed = sim(rights; regulation=0.40, start_from_OA=true)
 
-incomes(managed)
+outcomes = incomes(managed)
 ```
 
-Here, `regulation=0.40` leaves an aggregate effort quota of `0.60`. Both runs
-use the same realized population, and the policy starts from its open-access
-attractor. Ordered quantiles are useful for controlled comparisons; seeded
-random samples describe finite-population variability.
+Here, `regulation=0.40` sets the aggregate effort quota to `0.60`.
+Both runs retain the same actor population; the policy begins at its open-access
+attractor. `random=false` uses deterministic ordered quantiles. For random
+studies, set and report an RNG seed before sampling.
 
-For publication-quality output:
+Plot the results with CairoMakie:
 
 ```julia
 using CairoMakie
@@ -97,42 +111,43 @@ incomes_plot!(Axis(fig[2, 1]), managed; order=true)
 save("outcomes.pdf", fig)
 ```
 
-## Find Your Way
+## Repository Map
 
-| Path | Purpose |
+| Directory | Contents |
 | --- | --- |
-| [`index.html`](index.html) | Self-contained interactive companion; also the Pages entry point. |
-| [`src/`](src/) | Julia model, distributions, policies, metrics, and plotting. |
+| [`src/`](src/) | Julia distributions, dynamics, policies, metrics, and plotting. |
 | [`test/`](test/) | Scientific regression tests. |
-| [`webapp/`](webapp/README.md) | Companion source, build instructions, and Julia-parity checks. |
-| [`manuscript/`](manuscript/README.md) | Current paper, four figure scripts, and final figure outputs. |
-| [`SupplementaryMaterial/`](SupplementaryMaterial/README.md) | Derivations, policy explainers, numerical records, and LaTeX source. |
-| [`docs/`](docs/README.md) | Model conventions, distributions, policy extension, and reproducibility. |
+| [`webapp/`](webapp/README.md) | Companion source, standalone build, and numerical/browser checks. |
+| [`manuscript/`](manuscript/README.md) | Submission PDF, combined PDF, main-figure scripts, and rendered figures. |
+| [`SupplementaryMaterial/`](SupplementaryMaterial/README.md) | SM PDF and LaTeX, figure generators, numerical results, and frozen source snapshot. |
+| [`docs/`](docs/README.md) | Model conventions, distributions, policies, and reproduction instructions. |
 
-**Reproduce the paper:** follow the [reproduction guide](docs/reproducibility.md).
-**Extend the model:** start with the [policy guide](docs/policies.md) and
-[custom policies](docs/custom_policies.md).
+Start with the [reproduction guide](docs/reproducibility.md) to regenerate the
+paper's figures. To design a new study, read the [distribution guide](docs/distributions.md)
+and [policy guide](docs/policies.md). Policies can be extended through
+[Julia dispatch](docs/custom_policies.md). [AGENTS.md](AGENTS.md) records the
+scientific conventions for AI-assisted work.
 
 ## Scientific Scope
 
-The manuscript and supplement define the scientific interpretation; the tested
-Julia implementation is the computational reference. The browser companion
-checks its main mechanisms against fixed-population Julia runs. Its
-[scientific contract](webapp/SCIENCE.md) explains sampling, accounting,
-convergence, and reduced-form assumptions.
+The paper and SM define the scientific interpretation; the tested Julia model
+is the computational reference. The companion is checked against fixed-population
+Julia runs. Its [scientific contract](webapp/SCIENCE.md) documents numerical
+convergence, accounting, sampling, and reduced-form assumptions.
 
 Exclusive rights use a binary strong-sanction specialization. Protected areas
-use a one-resource equilibrium reduction. Generic Julia economic transforms
-are not automatically literal gear subsidies or royalties; dimensional causal
-mechanisms must be mapped explicitly. Experimental development and two-patch
-workflows are not exposed in the companion.
+use a one-resource equilibrium reduction, not an exact reproduction of two-patch
+transients. Generic economic transforms require an explicit dimensional mapping
+before being interpreted as a particular royalty or gear subsidy. Experimental
+development and two-patch workflows are not exposed in the companion.
 
 ## Citation and License
 
-By John M. Anderies and Jon Norberg. Citation metadata is in
-[`CITATION.cff`](CITATION.cff). For reproducible studies, record the exact commit
-or release, the environment, population seed, policy settings, and convergence
-diagnostics. A manuscript DOI and archived release DOI can be added when issued.
+By Jon Norberg and John M. Anderies. Please cite the accompanying paper and
+identify the software version used; machine-readable metadata is in
+[`CITATION.cff`](CITATION.cff). Record the exact commit or source-snapshot
+identifier, Julia environment, population seed, policy settings, and convergence
+diagnostics. Publication and archived-release DOIs will be added when available.
 
-SED is available under the [MIT license](LICENSE). Bundled Lucide icons retain
-their [ISC license](webapp/vendor/lucide.LICENSE).
+SED uses the [MIT license](LICENSE). Bundled Lucide icons retain their
+[ISC license](webapp/vendor/lucide.LICENSE).

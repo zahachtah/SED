@@ -4,9 +4,7 @@ The publication entry point is the repository-root `index.html`, built from
 `webapp/`. It is entirely static and can also be opened directly from disk.
 There is no backend, tracking, build-time secret, or runtime CDN dependency.
 
-The intended project-site address is:
-
-https://zahachtah.github.io/SED/
+The project-site address is **[zahachtah.github.io/SED](https://zahachtah.github.io/SED/)**.
 
 ## Enable the Site
 
@@ -17,11 +15,18 @@ After the prepared files are committed and pushed:
 2. Run the **Publish companion** workflow from the Actions tab.
 3. Open the deployment URL once the workflow completes.
 
-The workflow publishes changes to the companion, its reading PDFs, or the
+The repository's default branch is `master`. The workflow publishes changes
+to the companion, its reading PDFs, or the
 deployment workflow when they reach `master`. It can also be run manually
 (`workflow_dispatch`). It rebuilds and tests the page and deploys only the
 HTML, manuscript PDF, and supplement PDF. Drafts, source code, and internal
 archives are not copied into the site. Repository visibility is not changed.
+
+The build job needs `contents: read` and `pages: read` so Configure Pages can
+inspect the site. The deploy job separately receives `pages: write` and
+`id-token: write`. If a previous run failed at Configure Pages, push the
+corrected workflow before retrying; making the repository public does not
+rerun a failed deployment automatically.
 
 GitHub also supports publishing directly from the root of a branch. The
 prepared workflow gives finer control over what is deployed. See
