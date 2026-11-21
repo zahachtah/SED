@@ -91,8 +91,8 @@ Actors with policy-adjusted thresholds above one are ineligible on the
 non-dimensional resource domain and are excluded from the maximum attainable
 share.
 
-Status: direct match to
-`SupplementaryMaterial/sections/03_participation_balance.tex`.
+Status: matches the accompanying derivation. Supplementary material is pending
+approval for public release.
 
 ## Attractor
 
@@ -111,7 +111,7 @@ from every positive-resource initial condition to the unique equilibrium
 resource density. If at most one actor is marginal, the full equilibrium is a
 globally asymptotically stable point; tied marginal actors produce a globally
 attracting set of allocations with the same resource density and total use.
-See `SupplementaryMaterial/sections/03_participation_balance.tex`. The proof
+The full proof is in the supplementary material (pending approval). It
 also covers fixed policy transformations of thresholds and limits, but not
 policies with additional dynamic states or resource-dependent limits.
 

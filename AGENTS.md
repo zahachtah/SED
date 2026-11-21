@@ -34,11 +34,18 @@ implementation interpolates within the marginal actor.
 
 When sources disagree, use this order:
 
-1. `manuscript/Science_MS_compact.pdf`, the latest author-approved typeset export.
-2. `SupplementaryMaterial/SED_Supplementary_Material.tex` and the files it includes.
+1. The latest author-approved manuscript, when available locally.
+2. The current supplementary material, when available locally.
 3. Tested model behavior in `src/`.
 4. Figure scripts in `manuscript/` and `SupplementaryMaterial/scripts/`.
 5. Historical prose and exploratory files in local ignored archives.
+
+The manuscript, supplementary prose, and rendered submission assets are
+**pending approval for public release**. Local copies are retained under
+`archive/pending-approval/`; they are not part of a fresh clone. Do not add
+those files to Git, publish them, or restore public download links without
+the author's approval. If a scientific change requires an unavailable paper
+section, ask the authors instead of inferring its contents.
 
 Do not silently resolve a scientific disagreement. Record the discrepancy,
 identify which source is being followed, and add a regression test before

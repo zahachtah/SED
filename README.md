@@ -18,9 +18,7 @@ accompanying theoretical paper.
 
 **[Launch the interactive companion](https://zahachtah.github.io/SED/)**
 
-[Manuscript](manuscript/Science_MS_compact.pdf) ·
-[Supplementary material](SupplementaryMaterial/SED_Supplementary_Material.pdf) ·
-[Combined PDF](manuscript/Norberg_Anderies_Manuscript_and_Supplement.pdf)
+Manuscript (pending approval) · Supplementary material (pending approval)
 
 <!-- companion-screenshot -->
 [![Interactive SED companion: resource balance, policy controls, and income distributions](docs/assets/companion.png)](https://zahachtah.github.io/SED/)
@@ -118,8 +116,8 @@ save("outcomes.pdf", fig)
 | [`src/`](src/) | Julia distributions, dynamics, policies, metrics, and plotting. |
 | [`test/`](test/) | Scientific regression tests. |
 | [`webapp/`](webapp/README.md) | Companion source, standalone build, and numerical/browser checks. |
-| [`manuscript/`](manuscript/README.md) | Submission PDF, combined PDF, main-figure scripts, and rendered figures. |
-| [`SupplementaryMaterial/`](SupplementaryMaterial/README.md) | SM PDF and LaTeX, figure generators, numerical results, and frozen source snapshot. |
+| [`manuscript/`](manuscript/README.md) | Main-figure source code and helpers. Manuscript and rendered figures pending approval. |
+| [`SupplementaryMaterial/`](SupplementaryMaterial/README.md) | Supplementary numerical and figure-generation code. Documents and submission assets pending approval. |
 | [`docs/`](docs/README.md) | Model conventions, distributions, policies, and reproduction instructions. |
 
 Start with the [reproduction guide](docs/reproducibility.md) to regenerate the
@@ -130,8 +128,8 @@ scientific conventions for AI-assisted work.
 
 ## Scientific Scope
 
-The paper and SM define the scientific interpretation; the tested Julia model
-is the computational reference. The companion is checked against fixed-population
+The manuscript and supplementary material are pending approval for release.
+The tested Julia model is the computational reference. The companion is checked against fixed-population
 Julia runs. Its [scientific contract](webapp/SCIENCE.md) documents numerical
 convergence, accounting, sampling, and reduced-form assumptions.
 
@@ -143,8 +141,9 @@ development and two-patch workflows are not exposed in the companion.
 
 ## Citation and License
 
-By Jon Norberg and John M. Anderies. Please cite the accompanying paper and
-identify the software version used; machine-readable metadata is in
+By Jon Norberg and John M. Anderies. Please cite the software and identify the
+version used while the accompanying paper is pending approval for release;
+machine-readable metadata is in
 [`CITATION.cff`](CITATION.cff). Record the exact commit or source-snapshot
 identifier, Julia environment, population seed, policy settings, and convergence
 diagnostics. Publication and archived-release DOIs will be added when available.

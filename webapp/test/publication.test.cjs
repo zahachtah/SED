@@ -40,10 +40,9 @@ async function filesIn(directory) {
     execFileSync(process.execPath, ["webapp/build.mjs", "--check", "--pages"],
         { cwd: root, stdio: "pipe" });
     const stage = path.join(root, "tmp/pages");
-    const expected = [".nojekyll", "index.html", "manuscript/Science_MS_compact.pdf",
-        "SupplementaryMaterial/SED_Supplementary_Material.pdf"].sort();
+    const expected = [".nojekyll", "index.html"].sort();
     const staged = (await filesIn(stage)).map(file => path.relative(stage, file)).sort();
-    assert.deepEqual(staged, expected, "Only the companion and two reading PDFs are published");
+    assert.deepEqual(staged, expected, "Only the companion is published pending document approval");
     for (const file of expected.filter(file => file !== ".nojekyll")) {
         assert.deepEqual(await fs.readFile(path.join(stage, file)), await fs.readFile(path.join(root, file)),
             `Published ${file} matches the repository copy`);
@@ -51,8 +50,8 @@ async function filesIn(directory) {
     const html = await fs.readFile(path.join(stage, "index.html"), "utf8");
     assert.doesNotMatch(html, /<script[^>]+src\s*=/i, "The standalone companion has no external scripts");
     assert.doesNotMatch(html, /<link[^>]+rel=["']stylesheet["']/i, "The stylesheet is embedded");
-    for (const file of expected.filter(file => file.endsWith(".pdf"))) {
-        assert.ok(html.includes(`href="${file}"`), `The companion links to ${file}`);
-    }
+    assert.ok(html.includes("Manuscript (pending approval)"));
+    assert.ok(html.includes("Supplementary material (pending approval)"));
+    assert.doesNotMatch(html, /href=["'][^"']*\.pdf(?:[?#][^"']*)?["']/i);
     console.log(`Publication checks passed: ${checked} local documentation links; standalone HTML; exact Pages allowlist.`);
 })().catch(error => { console.error(error); process.exitCode = 1; });

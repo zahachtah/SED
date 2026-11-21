@@ -72,5 +72,6 @@ thresholds above one are valid, and participation at `y=1` can remain below
 100%.
 
 For a full runnable example, see [Figure 2](../manuscript/figure2.jl).
-For the empirical interpretation, see Section S2 of the
-[supplement](../SupplementaryMaterial/SED_Supplementary_Material.pdf).
+The supplementary discussion of empirical interpretation is pending approval
+for release. Distribution construction and dependency behavior are covered by
+the public model tests.

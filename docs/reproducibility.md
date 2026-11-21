@@ -27,12 +27,11 @@ Each script can also be run independently with `julia --project=.`.
 Shared typography is in `manuscript/helpers/figure_style.jl`; Figure 3 also
 exposes its panel-specific sizes as constants at the top of its script.
 
-The submission manuscript, `manuscript/Science_MS_compact.pdf`, is the author's
-typeset export. Figure generation does not rewrite that PDF or update its prose.
-Word drafts and authoring utilities are kept separately from the public
-reproduction workflow so an older draft cannot be mistaken for the paper.
+The manuscript and rendered submission assets are pending approval for public
+release. Generators and tested helpers remain available; their outputs are
+ignored by Git. Author copies of the documents are retained locally.
 
-## 3. Rebuild the Supplement and Numerical Records
+## 3. Rebuild Supplementary Figures and Numerical Records
 
 ```sh
 julia --project=. SupplementaryMaterial/scripts/generate_figures.jl
@@ -41,11 +40,9 @@ julia --project=. SupplementaryMaterial/scripts/generate_reproducibility_outputs
 
 The second command writes the machine-readable verification table in
 `SupplementaryMaterial/results/`, including quota balance, price, and solver
-diagnostics. With a LaTeX installation, compile from the supplement directory:
-
-```sh
-latexmk -cd -pdf -interaction=nonstopmode -halt-on-error SupplementaryMaterial/SED_Supplementary_Material.tex
-```
+diagnostics. Generated results and figures are ignored by Git. The supplementary
+document and its LaTeX prose are pending approval and are not part of the
+public repository or the website build.
 
 ## 4. Verify the Browser Companion
 

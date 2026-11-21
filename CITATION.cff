@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-message: "Please cite the SED software and the accompanying manuscript, and identify the exact release or commit used."
+message: "Please cite the SED software and identify the exact release or commit used. The manuscript and supplementary material are pending approval for release."
 type: software
 title: "SED: A distributional social-ecological model of resource use and governance"
 authors:

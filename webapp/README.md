@@ -84,7 +84,9 @@ Lucide is bundled under its ISC license in `vendor/lucide.LICENSE`.
 
 See the [Pages guide](../docs/github-pages.md) for the manual publication
 workflow. `node webapp/build.mjs --check` checks for source/HTML drift;
-`--pages` stages only the companion and its two reading PDFs in `tmp/pages/`.
+`--pages` stages only the companion in `tmp/pages/`. Manuscript and
+supplementary material are pending approval; no paper PDF is deployed or
+required to build the website.
 The publication check also verifies local documentation links and confirms that
 drafts, private archives, and development files cannot enter that Pages bundle.
 

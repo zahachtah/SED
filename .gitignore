@@ -69,3 +69,15 @@ __pycache__/
 # Unsupported local history retained outside the shared repository
 /archive/
 /SupplementaryMaterial/archive/
+
+# Publication documents and rendered submission assets: pending approval.
+# Figure/model source code stays public; withheld files are kept in archive/.
+/manuscript/*.pdf
+/manuscript/*.docx
+/manuscript/figures/
+/SupplementaryMaterial/*.pdf
+/SupplementaryMaterial/*.tex
+/SupplementaryMaterial/sections/
+/SupplementaryMaterial/figures/
+/SupplementaryMaterial/results/
+/SupplementaryMaterial/reproducibility/

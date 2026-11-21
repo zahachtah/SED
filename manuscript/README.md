@@ -1,21 +1,17 @@
-# Manuscript and Main Figures
+# Main-Figure Source Code
 
-- [Submission manuscript](Science_MS_compact.pdf)
-- [Manuscript and supplementary material together](Norberg_Anderies_Manuscript_and_Supplement.pdf)
-- [Standalone supplementary material](../SupplementaryMaterial/SED_Supplementary_Material.pdf)
-
-The manuscript PDF is the author's typeset export of 19 November 2026. It is
-the paper's scientific reference. Earlier Word drafts and editorial worklists
-are retained in the local ignored archive, not distributed as competing versions.
+**Manuscript (pending approval).** The manuscript, combined PDF, and rendered
+submission figures are not distributed at present. Author copies are retained
+locally in the ignored archive. Do not restore them to Git without approval.
 
 ## Reproduce the Figures
 
-| Figure | Script | PDF |
-| --- | --- | --- |
-| 1: Exit readiness | [figure1.jl](figure1.jl) | [figure1.pdf](figures/figure1.pdf) |
-| 2: From heterogeneity to outcomes | [figure2.jl](figure2.jl) | [figure2.pdf](figures/figure2.pdf) |
-| 3: Distributional mechanisms | [figure3.jl](figure3.jl) | [figure3.pdf](figures/figure3.pdf) |
-| 4: Policy instruments | [figure4.jl](figure4.jl) | [figure4.pdf](figures/figure4.pdf) |
+| Figure | Script |
+| --- | --- |
+| 1: Exit readiness | [figure1.jl](figure1.jl) |
+| 2: From heterogeneity to outcomes | [figure2.jl](figure2.jl) |
+| 3: Distributional mechanisms | [figure3.jl](figure3.jl) |
+| 4: Policy instruments | [figure4.jl](figure4.jl) |
 
 From the repository root:
 
@@ -29,7 +25,7 @@ PDF/PNG pair to `figures/`. Shared typography is in
 geometry are in [`helpers/policy_scenarios.jl`](helpers/policy_scenarios.jl).
 These helpers use the Julia package rather than a separate numerical model.
 
-Generating figures does not rewrite the manuscript PDF or its prose.
+Generated PDFs and PNGs stay local and are ignored by Git pending approval.
 The [reproduction guide](../docs/reproducibility.md) explains the software
 environment and numerical verification records.
 
@@ -44,8 +40,8 @@ Resource rent is retained harvest revenue minus forgone outside earnings,
 before rights transfers. Total actor income includes outside earnings and net
 rights transfers but excludes government royalty receipts. Literal gear support
 changes both impact potentials and exit thresholds. Income components and
-solver/market diagnostics are recorded in
-[`main_figure_verification.csv`](../SupplementaryMaterial/results/main_figure_verification.csv).
+solver/market diagnostics can be regenerated locally with
+`SupplementaryMaterial/scripts/generate_reproducibility_outputs.jl`.
 
 ## Income-Change Alternative
 
@@ -55,10 +51,9 @@ The retained alternative does not overwrite the primary Figure 4:
 julia --project=. manuscript/incomedifferenceonlyFig4.jl
 ```
 
-[`incomedifferenceonlyFig4.jl`](incomedifferenceonlyFig4.jl) writes
-[`figures/incomedifferenceonlyFig4.pdf`](figures/incomedifferenceonlyFig4.pdf)
-and its PNG. It shows each actor's policy-minus-open-access income in the
+[`incomedifferenceonlyFig4.jl`](incomedifferenceonlyFig4.jl) writes a local PDF
+and PNG. It shows each actor's policy-minus-open-access income in the
 original threshold order, on a shared symmetric scale. Blue marks gains and red
 losses. Gini changes are calculated from the two income-level distributions,
-not from signed income changes. Full component differences are saved in
-[`figure4_income_changes.csv`](../SupplementaryMaterial/results/figure4_income_changes.csv).
+not from signed income changes. Generated component differences and rendered
+outputs are ignored by Git pending publication approval.

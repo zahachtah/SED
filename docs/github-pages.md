@@ -16,10 +16,11 @@ After the prepared files are committed and pushed:
 3. Open the deployment URL once the workflow completes.
 
 The repository's default branch is `master`. The workflow publishes changes
-to the companion, its reading PDFs, or the
+to the companion pages, their source, or the
 deployment workflow when they reach `master`. It can also be run manually
 (`workflow_dispatch`). It rebuilds and tests the page and deploys only the
-HTML, manuscript PDF, and supplement PDF. Drafts, source code, and internal
+the companion HTML only. The manuscript and supplementary material are pending
+approval and are not deployed. Drafts, source code, and internal
 archives are not copied into the site. Repository visibility is not changed.
 
 The build job needs `contents: read` and `pages: read` so Configure Pages can
@@ -45,5 +46,5 @@ The capture command first runs the interaction and desktop/mobile checks.
 Only after they pass does it write the actual desktop policy capture to
 `docs/assets/companion.png` and insert the linked image into the README.
 Additional light/dark and mobile captures remain in `tmp/companion/`.
-Recheck the site after deployment, including its manuscript and supplementary
-material links.
+Recheck the site after deployment. Manuscript and supplementary-material
+availability should read "pending approval", without download links.

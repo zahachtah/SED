@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const root = new URL("./", import.meta.url);
@@ -23,13 +23,9 @@ if (process.argv.includes("--check")) {
 if (process.argv.includes("--pages")) {
     const site = new URL("../tmp/pages/", root);
     await rm(site, { recursive: true, force: true });
-    await mkdir(new URL("manuscript/", site), { recursive: true });
-    await mkdir(new URL("SupplementaryMaterial/", site), { recursive: true });
+    await mkdir(site, { recursive: true });
     await writeFile(new URL("index.html", site), html);
     await writeFile(new URL(".nojekyll", site), "");
-    for (const file of ["manuscript/Science_MS_compact.pdf", "SupplementaryMaterial/SED_Supplementary_Material.pdf"]) {
-        await copyFile(new URL(`../${file}`, root), new URL(file, site));
-    }
     console.log(`Staged publication site in ${fileURLToPath(site)}`);
 }
 console.log(`Built ${fileURLToPath(output)} (${Math.round(Buffer.byteLength(html) / 1024)} KiB, self-contained)`);

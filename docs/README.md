@@ -1,8 +1,8 @@
 # Model and Study Guides
 
 Start with the [interactive companion](https://zahachtah.github.io/SED/) or the
-[root README](../README.md). For the formal derivation, read the
-[supplement](../SupplementaryMaterial/SED_Supplementary_Material.pdf).
+[root README](../README.md). Manuscript and supplementary material:
+pending approval for release. The guides below describe the public model.
 
 | Guide | What it answers |
 | --- | --- |
